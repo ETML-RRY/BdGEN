@@ -161,10 +161,7 @@ class _LocationDraft(BaseModel):
 
 
 class _ExtractionDraft(BaseModel):
-    art_style: str
-    color_palette: str
-    line_work: str
-    mood: str
+    style: _StyleDraft
     characters: list[_CharacterDraft] = Field(
         default_factory=list,
         description=(
@@ -298,16 +295,16 @@ def extract(
     draft = msg.parsed
     # Append negative_constraints to art_style so it rides along verbatim in
     # every downstream image prompt — it's the single most influential lever.
-    art_style = _sanitize(draft.art_style)
-    if draft.negative_constraints:
-        neg = _sanitize(draft.negative_constraints)
+    art_style = _sanitize(draft.style.art_style)
+    if draft.style.negative_constraints:
+        neg = _sanitize(draft.style.negative_constraints)
         if neg and not art_style.lower().strip().endswith(neg.lower().strip()):
             art_style = f"{art_style} {neg}"
     style = Style(
         art_style=art_style,
-        color_palette=_sanitize(draft.color_palette),
-        line_work=_sanitize(draft.line_work),
-        mood=_sanitize(draft.mood),
+        color_palette=_sanitize(draft.style.color_palette),
+        line_work=_sanitize(draft.style.line_work),
+        mood=_sanitize(draft.style.mood),
     )
     used_char_ids: set[str] = set()
     characters = [

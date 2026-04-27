@@ -11,6 +11,7 @@ export default function ReferencesStep({ project, onChanged }) {
       label: `Personnage — ${c.name}`,
       image_url: c.image_url,
       quality: c.quality,
+      stale: c.stale,
       description: [c.physical_description, c.outfit].filter(Boolean).join("\n\n"),
     })),
     ...project.references.locations.map((l) => ({
@@ -18,6 +19,7 @@ export default function ReferencesStep({ project, onChanged }) {
       label: `Décor — ${l.name}`,
       image_url: l.image_url,
       quality: l.quality,
+      stale: l.stale,
       description: l.description,
     })),
   ];

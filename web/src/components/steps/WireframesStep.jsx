@@ -14,6 +14,7 @@ export default function WireframesStep({ project, onChanged }) {
         ? "4ᵉ de couverture"
         : `Planche ${w.id.replace("page_", "")}`,
     image_url: w.image_url,
+    stale: w.stale,
   }));
 
   return (

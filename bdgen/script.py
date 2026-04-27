@@ -166,11 +166,25 @@ class _LLMSetupDraft(BaseModel):
 CHARACTER_REFINE_SYSTEM_PROMPT = dedent("""\
     You are revising a single character record for a comic book project.
 
-    The user has supplied a feedback note. Apply it to the character below and
-    return the updated record as JSON, keeping the same `id`. You may rewrite
-    `physical_description`, `outfit`, and `reference_prompt` as needed to honor
-    the feedback while staying consistent with the project's overall style and
-    other characters/locations.
+    The user message contains a JSON wrapper with `metadata`, `style`,
+    `current_character`, and `user_feedback`. Treat it as INPUT CONTEXT only.
+    Apply the feedback to `current_character` and return the UPDATED character
+    record. You may rewrite `name`, `physical_description`, `outfit`, and
+    `reference_prompt` as needed; the `id` MUST stay unchanged.
+
+    OUTPUT SHAPE — your response is a flat JSON object with EXACTLY these
+    top-level keys, and nothing else:
+      {
+        "id": "<unchanged>",
+        "name": "...",
+        "physical_description": "...",
+        "outfit": "...",
+        "reference_prompt": "..."
+      }
+
+    Do NOT echo back `metadata`, `style`, `current_character`, or
+    `user_feedback`. Do NOT wrap the output under any key. Do NOT add extra
+    fields.
 
     HARD CONSTRAINTS:
     - Keep `id` unchanged.
@@ -184,8 +198,23 @@ CHARACTER_REFINE_SYSTEM_PROMPT = dedent("""\
 LOCATION_REFINE_SYSTEM_PROMPT = dedent("""\
     You are revising a single location record for a comic book project.
 
-    The user has supplied a feedback note. Apply it to the location below and
-    return the updated record as JSON, keeping the same `id`.
+    The user message contains a JSON wrapper with `metadata`, `style`,
+    `current_location`, and `user_feedback`. Treat it as INPUT CONTEXT only.
+    Apply the feedback to `current_location` and return the UPDATED location
+    record. The `id` MUST stay unchanged.
+
+    OUTPUT SHAPE — your response is a flat JSON object with EXACTLY these
+    top-level keys, and nothing else:
+      {
+        "id": "<unchanged>",
+        "name": "...",
+        "description": "...",
+        "reference_prompt": "..."
+      }
+
+    Do NOT echo back `metadata`, `style`, `current_location`, or
+    `user_feedback`. Do NOT wrap the output under any key. Do NOT add extra
+    fields.
 
     HARD CONSTRAINTS:
     - Keep `id` unchanged.
@@ -739,6 +768,9 @@ def _call_anthropic(
     try:
         return output_type.model_validate_json(json_text)
     except Exception as e:
+        unwrapped = _try_unwrap_echoed_input(json_text, output_type)
+        if unwrapped is not None:
+            return unwrapped
         raise RuntimeError(
             f"Failed to parse Claude response as {output_type.__name__}: {e}\n"
             f"Raw text (first 800 chars): {raw[:800]}"
@@ -755,6 +787,30 @@ def _strip_json_fences(text: str) -> str:
         if text.endswith("```"):
             text = text[:-3]
     return text.strip()
+
+
+def _try_unwrap_echoed_input(
+    json_text: str, output_type: type[BaseModel]
+) -> BaseModel | None:
+    # Recovery path: refine prompts pass `{metadata, style, current_*, user_feedback}`
+    # and the model sometimes echoes that wrapper back. Look for a payload nested
+    # under a `current_*` or `updated_*` key that matches the target schema.
+    try:
+        data = json.loads(json_text)
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    candidate_keys = [
+        k for k in data
+        if k.startswith("current_") or k.startswith("updated_") or k in {"character", "location"}
+    ]
+    for key in candidate_keys:
+        try:
+            return output_type.model_validate(data[key])
+        except Exception:
+            continue
+    return None
 
 
 # --- Targeted regeneration (single character / location / page) ---

@@ -17,6 +17,7 @@ export default function Home() {
   const [projects, setProjects] = useState(null);
   const [job, setJob] = useState(null);
   const [error, setError] = useState(null);
+  const [duplicating, setDuplicating] = useState(null);
   const fileRef = useRef(null);
   const navigate = useNavigate();
 
@@ -30,6 +31,22 @@ export default function Home() {
       setJob(job);
     } catch (e) {
       setError(e.message);
+    }
+  }
+
+  async function onDuplicate(e, sourceName) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (duplicating) return;
+    setDuplicating(sourceName);
+    setError(null);
+    try {
+      const { name } = await api.duplicateProject(sourceName);
+      navigate(`/projects/${encodeURIComponent(name)}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDuplicating(null);
     }
   }
 
@@ -126,7 +143,18 @@ export default function Home() {
                         </div>
                       )}
                     </div>
-                    <StateChip state={p.state} label={STATE_LABELS[p.state]} />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-ghost text-xs"
+                        title="Dupliquer la configuration dans un nouveau projet (sans script ni images)"
+                        onClick={(e) => onDuplicate(e, p.name)}
+                        disabled={duplicating === p.name}
+                      >
+                        {duplicating === p.name ? "…" : "Dupliquer"}
+                      </button>
+                      <StateChip state={p.state} label={STATE_LABELS[p.state]} />
+                    </div>
                   </div>
                   <div className="text-xs text-[var(--color-mute)] flex flex-wrap gap-x-4 gap-y-1 mt-3">
                     {p.page_count !== null && (

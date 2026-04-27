@@ -55,6 +55,9 @@ export default function ImageStep({
   const draftItems = supportsQuality
     ? items.filter((it) => it.image_url && it.quality && it.quality !== "high")
     : [];
+  // Items whose underlying script text was rewritten after the image was
+  // generated — the on-disk PNG no longer matches the latest description.
+  const staleItems = items.filter((it) => it.stale && it.image_url);
 
   useEffect(() => {
     if (stream.terminal) onChanged();
@@ -105,6 +108,15 @@ export default function ImageStep({
           isRunning || !supportsQuality
             ? null
             : (item) => start({ force_ids: [item.id], quality_override: "high" })
+        }
+        onRefresh={
+          isRunning
+            ? null
+            : (item) =>
+                start({
+                  force_ids: [item.id],
+                  quality_override: item.quality || undefined,
+                })
         }
         emptyLabel={emptyLabel}
       />
@@ -194,19 +206,18 @@ export default function ImageStep({
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h2 className="text-lg font-semibold">{title}</h2>
           <div className="flex gap-2 flex-wrap">
-            {supportsQuality && draftItems.length > 0 && (
+            {staleItems.length > 0 && (
               <button
-                className="btn btn-secondary text-sm"
+                className="btn btn-primary text-sm"
                 onClick={() =>
                   start({
-                    force_ids: draftItems.map((it) => it.id),
-                    quality_override: "high",
+                    force_ids: staleItems.map((it) => it.id),
                   })
                 }
                 disabled={starting}
-                title={`${draftItems.length} élément(s) en brouillon`}
+                title={`${staleItems.length} image(s) ne correspondent plus au texte modifié`}
               >
-                Tout améliorer ({draftItems.length})
+                ↻ Rafraîchir les obsolètes ({staleItems.length})
               </button>
             )}
             {supportsQuality ? (
@@ -215,17 +226,32 @@ export default function ImageStep({
                   className="btn btn-ghost text-sm"
                   onClick={() => start({ quality_override: "low" })}
                   disabled={starting}
-                  title="Compléter ce qui manque en brouillon"
+                  title="Génère ce qui manque encore en brouillon. Les éléments déjà en final sont conservés."
                 >
                   Compléter en brouillon
                 </button>
                 <button
                   className="btn btn-secondary text-sm"
-                  onClick={() => start({ quality_override: "high" })}
+                  onClick={() =>
+                    start({
+                      // Upgrade any existing draft to final AND fill in
+                      // missing items at final quality, in one pass.
+                      force_ids: draftItems.length > 0
+                        ? draftItems.map((it) => it.id)
+                        : undefined,
+                      quality_override: "high",
+                    })
+                  }
                   disabled={starting}
-                  title="Compléter ce qui manque en qualité finale"
+                  title={
+                    draftItems.length > 0
+                      ? `Régénère ${draftItems.length} brouillon(s) en final et complète les éléments manquants en final.`
+                      : "Génère ce qui manque encore en qualité finale."
+                  }
                 >
-                  Compléter en final
+                  {draftItems.length > 0
+                    ? `Tout finaliser (${draftItems.length} brouillon${draftItems.length > 1 ? "s" : ""})`
+                    : "Compléter en final"}
                 </button>
               </>
             ) : (
@@ -270,10 +296,12 @@ export default function ImageStep({
   );
 }
 
-function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, emptyLabel }) {
+function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, onRefresh, emptyLabel }) {
   const safeIdx = Math.max(0, Math.min(idx, items.length - 1));
   const item = items[safeIdx];
   const canUpgrade = onUpgrade && item.image_url && item.quality && item.quality !== "high";
+  const isStale = !!item.stale && !!item.image_url;
+  const canRefresh = onRefresh && isStale;
 
   return (
     <div>
@@ -285,7 +313,7 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, emptyLa
         >
           ← Précédent
         </button>
-        <div className="flex items-center gap-2 min-w-0 flex-1 justify-center">
+        <div className="flex items-center gap-2 min-w-0 flex-1 justify-center flex-wrap">
           <span className="text-sm font-medium truncate text-center">
             {item.label}
             <span className="text-[var(--color-mute)] ml-2">
@@ -298,6 +326,14 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, emptyLa
               title={`Qualité de génération : ${item.quality}`}
             >
               {QUALITY_LABEL[item.quality] || item.quality}
+            </span>
+          )}
+          {isStale && (
+            <span
+              className="chip chip-peach"
+              title="Le texte a été modifié après cette image. Régénérez pour aligner le visuel sur la nouvelle description."
+            >
+              Texte modifié
             </span>
           )}
         </div>
@@ -319,7 +355,10 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, emptyLa
           <img
             src={item.image_url}
             alt={item.label}
-            className="max-h-full max-w-full object-contain"
+            className={
+              "max-h-full max-w-full object-contain " +
+              (isStale ? "opacity-60 ring-2 ring-[var(--color-peach-300)]" : "")
+            }
           />
         ) : (
           <div className="text-sm text-[var(--color-mute)]">
@@ -332,11 +371,20 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, emptyLa
           {item.description}
         </p>
       )}
-      {(onRefine || canUpgrade) && (
-        <div className="flex justify-end gap-2 mt-3">
-          {canUpgrade && (
+      {(onRefine || canUpgrade || canRefresh) && (
+        <div className="flex justify-end gap-2 mt-3 flex-wrap">
+          {canRefresh && (
             <button
               className="btn btn-primary text-sm"
+              onClick={() => onRefresh(item)}
+              title="Régénère cette image avec la dernière version du texte (qualité actuelle conservée)."
+            >
+              ↻ Régénérer l'image
+            </button>
+          )}
+          {canUpgrade && (
+            <button
+              className={(canRefresh ? "btn btn-secondary" : "btn btn-primary") + " text-sm"}
               onClick={() => onUpgrade(item)}
               title="Régénère cet élément seul en haute qualité."
             >

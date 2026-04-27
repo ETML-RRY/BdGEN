@@ -22,6 +22,7 @@ export default function Wizard() {
   const location = useLocation();
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
+  const [duplicating, setDuplicating] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -33,6 +34,19 @@ export default function Wizard() {
       return null;
     }
   }, [name]);
+
+  async function onDuplicate() {
+    if (duplicating) return;
+    setDuplicating(true);
+    try {
+      const { name: newName } = await api.duplicateProject(name);
+      navigate(`/projects/${encodeURIComponent(newName)}`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setDuplicating(false);
+    }
+  }
 
   useEffect(() => {
     reload();
@@ -73,6 +87,15 @@ export default function Wizard() {
             {project.config?.metadata?.title || project.name}
           </h1>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost text-sm"
+              onClick={onDuplicate}
+              disabled={duplicating}
+              title="Cloner la configuration de ce projet (style, personnages, décors, structure) dans un nouveau projet vierge."
+            >
+              {duplicating ? "Duplication…" : "Dupliquer"}
+            </button>
             <a
               href={api.exportUrl(name)}
               className="btn btn-ghost text-sm"

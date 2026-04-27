@@ -11,6 +11,7 @@ export default function ComposeStep({ project, onChanged }) {
         : `Planche ${w.id.replace("page_", "")}`,
     image_url: w.image_url,
     quality: w.quality,
+    stale: w.stale,
   }));
 
   return (

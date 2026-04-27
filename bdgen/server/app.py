@@ -141,6 +141,7 @@ def _register_api(app: FastAPI) -> None:
         proj_dir = service.get_project_dir(name, _output_root())
         state = service.derive_state(proj_dir)
         quality_idx = service.read_quality_index(proj_dir)
+        stale_idx = service.read_stale_index(proj_dir)
         # Default quality to assume for items that pre-date the quality index.
         default_quality = (
             (cfg_dict or {})
@@ -152,6 +153,9 @@ def _register_api(app: FastAPI) -> None:
         refs = {"characters": [], "locations": []}
         wireframes = []
         composed = []
+        stale_refs = set(stale_idx.get("references", []))
+        stale_wf = set(stale_idx.get("wireframes", []))
+        stale_compose = set(stale_idx.get("compose", []))
         if bd_script is not None:
             for c in bd_script.characters:
                 ref_path = proj_dir / "references" / "characters" / f"{c.id}.png"
@@ -160,13 +164,13 @@ def _register_api(app: FastAPI) -> None:
                     "name": c.name,
                     "physical_description": c.physical_description,
                     "outfit": c.outfit,
-                    "image_url": (
-                        f"/api/projects/{name}/files/references/characters/{c.id}.png"
-                        if ref_path.exists() else None
+                    "image_url": _file_url(
+                        name, f"references/characters/{c.id}.png", ref_path
                     ),
                     "quality": _quality_for(
                         quality_idx, "references", c.id, ref_path, default_quality
                     ),
+                    "stale": c.id in stale_refs and ref_path.exists(),
                 })
             for l in bd_script.locations:
                 ref_path = proj_dir / "references" / "locations" / f"{l.id}.png"
@@ -174,23 +178,23 @@ def _register_api(app: FastAPI) -> None:
                     "id": l.id,
                     "name": l.name,
                     "description": l.description,
-                    "image_url": (
-                        f"/api/projects/{name}/files/references/locations/{l.id}.png"
-                        if ref_path.exists() else None
+                    "image_url": _file_url(
+                        name, f"references/locations/{l.id}.png", ref_path
                     ),
                     "quality": _quality_for(
                         quality_idx, "references", l.id, ref_path, default_quality
                     ),
+                    "stale": l.id in stale_refs and ref_path.exists(),
                 })
             if bd_script.cover is not None:
-                wireframes.append(_asset_entry(name, "cover", proj_dir, "wireframes"))
-                composed.append(_compose_entry(name, "cover", proj_dir, quality_idx, default_quality))
+                wireframes.append(_asset_entry(name, "cover", proj_dir, "wireframes", stale_wf))
+                composed.append(_compose_entry(name, "cover", proj_dir, quality_idx, default_quality, stale_compose))
             for p in bd_script.pages:
-                wireframes.append(_asset_entry(name, f"page_{p.page_number}", proj_dir, "wireframes"))
-                composed.append(_compose_entry(name, f"page_{p.page_number}", proj_dir, quality_idx, default_quality))
+                wireframes.append(_asset_entry(name, f"page_{p.page_number}", proj_dir, "wireframes", stale_wf))
+                composed.append(_compose_entry(name, f"page_{p.page_number}", proj_dir, quality_idx, default_quality, stale_compose))
             if bd_script.back_cover is not None:
-                wireframes.append(_asset_entry(name, "back", proj_dir, "wireframes"))
-                composed.append(_compose_entry(name, "back", proj_dir, quality_idx, default_quality))
+                wireframes.append(_asset_entry(name, "back", proj_dir, "wireframes", stale_wf))
+                composed.append(_compose_entry(name, "back", proj_dir, quality_idx, default_quality, stale_compose))
         return {
             "name": name,
             "state": state,
@@ -199,11 +203,8 @@ def _register_api(app: FastAPI) -> None:
             "references": refs,
             "wireframes": wireframes,
             "composed": composed,
-            "pdf_url": (
-                f"/api/projects/{name}/files/{name}.pdf"
-                if (proj_dir / f"{name}.pdf").exists()
-                else None
-            ),
+            "stale": stale_idx,
+            "pdf_url": _file_url(name, f"{name}.pdf", proj_dir / f"{name}.pdf"),
             "default_quality": default_quality,
         }
 
@@ -245,6 +246,38 @@ def _register_api(app: FastAPI) -> None:
                 raise HTTPException(409, "Une génération est en cours sur ce projet.")
         service.delete_project(name, _output_root())
         return {"deleted": name}
+
+    @app.post("/api/projects/{name}/duplicate")
+    def duplicate_project(name: str, payload: dict = Body(default_factory=dict)) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        new_id = (payload or {}).get("new_project") or None
+        try:
+            created = service.duplicate_project(name, new_id, _output_root())
+        except FileNotFoundError as e:
+            raise HTTPException(404, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Duplication impossible : {e}")
+        return {"name": created}
+
+    @app.post("/api/projects/{name}/restyle")
+    def restyle_project(name: str, payload: dict = Body(...)) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        if app.state.jobs.is_running():
+            current = app.state.jobs.current()
+            if current and current.project == name:
+                raise HTTPException(409, "Une génération est en cours sur ce projet.")
+        style = (payload or {}).get("style")
+        if not isinstance(style, dict):
+            raise HTTPException(400, "Le champ 'style' est obligatoire.")
+        try:
+            deleted = service.restyle_project(name, style, _output_root())
+        except FileNotFoundError as e:
+            raise HTTPException(404, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Re-stylage impossible : {e}")
+        return {"ok": True, "deleted": deleted}
 
     @app.get("/api/projects/{name}/feedback")
     def list_feedback(name: str) -> dict:
@@ -547,7 +580,7 @@ def _register_api(app: FastAPI) -> None:
         return {
             "ok": True,
             "path": str(p),
-            "url": f"/api/projects/{name}/files/{service.STYLE_REF_NAME}",
+            "url": _file_url(name, service.STYLE_REF_NAME, p),
         }
 
     @app.get("/api/projects/{name}/style-reference")
@@ -556,10 +589,7 @@ def _register_api(app: FastAPI) -> None:
         ref = service.get_style_reference_path(proj_dir)
         return {
             "exists": ref is not None,
-            "url": (
-                f"/api/projects/{name}/files/{service.STYLE_REF_NAME}"
-                if ref else None
-            ),
+            "url": _file_url(name, service.STYLE_REF_NAME, ref) if ref else None,
         }
 
     @app.post("/api/style-from-image")
@@ -589,6 +619,23 @@ def _validate_quality(q: str | None) -> None:
         )
 
 
+def _file_url(project: str, rel: str, full_path: Path) -> str | None:
+    """Build a cache-busted URL for a project file, or None if missing.
+
+    Browsers cache image URLs aggressively. Without the ``?v=<mtime>`` suffix,
+    a regenerated file (same URL, new bytes) keeps showing the old image until
+    the user hits F5. Appending the file's mtime makes the URL change every
+    time the file is rewritten, so the browser fetches the fresh bytes.
+    """
+    if not full_path.exists():
+        return None
+    try:
+        v = int(full_path.stat().st_mtime)
+    except OSError:
+        v = 0
+    return f"/api/projects/{project}/files/{rel}?v={v}"
+
+
 def _target_relpath(target: str, kind: str) -> str | None:
     if target == "cover":
         return f"{kind}/cover.png"
@@ -603,17 +650,23 @@ def _target_relpath(target: str, kind: str) -> str | None:
     return None
 
 
-def _asset_entry(project: str, target: str, proj_dir: Path, kind: str) -> dict:
-    """Build {id, image_url} for a wireframe or composed page target."""
+def _asset_entry(
+    project: str,
+    target: str,
+    proj_dir: Path,
+    kind: str,
+    stale_set: set[str] | None = None,
+) -> dict:
+    """Build {id, image_url, stale} for a wireframe or composed page target."""
     rel = _target_relpath(target, kind)
     if rel is None:
-        return {"id": target, "image_url": None}
+        return {"id": target, "image_url": None, "stale": False}
     full = proj_dir / rel
+    exists = full.exists()
     return {
         "id": target,
-        "image_url": (
-            f"/api/projects/{project}/files/{rel}" if full.exists() else None
-        ),
+        "image_url": _file_url(project, rel, full),
+        "stale": bool(stale_set and target in stale_set and exists),
     }
 
 
@@ -623,19 +676,21 @@ def _compose_entry(
     proj_dir: Path,
     quality_idx: dict[str, dict[str, str]],
     default_quality: str,
+    stale_set: set[str] | None = None,
 ) -> dict:
     """Same as _asset_entry but enriched with the recorded quality."""
     rel = _target_relpath(target, "pages")
-    full = proj_dir / rel if rel else None
+    if rel is None:
+        return {"id": target, "image_url": None, "quality": None, "stale": False}
+    full = proj_dir / rel
+    exists = full.exists()
     return {
         "id": target,
-        "image_url": (
-            f"/api/projects/{project}/files/{rel}"
-            if full and full.exists() else None
-        ),
+        "image_url": _file_url(project, rel, full),
         "quality": _quality_for(
             quality_idx, "compose", target, full, default_quality
         ),
+        "stale": bool(stale_set and target in stale_set and exists),
     }
 
 

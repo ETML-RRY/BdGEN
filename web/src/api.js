@@ -36,6 +36,16 @@ export const api = {
     }),
   deleteProject: (name) =>
     request(`/api/projects/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  duplicateProject: (name, newProject) =>
+    request(`/api/projects/${encodeURIComponent(name)}/duplicate`, {
+      method: "POST",
+      body: JSON.stringify({ new_project: newProject || null }),
+    }),
+  restyleProject: (name, style) =>
+    request(`/api/projects/${encodeURIComponent(name)}/restyle`, {
+      method: "POST",
+      body: JSON.stringify({ style }),
+    }),
   feedback: (name) => request(`/api/projects/${encodeURIComponent(name)}/feedback`),
 
   exportUrl: (name) => `/api/projects/${encodeURIComponent(name)}/export`,

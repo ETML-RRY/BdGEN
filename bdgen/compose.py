@@ -290,7 +290,19 @@ def _build_page_prompt(
             for d in panel.dialogs:
                 speaker = script.character_by_id(d.speaker)
                 speaker_name = speaker.name if speaker else d.speaker
-                lines.append(f'    - {speaker_name} ({d.type}): "{d.text}"')
+                if d.type == "narration":
+                    # Narration captions are NOT speech bubbles — render as a
+                    # rectangular caption box with no tail.
+                    lines.append(
+                        f'    - CAPTION (narration, no speaker, no tail): "{d.text}"'
+                    )
+                else:
+                    lines.append(
+                        f'    - SPEAKER="{speaker_name}" (type={d.type}): "{d.text}"\n'
+                        f"      → Bubble tail MUST originate from {speaker_name}'s mouth area "
+                        f"(or from {speaker_name} for thought clouds). Never let the tail point "
+                        f"to a different character."
+                    )
             dialogs_block = "\n  Dialogs:\n" + "\n".join(lines)
 
         narration_block = (
@@ -351,10 +363,32 @@ def _build_page_prompt(
         - Render sound effects as bold stylized lettering integrated into the
           scene (not inside a bubble).
         - Bubble shapes by dialog type:
-          * speech  -> rounded bubble with a tail pointing toward the speaker
-          * thought -> cloud-shaped bubble with small trailing bubbles
-          * shout   -> jagged spiky bubble
-          * whisper -> dashed-outline bubble
+          * speech    -> rounded bubble with a tail pointing toward the speaker
+          * thought   -> cloud-shaped bubble with small trailing bubbles drifting
+                         from the speaker's head (no straight tail)
+          * shout     -> jagged spiky bubble with a tail toward the speaker
+          * whisper   -> dashed-outline bubble with a tail toward the speaker
+          * narration -> rectangular caption box (yellow or off-white), pinned
+                         to a panel edge or corner, NO tail, NO speaker
+        - SPEAKER ATTRIBUTION — NON-NEGOTIABLE:
+          * Each bubble MUST be visually anchored to the EXACT character named
+            in its `SPEAKER="..."` field. Match the name to the character sheet
+            you were given as input.
+          * The tail of every speech/shout/whisper bubble MUST terminate at the
+            named speaker's mouth (or very close to it), and MUST NOT touch,
+            cross, or visually associate with any other character in the panel.
+          * For thought clouds, the trailing small bubbles MUST drift from the
+            named speaker's head — never from another character.
+          * If two or more characters are close together, place the bubble on
+            the SAME side as the speaker so the tail's target is unambiguous;
+            shorten or curve the tail rather than letting it cut across or
+            graze a non-speaker.
+          * Verify each bubble before finalizing: trace each tail back — does
+            it land on the character whose name appears in SPEAKER? If not,
+            reposition the bubble or redraw the tail until it does.
+        - Bubble reading order: top-to-bottom, left-to-right within the panel.
+          When that order conflicts with correct speaker attribution, attribution
+          wins — never break the SPEAKER → tail link to improve flow.
         - Lettering style: clean comic hand-lettering, black ink on white bubble
           background, comfortably readable size.
 
@@ -466,14 +500,18 @@ def _call_image(
 ) -> None:
     if refs:
         files = [(p.name, p.read_bytes(), "image/png") for p in refs]
-        result = client.images.edit(
+        edit_kwargs = dict(
             model=image_model.model,
             image=files,
             prompt=prompt,
             size=PAGE_SIZE,
             quality=image_model.quality,
-            input_fidelity="high",
         )
+        # `input_fidelity` is a gpt-image-1 knob; gpt-image-2 rejects it with
+        # 400 invalid_input_fidelity_model. Only opt in on the older model.
+        if image_model.model == "gpt-image-1":
+            edit_kwargs["input_fidelity"] = "high"
+        result = client.images.edit(**edit_kwargs)
     else:
         result = client.images.generate(
             model=image_model.model,

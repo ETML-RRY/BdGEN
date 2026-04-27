@@ -102,9 +102,12 @@ export default function ProjectForm({
   onSubmit,
   onCancel,
   submitLabel = "Enregistrer",
+  onApplyStyleOnly = null,
+  applyStyleOnlyLabel = "Appliquer le style uniquement",
 }) {
   const [config, setConfig] = useState(() => normalize(initial || DEFAULT_CONFIG));
   const [submitting, setSubmitting] = useState(false);
+  const [applyingStyleOnly, setApplyingStyleOnly] = useState(false);
   const [error, setError] = useState(null);
   const [styleFromImageOpen, setStyleFromImageOpen] = useState(false);
   const [styleRefFile, setStyleRefFile] = useState(null);
@@ -165,43 +168,69 @@ export default function ProjectForm({
     });
   }
 
+  function prepareConfig() {
+    const out = structuredClone(config);
+    if (isNew && !out.project) {
+      out.project = (out.metadata.title || "projet")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 60) || "projet";
+    }
+    out.structure.page_count = Number(out.structure.page_count);
+    out.structure.panels_per_page_avg = Number(out.structure.panels_per_page_avg);
+    out.structure.panels_per_page_range = [
+      Number(out.structure.panels_per_page_range[0]),
+      Number(out.structure.panels_per_page_range[1]),
+    ];
+    out.generation_options.script_model.temperature = Number(
+      out.generation_options.script_model.temperature
+    );
+    return out;
+  }
+
+  async function maybeUploadStyleRef(out) {
+    if (!styleRefFile) return;
+    const projName = projectName || out.project;
+    if (!projName) return;
+    try { await api.setStyleReference(projName, styleRefFile); } catch { /* non-fatal */ }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      // Auto-derive project slug from title if empty (new project only).
-      const out = structuredClone(config);
-      if (isNew && !out.project) {
-        out.project = (out.metadata.title || "projet")
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[̀-ͯ]/g, "")
-          .replace(/[^a-z0-9]+/g, "_")
-          .replace(/^_+|_+$/g, "")
-          .slice(0, 60) || "projet";
-      }
-      // Coerce numbers
-      out.structure.page_count = Number(out.structure.page_count);
-      out.structure.panels_per_page_avg = Number(out.structure.panels_per_page_avg);
-      out.structure.panels_per_page_range = [
-        Number(out.structure.panels_per_page_range[0]),
-        Number(out.structure.panels_per_page_range[1]),
-      ];
-      out.generation_options.script_model.temperature = Number(
-        out.generation_options.script_model.temperature
-      );
+      const out = prepareConfig();
       await onSubmit(out);
-      if (styleRefFile) {
-        const projName = projectName || out.project;
-        if (projName) {
-          try { await api.setStyleReference(projName, styleRefFile); } catch { /* non-fatal */ }
-        }
-      }
+      await maybeUploadStyleRef(out);
     } catch (e) {
       setError(e.message);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleApplyStyleOnly() {
+    if (!onApplyStyleOnly) return;
+    if (!window.confirm(
+      "Le style va remplacer celui du projet. Le scénario (textes, dialogues, " +
+      "personnages, planches) reste intact, mais les images de référence, " +
+      "esquisses et planches composées seront supprimées pour pouvoir être " +
+      "régénérées avec le nouveau style.\n\nContinuer ?"
+    )) return;
+    setError(null);
+    setApplyingStyleOnly(true);
+    try {
+      const out = prepareConfig();
+      await maybeUploadStyleRef(out);
+      await onApplyStyleOnly(out);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setApplyingStyleOnly(false);
     }
   }
 
@@ -627,13 +656,24 @@ export default function ProjectForm({
         </div>
       )}
 
-      <div className="flex justify-end gap-3">
+      <div className="flex flex-wrap justify-end gap-3">
         {onCancel && (
           <button type="button" className="btn btn-ghost" onClick={onCancel}>
             Annuler
           </button>
         )}
-        <button type="submit" className="btn btn-primary" disabled={submitting}>
+        {onApplyStyleOnly && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleApplyStyleOnly}
+            disabled={submitting || applyingStyleOnly}
+            title="Mettre à jour le style et réinitialiser les images sans toucher au scénario."
+          >
+            {applyingStyleOnly ? "Application…" : applyStyleOnlyLabel}
+          </button>
+        )}
+        <button type="submit" className="btn btn-primary" disabled={submitting || applyingStyleOnly}>
           {submitting ? "Enregistrement…" : submitLabel}
         </button>
       </div>

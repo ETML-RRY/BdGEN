@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import shutil
+import unicodedata
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -22,14 +24,16 @@ from . import references as references_module
 from . import script as script_module
 from . import wireframes as wireframes_module
 from .feedback import FeedbackStore, feedback_path_for
-from .models import BdGenInput, BdGenScript
+from .models import BdGenInput, BdGenScript, Style
 from .progress import InterruptFlag, ProgressReporter
 
 Step = Literal["preparation", "script", "references", "wireframes", "compose", "done"]
 Quality = Literal["low", "medium", "high"]
 PROJECT_CONFIG_NAME = "bdgen.json"
 QUALITY_INDEX_NAME = "bdgen-quality.json"
+STALE_INDEX_NAME = "bdgen-stale.json"
 STYLE_REF_NAME = "bdgen-style-ref.png"
+STALE_STEPS = ("references", "wireframes", "compose")
 
 
 @dataclass
@@ -128,6 +132,134 @@ def delete_project(name: str, output_root: Path | None = None) -> None:
     d = get_project_dir(name, output_root)
     if d.exists():
         shutil.rmtree(d)
+
+
+def _slugify(text: str) -> str:
+    norm = unicodedata.normalize("NFD", text)
+    norm = "".join(c for c in norm if not unicodedata.combining(c))
+    norm = norm.lower()
+    norm = re.sub(r"[^a-z0-9]+", "_", norm).strip("_")
+    return norm[:60]
+
+
+def _next_available_name(base: str, root: Path) -> str:
+    """Pick a project slug not already present under ``root``."""
+    candidate = base
+    if not (root / candidate).exists():
+        return candidate
+    i = 2
+    while (root / f"{base}_{i}").exists():
+        i += 1
+    return f"{base}_{i}"
+
+
+def duplicate_project(
+    source_name: str,
+    new_project_id: str | None = None,
+    output_root: Path | None = None,
+) -> str:
+    """Clone the source project's configuration into a fresh project.
+
+    Copies ``bdgen.json`` (story, style, characters, locations, structure,
+    generation_options) and the optional style-reference image. Does NOT copy
+    the script, references, wireframes, composed pages, PDF, or feedback —
+    the duplicate starts at the Préparation step with everything generated
+    from scratch.
+
+    Returns the slug of the freshly created project.
+    """
+    root = projects_root(output_root)
+    src_cfg = load_config(source_name, output_root)
+
+    base = _slugify(new_project_id or f"{source_name}_copie") or "projet_copie"
+    new_id = _next_available_name(base, root)
+
+    new_cfg = src_cfg.model_copy(deep=True)
+    new_cfg.project = new_id
+    if not (new_project_id and new_project_id.strip()):
+        # User didn't pass an explicit name → tag the title so it's easy to
+        # spot in listings until the user renames it.
+        if new_cfg.metadata.title:
+            new_cfg.metadata.title = f"{new_cfg.metadata.title} (copie)"
+
+    save_config(new_cfg, output_root)
+
+    src_dir = get_project_dir(source_name, output_root)
+    style_ref = src_dir / STYLE_REF_NAME
+    if style_ref.exists() and style_ref.stat().st_size > 0:
+        dst_dir = get_project_dir(new_id, output_root)
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(style_ref, dst_dir / STYLE_REF_NAME)
+
+    return new_id
+
+
+def restyle_project(
+    name: str,
+    new_style: dict,
+    output_root: Path | None = None,
+) -> dict:
+    """Apply a new visual style without rewriting the script.
+
+    Updates ``style`` on both ``bdgen.json`` and ``bdgen-script.json``, then
+    wipes the downstream image artefacts (references, wireframes, composed
+    pages, PDF, quality index) so the user can rerun those steps under the
+    new style. Script text, characters, locations, panels and dialogs are
+    preserved verbatim.
+
+    Returns a summary describing what was deleted.
+    """
+    proj_dir = get_project_dir(name, output_root)
+    if not proj_dir.is_dir():
+        raise FileNotFoundError(f"Projet inconnu : {name}")
+
+    config = load_config(name, output_root)
+    # Re-validate the incoming style by routing it through the Pydantic model.
+    merged = config.style.model_dump()
+    merged.update({k: v for k, v in new_style.items() if v is not None})
+    config.style = Style.model_validate(merged)
+    save_config(config, output_root)
+
+    deleted: dict[str, int | bool] = {
+        "references": 0,
+        "wireframes": 0,
+        "pages": 0,
+        "pdf": False,
+        "quality_index": False,
+    }
+
+    script_path = proj_dir / "bdgen-script.json"
+    if script_path.exists():
+        bd_script = BdGenScript.load(script_path)
+        bd_script.style = config.style
+        for c in bd_script.characters:
+            c.reference_image = None
+        for l in bd_script.locations:
+            l.reference_image = None
+        bd_script.save(script_path)
+
+    for sub in ("references", "wireframes", "pages"):
+        d = proj_dir / sub
+        if d.is_dir():
+            count = sum(1 for p in d.rglob("*.png") if p.is_file())
+            shutil.rmtree(d)
+            deleted[sub] = count
+
+    pdf = proj_dir / f"{name}.pdf"
+    if pdf.exists():
+        pdf.unlink()
+        deleted["pdf"] = True
+
+    qidx = proj_dir / QUALITY_INDEX_NAME
+    if qidx.exists():
+        qidx.unlink()
+        deleted["quality_index"] = True
+
+    sidx = proj_dir / STALE_INDEX_NAME
+    if sidx.exists():
+        sidx.unlink()
+
+    return deleted
 
 
 # --- State derivation ---
@@ -315,6 +447,87 @@ def write_quality_index(proj_dir: Path, idx: dict[str, dict[str, str]]) -> None:
     )
 
 
+# --- Staleness index (per-target "text modified after image was generated") ---
+
+def _stale_index_path(proj_dir: Path) -> Path:
+    return proj_dir / STALE_INDEX_NAME
+
+
+def read_stale_index(proj_dir: Path) -> dict[str, list[str]]:
+    """Return {step: [target_id, ...]} for references / wireframes / compose.
+
+    A target appears here when its underlying script text was rewritten after
+    the image was generated, so the on-disk PNG no longer matches.
+    """
+    p = _stale_index_path(proj_dir)
+    base: dict[str, list[str]] = {s: [] for s in STALE_STEPS}
+    if not p.exists():
+        return base
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return base
+        for s in STALE_STEPS:
+            v = data.get(s)
+            if isinstance(v, list):
+                # de-dup, preserve order
+                seen: set[str] = set()
+                out: list[str] = []
+                for tid in v:
+                    if isinstance(tid, str) and tid not in seen:
+                        seen.add(tid)
+                        out.append(tid)
+                base[s] = out
+        return base
+    except Exception:
+        return base
+
+
+def write_stale_index(proj_dir: Path, idx: dict[str, list[str]]) -> None:
+    p = _stale_index_path(proj_dir)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    # Drop empty buckets to keep the file tidy.
+    cleaned = {k: v for k, v in idx.items() if v}
+    if not cleaned:
+        if p.exists():
+            p.unlink()
+        return
+    p.write_text(
+        json.dumps(cleaned, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def mark_stale(proj_dir: Path, step: str, target_ids: str | list[str]) -> None:
+    """Flag one or more targets as obsolete for a given image step."""
+    if step not in STALE_STEPS:
+        return
+    ids = [target_ids] if isinstance(target_ids, str) else list(target_ids)
+    if not ids:
+        return
+    idx = read_stale_index(proj_dir)
+    bucket = idx.setdefault(step, [])
+    seen = set(bucket)
+    for tid in ids:
+        if tid and tid not in seen:
+            bucket.append(tid)
+            seen.add(tid)
+    write_stale_index(proj_dir, idx)
+
+
+def clear_stale(proj_dir: Path, step: str, target_ids: str | list[str]) -> None:
+    if step not in STALE_STEPS:
+        return
+    ids = {target_ids} if isinstance(target_ids, str) else set(target_ids)
+    if not ids:
+        return
+    idx = read_stale_index(proj_dir)
+    bucket = idx.get(step, [])
+    new_bucket = [tid for tid in bucket if tid not in ids]
+    if len(new_bucket) != len(bucket):
+        idx[step] = new_bucket
+        write_stale_index(proj_dir, idx)
+
+
 def _record_qualities(
     proj_dir: Path,
     step: str,
@@ -340,6 +553,30 @@ def _record_qualities(
             changed = True
     if changed:
         write_quality_index(proj_dir, idx)
+
+
+def _clear_stale_for_regenerated(
+    proj_dir: Path,
+    step: str,
+    target_to_path: dict[str, Path],
+    pre_existing: set[str],
+    force_ids: list[str] | None,
+) -> None:
+    """Drop the staleness flag for any target that was just regenerated.
+
+    A target counts as freshly produced if it was force-regenerated and its
+    file exists at the end of the run, or if it was newly created (didn't
+    exist before, exists now). Untouched/skipped targets keep their flag.
+    """
+    forced = set(force_ids or [])
+    cleared: list[str] = []
+    for tid, p in target_to_path.items():
+        if not p.exists():
+            continue
+        if tid in forced or tid not in pre_existing:
+            cleared.append(tid)
+    if cleared:
+        clear_stale(proj_dir, step, cleared)
 
 
 # --- Step runners (called from the JobManager in a worker thread) ---
@@ -410,6 +647,9 @@ def run_step_references(
     finally:
         # Even on partial completion (interruption), record what landed.
         _record_qualities(proj_dir, "references", target_paths, pre_existing, quality_used)
+        _clear_stale_for_regenerated(
+            proj_dir, "references", target_paths, pre_existing, force_ids
+        )
     bd_script.save(script_path)
     return bd_script
 
@@ -431,12 +671,25 @@ def run_step_wireframes(
             p = _wireframe_path(wf_dir, fid)
             if p and p.exists():
                 p.unlink()
+    target_paths: dict[str, Path] = {}
+    if bd_script.cover is not None:
+        target_paths["cover"] = wf_dir / "cover.png"
+    for p in bd_script.pages:
+        target_paths[f"page_{p.page_number}"] = wf_dir / f"page_{p.page_number:02d}.png"
+    if bd_script.back_cover is not None:
+        target_paths["back"] = wf_dir / "back.png"
+    pre_existing = {tid for tid, pp in target_paths.items() if pp.exists()}
     feedback_store = FeedbackStore.load_or_empty(feedback_path_for(script_path))
-    wireframes_module.generate_wireframes(
-        bd_script, opts, wf_dir,
-        feedback_store=feedback_store,
-        reporter=reporter, interrupt=interrupt,
-    )
+    try:
+        wireframes_module.generate_wireframes(
+            bd_script, opts, wf_dir,
+            feedback_store=feedback_store,
+            reporter=reporter, interrupt=interrupt,
+        )
+    finally:
+        _clear_stale_for_regenerated(
+            proj_dir, "wireframes", target_paths, pre_existing, force_ids
+        )
 
 
 def run_step_compose(
@@ -483,6 +736,9 @@ def run_step_compose(
         )
     finally:
         _record_qualities(proj_dir, "compose", target_paths, pre_existing, quality_used)
+        _clear_stale_for_regenerated(
+            proj_dir, "compose", target_paths, pre_existing, force_ids
+        )
     return out
 
 
@@ -502,6 +758,12 @@ def add_feedback_and_regenerate_character(
     fb_store.save(fb_path)
     script_module.regenerate_character(bd_script, character_id, feedback_text, reporter)
     bd_script.save(script_path)
+    # The on-disk reference PNG (if any) was generated against the previous
+    # text and no longer matches; flag it so the UI can offer a one-click
+    # regeneration without asking the user to re-state the change.
+    ref_png = proj_dir / "references" / "characters" / f"{character_id}.png"
+    if ref_png.exists():
+        mark_stale(proj_dir, "references", character_id)
     return bd_script
 
 
@@ -519,6 +781,9 @@ def add_feedback_and_regenerate_location(
     fb_store.save(fb_path)
     script_module.regenerate_location(bd_script, location_id, feedback_text, reporter)
     bd_script.save(script_path)
+    ref_png = proj_dir / "references" / "locations" / f"{location_id}.png"
+    if ref_png.exists():
+        mark_stale(proj_dir, "references", location_id)
     return bd_script
 
 
@@ -577,6 +842,7 @@ def delete_character_and_cascade(
     if character_id in qidx.get("references", {}):
         qidx["references"].pop(character_id, None)
         write_quality_index(proj_dir, qidx)
+    clear_stale(proj_dir, "references", character_id)
 
     return {
         "deleted": True,
@@ -612,6 +878,7 @@ def delete_location_and_cascade(
     if location_id in qidx.get("references", {}):
         qidx["references"].pop(location_id, None)
         write_quality_index(proj_dir, qidx)
+    clear_stale(proj_dir, "references", location_id)
 
     return {
         "deleted": True,
@@ -662,6 +929,10 @@ def add_feedback_and_regenerate_cover(
     fb_store.save(fb_path)
     script_module.regenerate_cover(bd_script, feedback_text, reporter)
     bd_script.save(script_path)
+    if (proj_dir / "wireframes" / "cover.png").exists():
+        mark_stale(proj_dir, "wireframes", "cover")
+    if (proj_dir / "pages" / "cover.png").exists():
+        mark_stale(proj_dir, "compose", "cover")
     return bd_script
 
 
@@ -679,6 +950,10 @@ def add_feedback_and_regenerate_back_cover(
     fb_store.save(fb_path)
     script_module.regenerate_back_cover(bd_script, feedback_text, reporter)
     bd_script.save(script_path)
+    if (proj_dir / "wireframes" / "back.png").exists():
+        mark_stale(proj_dir, "wireframes", "back")
+    if (proj_dir / "pages" / "back.png").exists():
+        mark_stale(proj_dir, "compose", "back")
     return bd_script
 
 
@@ -703,6 +978,12 @@ def add_feedback_and_regenerate_page(
     if cascade:
         script_module.truncate_pages_from(bd_script, page_number + 1)
     bd_script.save(script_path)
+    wf = proj_dir / "wireframes" / f"page_{page_number:02d}.png"
+    cm = proj_dir / "pages" / f"page_{page_number:02d}.png"
+    if wf.exists():
+        mark_stale(proj_dir, "wireframes", target)
+    if cm.exists():
+        mark_stale(proj_dir, "compose", target)
     return bd_script
 
 
