@@ -1,0 +1,16 @@
+[project]
+name = "bdgen"
+version = "0.1.0"
+description = "Generate comic books from JSON definitions using generative AI."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.0",
+    "openai>=2.0",
+    "anthropic>=0.50.0",
+    "pillow>=10.0",
+    "python-dotenv>=1.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+]

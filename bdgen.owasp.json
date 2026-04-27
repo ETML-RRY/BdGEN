@@ -1,0 +1,61 @@
+{
+  "metadata": {
+    "title": "OWASP top 10",
+    "author": "Romain Rosay",
+    "language": "fr"
+  },
+  "story": {
+    "synopsis": "Une bande dessinée éducative constituée de 10 histoires visant à sensibiliser les développeurs et les professionnels de la sécurité aux 10 principales vulnérabilités identifiées par l'OWASP (dans le top version 2025). Chaque histoire décrit une situation qui met en scène un scénario drôle mais réaliste illustrant une vulnérabilité spécifique, ses conséquences potentielles et les meilleures pratiques pour la prévenir.",
+    "genre": "humour, éducatif",
+    "tone": "humouristique mais informatif",
+    "setting": "Dans l'open-space d'une société de dev, époque contemporaine",
+    "target_audience": "ado-adulte"
+  },
+  "style": {
+    "art_style": "manga simplifié, avec des personnages expressifs et des décors minimalistes",
+    "color_palette": "noir et blanc",
+    "line_work": "contours nets et fins, encrage noir",
+    "mood": "Joyeux et léger malgré le sujet sérieux"
+  },
+  "characters": [
+    {
+      "id": "prof-o",
+      "name": "Professeur O",
+      "role": "protagoniste, héros de la bande dessinée",
+      "physical_description": "Un vieil homme, avec une longue barbe blanche. Il est souvent vu avec un ordinateur portable ou des outils de hacking.",
+      "outfit": "Des lunettes rondes, un chapeau de professeur et une blouse blanche",
+      "personality": "Sérieux, un peu excentrique voir sénile, mais toujours prêt à aider les autres à comprendre les enjeux de la sécurité informatique."
+    }
+  ],
+  "structure": {
+    "page_count": 48,
+    "panels_per_page_avg": 8,
+    "panels_per_page_range": [2, 6],
+    "include_cover": true,
+    "narrative_pacing": "rythme rapide avec des gags courts et percutants, chaque chapitre se concentrant sur une vulnérabilité spécifique"
+  },
+  "generation_options": {
+    "script_model": {
+      "provider": "anthropic",
+      "model": "claude-opus-4-7",
+      "temperature": 0.8
+    },
+    "image_model": {
+      "provider": "openai",
+      "model": "gpt-image-2",
+      "size": "1024x1536",
+      "quality": "high"
+    },
+    "references": {
+      "generate": true,
+      "output_dir": "./output/references",
+      "character_views": ["face_closeup", "full_body_front", "expressions_sheet"],
+      "location_view": "establishing_shot",
+      "use_as_input_for_panels": true
+    },
+    "render_dialogs_separately": true,
+    "output_format": "pdf",
+    "output_path": "./output/owasp_top_10.pdf",
+    "script_path": "./output/bdgen-script-owasp.json"
+  }
+}

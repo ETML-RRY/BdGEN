@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@theme {
+  /* Pastel design tokens */
+  --color-paper: #fbf8f3;
+  --color-paper-soft: #f3eee5;
+  --color-ink: #2b2a26;
+  --color-ink-soft: #5b5a55;
+  --color-mute: #97948b;
+  --color-line: #e6e1d7;
+
+  --color-primary-50: #f5f0fb;
+  --color-primary-100: #e9ddf7;
+  --color-primary-200: #d4bbef;
+  --color-primary-300: #b791e2;
+  --color-primary-500: #8b5cd1;
+  --color-primary-600: #7142bf;
+  --color-primary-700: #5a35a0;
+
+  --color-mint-100: #def5e9;
+  --color-mint-200: #b8e6cf;
+  --color-mint-500: #44a983;
+  --color-mint-700: #2f7a5f;
+
+  --color-peach-100: #fde6d3;
+  --color-peach-300: #f4b285;
+  --color-peach-500: #df7d3c;
+
+  --color-sky-100: #d8ecf5;
+  --color-sky-300: #8ec7e0;
+  --color-sky-500: #4a9bbd;
+
+  --color-rose-100: #fadbe2;
+  --color-rose-300: #ec9eb0;
+  --color-rose-500: #c95975;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+/* Utility shorthand for the pastel "card" surface used everywhere. */
+.card {
+  background-color: white;
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.02), 0 4px 12px rgb(0 0 0 / 0.04);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1rem;
+  border-radius: 10px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  border: 1px solid transparent;
+  transition: filter 0.15s, background 0.15s, border-color 0.15s;
+  cursor: pointer;
+  user-select: none;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--color-primary-500); color: white; }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.05); }
+.btn-secondary { background: var(--color-paper-soft); color: var(--color-ink); border-color: var(--color-line); }
+.btn-secondary:hover:not(:disabled) { background: var(--color-line); }
+.btn-ghost { background: transparent; color: var(--color-ink-soft); }
+.btn-ghost:hover:not(:disabled) { background: var(--color-paper-soft); }
+.btn-danger { background: var(--color-rose-500); color: white; }
+.btn-danger:hover:not(:disabled) { filter: brightness(1.05); }
+
+.input, .textarea, .select {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--color-line);
+  background: white;
+  color: var(--color-ink);
+  font-size: 0.95rem;
+}
+.input:focus, .textarea:focus, .select:focus {
+  outline: none;
+  border-color: var(--color-primary-300);
+  box-shadow: 0 0 0 3px var(--color-primary-100);
+}
+.textarea { resize: vertical; min-height: 5rem; }
+
+.label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-ink-soft);
+  letter-spacing: 0.01em;
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: var(--color-paper-soft);
+  color: var(--color-ink-soft);
+  border: 1px solid var(--color-line);
+}
+.chip-mint { background: var(--color-mint-100); color: var(--color-mint-700); border-color: var(--color-mint-200); }
+.chip-peach { background: var(--color-peach-100); color: var(--color-peach-500); border-color: var(--color-peach-300); }
+.chip-sky { background: var(--color-sky-100); color: var(--color-sky-500); border-color: var(--color-sky-300); }
+.chip-primary { background: var(--color-primary-100); color: var(--color-primary-700); border-color: var(--color-primary-200); }
+.chip-rose { background: var(--color-rose-100); color: var(--color-rose-500); border-color: var(--color-rose-300); }
