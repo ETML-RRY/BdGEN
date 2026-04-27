@@ -543,11 +543,19 @@ def _build_cover_prompt(
         COVER ILLUSTRATION:
         {cover.scene_description}
 
-        TYPOGRAPHY (language: {language}):
+        TYPOGRAPHY (language: {language}) — render EXACTLY these strings, no others:
         - Title: "{script.metadata.title}" — placement: {cover.title_placement or "top center, large display lettering"}
         - Author: "{script.metadata.author}" — secondary typography below or above the title
-        - Subtitle: {cover.subtitle or "(none)"}
-        - Tagline: {cover.tagline or "(none)"}
+        - Subtitle: {cover.subtitle or "(none — leave out)"}
+        - Tagline: {cover.tagline or "(none — leave out)"}
+
+        STRICT TEXT RULE: the ONLY readable text allowed on this cover is the
+        title, author, and (if non-empty above) the subtitle and tagline. DO
+        NOT add any other lettering — no series tag, no issue number, no
+        publisher name, no "ce mois-ci ...", no headline, no decorative
+        wording, no logos with text. If a style reference image is provided,
+        IGNORE every word it contains; treat its lettering as decorative
+        texture you must NOT transcribe.
 
         PUBLICATION SPECS:
         - Format: standard album BD portrait, 21x28cm aspect ratio
@@ -591,13 +599,29 @@ def _build_back_prompt(
         LAYOUT:
         - The synopsis blurb is the main element, set as readable body text in the
           central area
-        - {back.layout_notes or "Reserve a barcode placeholder rectangle in the bottom-right corner (just an empty rectangle, no actual barcode)"}
+        - {back.layout_notes or "Standard back-cover layout with reserved zones for the publisher logo (bottom-left) and barcode (bottom-right)"}
         - Title and author may be subtly repeated at the top
-        - Publisher logo placeholder optional in the bottom area
+
+        RESERVED EMPTY ZONES — MUST BE LEFT BLANK WHITE:
+        - Bottom-right corner: a clean WHITE rectangular space approximately
+          35mm wide x 22mm tall (standard EAN-13 barcode footprint). This area
+          MUST be empty white background — DO NOT draw any barcode lines, do
+          NOT print any digits, do NOT add an ISBN number, do NOT draw a frame
+          around it. Just untouched white space waiting for the real barcode
+          to be added later by the publisher.
+        - Bottom-left corner (or wherever space allows near the bottom): a
+          clean WHITE rectangular space approximately 30mm x 30mm reserved for
+          the publisher logo. This area MUST be empty white background — DO NOT
+          invent a logo, mascot, star, sun, swirl, monogram, or any decorative
+          element. Do NOT print "votre logo", "logo éditeur", "publisher" or
+          any placeholder text. Just untouched white space.
+        - These two reserved zones are MANDATORY and NON-NEGOTIABLE. Treat them
+          as forbidden surfaces — no ink, no pixels, no decoration, no text.
 
         PUBLICATION SPECS:
         - Format: standard album BD portrait, 21x28cm aspect ratio
-        - Bleed (fond perdu): full bleed
+        - Bleed (fond perdu): full bleed for the artwork; the two reserved
+          empty zones above stay white regardless
         - Safety margin: 5mm inside trim
         - NO folio
 
@@ -605,6 +629,10 @@ def _build_back_prompt(
         - All text in {language}
         - Body text in clean readable typography
         - Maintain visual consistency with the front cover style
+        - The ONLY text on this back cover is: the optional title/author repeat
+          at the top, the synopsis blurb, and the optional tagline. NOTHING
+          ELSE — no fake ISBN digits, no fake publisher name, no placeholder
+          phrases.
 
         """) + _build_refs_section(ref_labels)
     return base

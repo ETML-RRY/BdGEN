@@ -181,12 +181,30 @@ def _client(image_model: ImageModelConfig) -> OpenAI:
 
 
 STYLE_REF_LABEL = (
-    "STYLE REFERENCE (this input image): this single image defines the "
-    "complete visual style, artistic approach, line work, coloring technique, "
-    "and aesthetic for the entire project. Study it carefully. Your output "
-    "MUST match its style — including line quality, coloring method, level of "
-    "detail, body proportions, and overall visual tone. Do NOT copy its "
-    "content or characters; replicate ONLY its style."
+    "STYLE REFERENCE (this input image): this image is provided ONLY as a "
+    "visual style reference. Study its drawing technique, line quality, "
+    "coloring method, level of detail, body proportions, palette and overall "
+    "visual tone, and replicate THOSE STYLISTIC QUALITIES in your output.\n\n"
+    "STRICT NON-COPYING RULE — MANDATORY, NO EXCEPTIONS (this is a copyright "
+    "constraint, not a stylistic suggestion):\n"
+    "- DO NOT reproduce, paraphrase, OCR, or recreate ANY text visible in "
+    "  the style reference. This includes titles, subtitles, taglines, "
+    "  captions, character names, dialog, sound effects, signs, labels, "
+    "  speech bubbles, headers, footers, page numbers, magazine logos, "
+    "  publisher names, barcodes, or ANY other lettering, in part or in full.\n"
+    "- DO NOT reproduce ANY characters, faces, hairstyles, body types, "
+    "  outfits, accessories, props, vehicles, animals or recognizable "
+    "  objects from the reference. Only the project's own character sheets "
+    "  (the OTHER input images) are authoritative for who appears.\n"
+    "- DO NOT reproduce the reference's specific scenes, panel content, "
+    "  compositions, settings, locations, decorative motifs, logos, mascots, "
+    "  or any other narrative element.\n"
+    "- DO NOT reuse the reference's color schemes literally if they encode "
+    "  identifiable branding; abstract the palette, do not photocopy it.\n"
+    "- The reference is a STYLE TEACHER, not a CONTENT SOURCE. Imagine you "
+    "  have only seen it through frosted glass: you can tell HOW it was drawn "
+    "  but not WHAT was drawn. Output the project's own content rendered in "
+    "  that learned style."
 )
 
 
