@@ -572,11 +572,33 @@ def _build_cover_prompt(
     return base
 
 
+def _ai_disclaimer(language: str) -> str:
+    """Return the mandatory AI-assistance + fictional-similarity disclaimer.
+
+    Hard-coded translations so the legal wording stays correct verbatim. Falls
+    back to French when the language isn't pre-translated — the user can
+    always retouch the back cover if they need a custom wording.
+    """
+    fr = (
+        "Bande dessinée réalisée avec l'assistance de BdGEN, un outil "
+        "d'intelligence artificielle générative. Toute ressemblance avec "
+        "des personnes, lieux, situations ou œuvres existants ne serait "
+        "que pure coïncidence."
+    )
+    en = (
+        "Comic book created with the assistance of BdGEN, a generative "
+        "artificial-intelligence tool. Any resemblance to actual persons, "
+        "places, situations, or existing works is purely coincidental."
+    )
+    return {"fr": fr, "en": en}.get((language or "fr").lower(), fr)
+
+
 def _build_back_prompt(
     script: BdGenScript, back: BackCover, ref_labels: list[str] | None = None
 ) -> str:
     style = script.style
     language = script.metadata.language
+    disclaimer = _ai_disclaimer(language)
     base = IMAGE_CONSTRAINTS + "\n" + dedent(f"""\
         Generate the BACK COVER of a comic book album, as a single
         publication-ready image, portrait format.
@@ -595,6 +617,20 @@ def _build_back_prompt(
         {back.scene_description or "(no illustration; keep the back primarily textual with a decorative background)"}
 
         TAGLINE: {back.tagline or "(none)"}
+
+        MANDATORY AI-ASSISTANCE DISCLAIMER (render this EXACT text verbatim, in {language}):
+        \"\"\"
+        {disclaimer}
+        \"\"\"
+        - Place the disclaimer as a discreet line of fine print along the bottom
+          of the page, ABOVE the two reserved empty zones described below and
+          spanning the horizontal space BETWEEN them (centered between the
+          publisher-logo zone on the left and the barcode zone on the right).
+        - Use a small, sober, easily readable typeface (≈ 7–8 pt equivalent).
+          Single line if it fits, otherwise two lines max, justified or
+          centered. Black ink on the page background.
+        - Do NOT translate, paraphrase, abbreviate or split this text across
+          unrelated areas. Render it once, exactly as given.
 
         LAYOUT:
         - The synopsis blurb is the main element, set as readable body text in the
@@ -630,9 +666,9 @@ def _build_back_prompt(
         - Body text in clean readable typography
         - Maintain visual consistency with the front cover style
         - The ONLY text on this back cover is: the optional title/author repeat
-          at the top, the synopsis blurb, and the optional tagline. NOTHING
-          ELSE — no fake ISBN digits, no fake publisher name, no placeholder
-          phrases.
+          at the top, the synopsis blurb, the optional tagline, and the
+          MANDATORY AI-assistance disclaimer at the bottom. NOTHING ELSE —
+          no fake ISBN digits, no fake publisher name, no placeholder phrases.
 
         """) + _build_refs_section(ref_labels)
     return base
