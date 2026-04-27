@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">BdGEN logo</title>
+  <desc id="desc">A pink speech bubble merged with a teal gear.</desc>
+  <defs>
+    <linearGradient id="bubbleGradient" x1="96" y1="48" x2="280" y2="432" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d92d77"/>
+      <stop offset="1" stop-color="#c42773"/>
+    </linearGradient>
+    <linearGradient id="gearGradient" x1="274" y1="40" x2="458" y2="408" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1697b7"/>
+      <stop offset="1" stop-color="#108faf"/>
+    </linearGradient>
+    <clipPath id="halfClip">
+      <rect x="256" y="0" width="256" height="512"/>
+    </clipPath>
+  </defs>
+
+  <g fill="none" fill-rule="evenodd" stroke="#183a73" stroke-linejoin="round" stroke-linecap="round">
+    <path
+      d="M255 35C127 35 23 139 23 267c0 69 30 131 79 173l-24 60 65-38c34 18 73 29 112 29z"
+      fill="url(#bubbleGradient)"
+      stroke-width="14"
+    />
+
+    <g clip-path="url(#halfClip)">
+      <g transform="translate(256 256)">
+        <path
+          d="M0-228l29 0 14 42 36 8 31-31 44 18-9 43 27 25 42-15 22 42-35 26 9 36 45 10 0 47-45 10-9 36 35 26-22 42-42-15-27 25 9 43-44 18-31-31-36 8-14 42H0l-14-42-36-8-31 31-44-18 9-43-27-25-42 15-22-42 35-26-9-36-45-10v-47l45-10 9-36-35-26 22-42 42 15 27-25-9-43 44-18 31 31 36-8z"
+          fill="url(#gearGradient)"
+          stroke-width="14"
+        />
+        <circle r="138" fill="none" stroke-width="14"/>
+        <circle r="74" fill="none" stroke-width="14"/>
+        <circle r="34" fill="#1697b7" stroke-width="14"/>
+      </g>
+    </g>
+
+    <path d="M256 24v464" stroke="#ffffff" stroke-width="22"/>
+    <path d="M256 24v464" stroke-width="14"/>
+  </g>
+</svg>

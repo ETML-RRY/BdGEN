@@ -10,9 +10,9 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 font-semibold text-lg">
             <img
-              src="/bd_gen_logo.png"
-              alt=""
-              className="w-9 h-9 object-contain"
+              src="/bd_gen_logo.svg"
+              alt="Logo BdGEN"
+              className="w-10 h-10 object-contain"
             />
             <span>BdGEN</span>
             <span className="text-sm font-normal text-[var(--color-mute)]">
