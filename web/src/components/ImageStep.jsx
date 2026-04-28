@@ -17,9 +17,9 @@ const QUALITY_CHIP = {
 };
 
 /**
- * Reusable shell for the image-generation steps (references, wireframes,
- * compose). Each step provides:
- *   - stepId: "references" | "wireframes" | "compose"
+ * Reusable shell for the image-generation steps (references, compose). Each
+ * step provides:
+ *   - stepId: "references" | "compose"
  *   - title / intro / etc.
  *   - items: [{ id, label, image_url, description?, quality? }]
  *   - supportsQuality: true to enable draft/final mode + per-item upgrade

@@ -13,7 +13,6 @@ from pathlib import Path
 from . import compose as compose_module
 from . import references as references_module
 from . import script as script_module
-from . import wireframes as wireframes_module
 from .feedback import FeedbackStore, feedback_path_for
 from .models import BdGenInput, BdGenScript, GenerationOptions, ReferencesOptions
 from .progress import StdoutReporter
@@ -22,10 +21,9 @@ from .progress import StdoutReporter
 def run_wizard(
     input_path: Path,
     pages_dir: Path,
-    wireframes_dir: Path,
     preview_pages: int | None = None,
 ) -> None:
-    """Walk the user through script -> references -> wireframes -> compose."""
+    """Walk the user through script -> references -> compose."""
     config = BdGenInput.load(input_path)
     opts = config.generation_options
     script_path = opts.script_path
@@ -36,8 +34,7 @@ def run_wizard(
         input_path, opts, script_path, feedback_store, feedback_path, preview_pages
     )
     bd_script = _step_references(bd_script, opts, script_path, feedback_store, feedback_path)
-    _step_wireframes(bd_script, opts, wireframes_dir, script_path, feedback_store, feedback_path)
-    _step_compose(bd_script, opts, pages_dir, wireframes_dir, script_path, feedback_store, feedback_path)
+    _step_compose(bd_script, opts, pages_dir, script_path, feedback_store, feedback_path)
 
     print(f"\n== Pipeline terminé ==\nBD : {opts.output_path}")
 
@@ -50,7 +47,7 @@ def _step_script(
     feedback_path: Path,
     preview_pages: int | None = None,
 ) -> BdGenScript:
-    print("\n== Étape 1/4 : Script ==")
+    print("\n== Étape 1/3 : Script ==")
     if preview_pages is not None:
         print(f"(mode preview : seules les {preview_pages} premières pages seront générées)")
 
@@ -123,7 +120,7 @@ def _step_references(
     feedback_store: FeedbackStore,
     feedback_path: Path,
 ) -> BdGenScript:
-    print("\n== Étape 2/4 : Références ==")
+    print("\n== Étape 2/3 : Références ==")
     references_module.generate_references(
         bd_script, opts.references, opts.image_model,
         script_path=script_path, feedback_store=feedback_store,
@@ -170,74 +167,22 @@ def _step_references(
                 bd_script.save(script_path)
 
 
-def _step_wireframes(
-    bd_script: BdGenScript,
-    opts: GenerationOptions,
-    wireframes_dir: Path,
-    script_path: Path,
-    feedback_store: FeedbackStore,
-    feedback_path: Path,
-) -> None:
-    print("\n== Étape 3/4 : Wireframes (optionnel) ==")
-    if not _prompt_yes_no("Générer les wireframes ?", default=True):
-        return
-    wireframes_module.generate_wireframes(
-        bd_script, opts, wireframes_dir, feedback_store=feedback_store,
-        reporter=StdoutReporter(),
-    )
-
-    while True:
-        _print_wireframes_summary(bd_script, wireframes_dir)
-        targets = _wireframe_targets(bd_script)
-        choice = _prompt_choice(
-            "Que faire ?",
-            {"c": "ontinuer", "v": "oir une page", "m": "odifier une page", "q": "uitter"},
-        )
-        if choice == "c":
-            return
-        if choice == "q":
-            sys.exit(0)
-        if choice == "v":
-            target = _prompt_target("Quelle page ?", targets)
-            if target:
-                _open_file(_wireframe_path(wireframes_dir, target))
-            continue
-        if choice == "m":
-            target = _prompt_target("Laquelle régénérer ?", targets)
-            if not target:
-                continue
-            text = _prompt_multiline(f"Feedback pour {target}")
-            if not text:
-                continue
-            feedback_store.add("wireframes", target, text)
-            feedback_store.save(feedback_path)
-            if _prompt_yes_no(f"Régénérer {target} ?", default=True):
-                wf = _wireframe_path(wireframes_dir, target)
-                if wf.exists():
-                    wf.unlink()
-                wireframes_module.generate_wireframes(
-                    bd_script, opts, wireframes_dir, feedback_store=feedback_store
-                )
-
-
 def _step_compose(
     bd_script: BdGenScript,
     opts: GenerationOptions,
     pages_dir: Path,
-    wireframes_dir: Path,
     script_path: Path,
     feedback_store: FeedbackStore,
     feedback_path: Path,
 ) -> None:
-    print("\n== Étape 4/4 : Composition ==")
-    wf_dir = wireframes_dir if wireframes_dir.exists() else None
+    print("\n== Étape 3/3 : Composition ==")
     compose_module.compose_output(
-        bd_script, opts, pages_dir, wf_dir, feedback_store=feedback_store,
+        bd_script, opts, pages_dir, feedback_store=feedback_store,
         reporter=StdoutReporter(),
     )
 
     while True:
-        targets = _wireframe_targets(bd_script)
+        targets = _page_targets(bd_script)
         choice = _prompt_choice(
             "Que faire ?",
             {
@@ -272,7 +217,7 @@ def _step_compose(
                 if pp.exists():
                     pp.unlink()
                 compose_module.compose_output(
-                    bd_script, opts, pages_dir, wf_dir, feedback_store=feedback_store,
+                    bd_script, opts, pages_dir, feedback_store=feedback_store,
                     reporter=StdoutReporter(),
                 )
 
@@ -355,14 +300,6 @@ def _print_refs_summary(bd_script: BdGenScript) -> None:
     print(f"  Décors      : {locs}")
 
 
-def _print_wireframes_summary(bd_script: BdGenScript, wireframes_dir: Path) -> None:
-    targets = _wireframe_targets(bd_script)
-    found = sum(
-        1 for t in targets if _wireframe_path(wireframes_dir, t).exists()
-    )
-    print(f"  Wireframes : {found}/{len(targets)} dans {wireframes_dir}")
-
-
 def _all_ref_ids(bd_script: BdGenScript) -> list[str]:
     return [c.id for c in bd_script.characters] + [l.id for l in bd_script.locations]
 
@@ -377,7 +314,7 @@ def _path_for_ref(
     return None
 
 
-def _wireframe_targets(bd_script: BdGenScript) -> list[str]:
+def _page_targets(bd_script: BdGenScript) -> list[str]:
     targets: list[str] = []
     if bd_script.cover is not None:
         targets.append("cover")
@@ -385,15 +322,6 @@ def _wireframe_targets(bd_script: BdGenScript) -> list[str]:
     if bd_script.back_cover is not None:
         targets.append("back")
     return targets
-
-
-def _wireframe_path(wireframes_dir: Path, target: str) -> Path:
-    if target == "cover":
-        return wireframes_dir / "cover.png"
-    if target == "back":
-        return wireframes_dir / "back.png"
-    num = int(target.split("_")[1])
-    return wireframes_dir / f"page_{num:02d}.png"
 
 
 def _page_path(pages_dir: Path, target: str) -> Path:

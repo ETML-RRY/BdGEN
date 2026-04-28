@@ -37,10 +37,14 @@ export default function PreparationStep({ project, onSaved }) {
     <ProjectForm
       initial={project.config}
       projectName={name}
+      initialCharacterPhotos={project.character_photos || {}}
+      initialLocationPhotos={project.location_photos || {}}
+      initialObjectPhotos={project.object_photos || {}}
       onSubmit={onSubmit}
+      onReferencesImported={onSaved}
       submitLabel="Enregistrer & passer à l'écriture"
       onApplyStyleOnly={hasScript ? onApplyStyleOnly : null}
-      applyStyleOnlyLabel="Appliquer le style sans réécrire"
+      applyStyleOnlyLabel="Restyler sans réécrire"
     />
   );
 }

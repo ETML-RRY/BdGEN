@@ -1,8 +1,8 @@
 """Cross-cutting constraints applied to every image-generation prompt.
 
 These rules are injected into every prompt sent to the image API (references,
-wireframes, page panels, cover, back cover) so the model has a consistent set
-of authoring constraints across the whole pipeline.
+page panels, cover, back cover) so the model has a consistent set of authoring
+constraints across the whole pipeline.
 """
 
 IMAGE_CONSTRAINTS = """\

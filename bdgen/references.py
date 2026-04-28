@@ -34,17 +34,20 @@ def generate_references(
     reporter: ProgressReporter | None = None,
     interrupt: InterruptFlag | None = None,
     style_ref: Path | None = None,
+    character_photos: dict[str, Path] | None = None,
+    location_photos: dict[str, Path] | None = None,
+    object_photos: dict[str, Path] | None = None,
 ) -> BdGenScript:
-    """Generate every character and location reference sheet.
+    """Generate every character, location and object reference sheet.
 
-    Saves images under ``{options.output_dir}/{characters|locations}/{id}.png`` and
-    fills the matching ``reference_image`` field on the script. Resumable: skips any
-    entry whose target PNG already exists on disk and is non-empty (unless ``force``
-    is True). When ``script_path`` is provided, the script JSON is re-saved after
-    each successful generation so progress survives a crash. When ``feedback_store``
-    is provided, any feedback recorded for a given character/location is appended to
-    its prompt. ``reporter`` receives structured progress events; ``interrupt`` is
-    checked between each character/location so generation can stop cleanly.
+    Saves images under ``{options.output_dir}/{characters|locations|objects}/{id}.png``
+    and fills the matching ``reference_image`` field on the script. Resumable: skips
+    any entry whose target PNG already exists on disk and is non-empty (unless
+    ``force`` is True). When ``script_path`` is provided, the script JSON is re-saved
+    after each successful generation so progress survives a crash. When
+    ``feedback_store`` is provided, any feedback recorded for a given target is
+    appended to its prompt. ``reporter`` receives structured progress events;
+    ``interrupt`` is checked between each entry so generation can stop cleanly.
     """
     rep = _coerce_reporter(reporter)
     flag = _coerce_flag(interrupt)
@@ -58,12 +61,14 @@ def generate_references(
 
     char_dir = options.output_dir / "characters"
     loc_dir = options.output_dir / "locations"
+    obj_dir = options.output_dir / "objects"
     char_dir.mkdir(parents=True, exist_ok=True)
     loc_dir.mkdir(parents=True, exist_ok=True)
+    obj_dir.mkdir(parents=True, exist_ok=True)
 
     client = _client(image_model)
 
-    total = len(script.characters) + len(script.locations)
+    total = len(script.characters) + len(script.locations) + len(script.objects)
     done = 0
 
     for character in script.characters:
@@ -92,7 +97,12 @@ def generate_references(
             prompt = _augment_prompt(
                 character.reference_prompt, feedback_store, character.id
             )
-            _generate_image(client, image_model, prompt, target, style_ref=style_ref)
+            photo = (character_photos or {}).get(character.id)
+            _generate_image(
+                client, image_model, prompt, target,
+                style_ref=style_ref,
+                character_photo=photo,
+            )
             rep.emit(ProgressEvent(
                 step="references",
                 phase=f"character_{character.id}_done",
@@ -132,7 +142,12 @@ def generate_references(
             prompt = _augment_prompt(
                 location.reference_prompt, feedback_store, location.id
             )
-            _generate_image(client, image_model, prompt, target, style_ref=style_ref)
+            photo = (location_photos or {}).get(location.id)
+            _generate_image(
+                client, image_model, prompt, target,
+                style_ref=style_ref,
+                location_photo=photo,
+            )
             rep.emit(ProgressEvent(
                 step="references",
                 phase=f"location_{location.id}_done",
@@ -143,6 +158,51 @@ def generate_references(
                 extra={"id": location.id, "kind": "location"},
             ))
         location.reference_image = target
+        if script_path is not None:
+            script.save(script_path)
+
+    for obj in script.objects:
+        flag.check()
+        done += 1
+        target = obj_dir / f"{obj.id}.png"
+        if not force and _is_complete(target):
+            rep.emit(ProgressEvent(
+                step="references",
+                phase=f"object_{obj.id}_skipped",
+                message=f"Objet « {obj.name} » déjà sur disque.",
+                current=done,
+                total=total,
+                artifact=str(target),
+                extra={"id": obj.id, "kind": "object"},
+            ))
+        else:
+            rep.emit(ProgressEvent(
+                step="references",
+                phase=f"object_{obj.id}",
+                message=f"Génération de la référence pour l'objet « {obj.name} »…",
+                current=done,
+                total=total,
+                extra={"id": obj.id, "kind": "object"},
+            ))
+            prompt = _augment_prompt(
+                obj.reference_prompt, feedback_store, obj.id
+            )
+            photo = (object_photos or {}).get(obj.id)
+            _generate_image(
+                client, image_model, prompt, target,
+                style_ref=style_ref,
+                object_photo=photo,
+            )
+            rep.emit(ProgressEvent(
+                step="references",
+                phase=f"object_{obj.id}_done",
+                message=f"Référence « {obj.name} » générée.",
+                current=done,
+                total=total,
+                artifact=str(target),
+                extra={"id": obj.id, "kind": "object"},
+            ))
+        obj.reference_image = target
         if script_path is not None:
             script.save(script_path)
 
@@ -208,25 +268,150 @@ STYLE_REF_LABEL = (
 )
 
 
+PHOTO_REF_LABEL = (
+    "PERSON LIKENESS REFERENCE (this input image is a photograph): use this "
+    "photo ONLY to anchor the recognizable facial features and overall "
+    "physiognomy of the character — like a caricaturist working from a "
+    "reference photo. The art style described in the prompt above (and shown "
+    "in the style reference if present) is the master and ALWAYS overrides "
+    "any photographic quality of this image.\n\n"
+    "PRESERVE FROM THE PHOTO (likeness):\n"
+    "- Face shape, jawline, head proportions.\n"
+    "- Nose shape, eye spacing and shape, eyebrow shape.\n"
+    "- Hair color, texture and approximate length / silhouette.\n"
+    "- Skin tone, approximate age.\n"
+    "- Distinguishing features: glasses, beard, freckles, moles, scars, "
+    "  visible piercings, dimples.\n\n"
+    "DO NOT PRESERVE FROM THE PHOTO (style stays in charge):\n"
+    "- DO NOT reproduce photographic realism, photographic lighting, depth "
+    "  of field, skin micro-texture, photographic grain, sharpness.\n"
+    "- DO NOT reuse the photo's background, props, pose or framing.\n"
+    "- DO NOT copy the photo's clothing — apply the outfit described in the "
+    "  text prompt instead.\n"
+    "- DO NOT introduce any photo-derived rendering technique that would "
+    "  conflict with the defined comic-book style. If in doubt, the style "
+    "  always wins; the photo is only there for likeness, not for look.\n\n"
+    "Output a stylized comic-book character drawn ENTIRELY in the project's "
+    "art style, that recognizably resembles the person in the photo."
+)
+
+
+LOCATION_PHOTO_REF_LABEL = (
+    "PLACE LIKENESS REFERENCE (this input image is a photograph of a real "
+    "place / setting): use this photo ONLY to anchor the recognizable "
+    "architecture, layout, dominant features and overall atmosphere of the "
+    "location — like an illustrator sketching from a reference photo. The "
+    "art style described in the prompt above (and shown in the style "
+    "reference if present) is the master and ALWAYS overrides any "
+    "photographic quality of this image.\n\n"
+    "PRESERVE FROM THE PHOTO (likeness):\n"
+    "- Overall spatial layout, perspective and characteristic structure of "
+    "  the place.\n"
+    "- Recognizable landmarks: distinctive buildings, walls, doors, windows, "
+    "  furniture, vegetation, terrain features.\n"
+    "- Dominant colors, materials and lighting mood, abstracted to the "
+    "  project's palette.\n"
+    "- Time of day / weather cues if they define the place's atmosphere.\n\n"
+    "DO NOT PRESERVE FROM THE PHOTO (style stays in charge):\n"
+    "- DO NOT reproduce photographic realism, photographic lighting, depth "
+    "  of field, micro-textures, photographic grain, sharpness.\n"
+    "- DO NOT include any people, vehicles or characters that happen to be "
+    "  in the photo. The reference is for the SETTING only.\n"
+    "- DO NOT reuse text/signage from the photo verbatim if it is brand- or "
+    "  trademark-bearing; either omit it or render generic stylized lettering.\n"
+    "- DO NOT introduce any photo-derived rendering technique that would "
+    "  conflict with the defined comic-book style.\n\n"
+    "Output a stylized comic-book establishing shot of the place, drawn "
+    "ENTIRELY in the project's art style, with NO characters in frame, that "
+    "is recognizably the SAME setting as the one in the photo."
+)
+
+
+OBJECT_PHOTO_REF_LABEL = (
+    "OBJECT LIKENESS REFERENCE (this input image is a photograph of a real "
+    "object, product or reference): use this photo ONLY to anchor the "
+    "recognizable shape, proportions, key markings and characteristic "
+    "silhouette of the object — like an illustrator working from a reference "
+    "photo. The art style described in the prompt above (and shown in the "
+    "style reference if present) is the master and ALWAYS overrides any "
+    "photographic quality of this image.\n\n"
+    "PRESERVE FROM THE PHOTO (likeness):\n"
+    "- Overall shape, proportions and silhouette of the object.\n"
+    "- Distinctive structural details (e.g. cover layout for a book, label "
+    "  shape for a bottle, characteristic ornaments or markings).\n"
+    "- Dominant colors and color zones, abstracted to the project's palette.\n"
+    "- Any textual element on the object: render it as STYLIZED LETTERING "
+    "  consistent with the art style, but keep the wording recognizable when "
+    "  it matters for the object's identity (e.g. a book title on a cover).\n\n"
+    "DO NOT PRESERVE FROM THE PHOTO (style stays in charge):\n"
+    "- DO NOT reproduce photographic realism, photographic lighting, depth "
+    "  of field, micro-textures, photographic grain, sharpness.\n"
+    "- DO NOT reuse the photo's background, surroundings, hands or environment.\n"
+    "- DO NOT introduce any photo-derived rendering technique that would "
+    "  conflict with the defined comic-book style.\n\n"
+    "Output a stylized comic-book illustration of the object, drawn ENTIRELY "
+    "in the project's art style on a neutral background, that is recognizably "
+    "the SAME object as the one in the photo."
+)
+
+
 def _generate_image(
     client: OpenAI,
     image_model: ImageModelConfig,
     prompt: str,
     target: Path,
     style_ref: Path | None = None,
+    character_photo: Path | None = None,
+    location_photo: Path | None = None,
+    object_photo: Path | None = None,
 ) -> None:
-    """Call images.generate() or images.edit() (when a style reference is provided).
+    """Call images.generate() or images.edit() with optional input images.
 
     When a style-reference PNG is supplied, we switch to images.edit() so the
     model can *see* the target visual style rather than only reading a text
-    description. This is significantly more reliable for unusual or non-default
-    artistic styles (sketchy indie BD, limited palettes, etc.).
+    description. ``character_photo`` / ``location_photo`` / ``object_photo``
+    each anchor the likeness of one entity while keeping the defined style in
+    charge. If none of the optional inputs are supplied we fall back to the
+    cheaper images.generate() path.
     """
+    inputs: list[tuple[str, bytes, str]] = []
+    prompt_prefix_parts: list[str] = []
     if style_ref is not None and style_ref.exists() and style_ref.stat().st_size > 0:
-        full_prompt = STYLE_REF_LABEL + "\n\n" + prompt
+        inputs.append((style_ref.name, style_ref.read_bytes(), "image/png"))
+        prompt_prefix_parts.append(STYLE_REF_LABEL)
+    if (
+        character_photo is not None
+        and character_photo.exists()
+        and character_photo.stat().st_size > 0
+    ):
+        inputs.append(
+            (character_photo.name, character_photo.read_bytes(), "image/png")
+        )
+        prompt_prefix_parts.append(PHOTO_REF_LABEL)
+    if (
+        location_photo is not None
+        and location_photo.exists()
+        and location_photo.stat().st_size > 0
+    ):
+        inputs.append(
+            (location_photo.name, location_photo.read_bytes(), "image/png")
+        )
+        prompt_prefix_parts.append(LOCATION_PHOTO_REF_LABEL)
+    if (
+        object_photo is not None
+        and object_photo.exists()
+        and object_photo.stat().st_size > 0
+    ):
+        inputs.append(
+            (object_photo.name, object_photo.read_bytes(), "image/png")
+        )
+        prompt_prefix_parts.append(OBJECT_PHOTO_REF_LABEL)
+
+    if inputs:
+        full_prompt = "\n\n".join(prompt_prefix_parts + [prompt])
         result = client.images.edit(
             model=image_model.model,
-            image=[(style_ref.name, style_ref.read_bytes(), "image/png")],
+            image=inputs,
             prompt=full_prompt,
             size=REFERENCE_SIZE,
             quality=image_model.quality,

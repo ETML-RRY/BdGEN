@@ -22,6 +22,14 @@ export default function ReferencesStep({ project, onChanged }) {
       stale: l.stale,
       description: l.description,
     })),
+    ...(project.references.objects || []).map((o) => ({
+      id: o.id,
+      label: `Objet — ${o.name}`,
+      image_url: o.image_url,
+      quality: o.quality,
+      stale: o.stale,
+      description: o.description,
+    })),
   ];
 
   return (
@@ -35,8 +43,8 @@ export default function ReferencesStep({ project, onChanged }) {
       layout="square"
       supportsQuality
       emptyLabel="Cette référence n'a pas encore été générée."
-      onContinue={() => navigate(`/projects/${encodeURIComponent(name)}/wireframes`)}
-      continueLabel="Continuer vers les esquisses →"
+      onContinue={() => navigate(`/projects/${encodeURIComponent(name)}/compose`)}
+      continueLabel="Continuer vers les planches →"
     />
   );
 }

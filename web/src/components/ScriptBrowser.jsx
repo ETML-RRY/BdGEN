@@ -7,6 +7,7 @@ import ConfirmDeleteDialog from "./ConfirmDeleteDialog.jsx";
 const TABS = [
   { id: "characters", label: "Personnages" },
   { id: "locations", label: "Décors" },
+  { id: "objects", label: "Objets" },
   { id: "pages", label: "Planches" },
   { id: "covers", label: "Couvertures" },
 ];
@@ -20,7 +21,8 @@ export default function ScriptBrowser({ project, onChanged, readOnly = false }) 
       <div className="flex items-center justify-between mb-4 gap-3">
         <div className="text-sm text-[var(--color-ink-soft)]">
           {script.characters.length} personnages · {script.locations.length}{" "}
-          décors · {script.pages.length} planches
+          décors · {(script.objects?.length ?? 0)} objets ·{" "}
+          {script.pages.length} planches
           {readOnly && (
             <span className="ml-3 chip chip-peach">
               Aperçu — édition désactivée pendant la génération
@@ -50,6 +52,9 @@ export default function ScriptBrowser({ project, onChanged, readOnly = false }) 
       )}
       {tab === "locations" && (
         <LocationsList locations={script.locations} onChanged={onChanged} readOnly={readOnly} />
+      )}
+      {tab === "objects" && (
+        <ObjectsList objects={script.objects || []} onChanged={onChanged} readOnly={readOnly} />
       )}
       {tab === "pages" && (
         <PagesBrowser script={script} onChanged={onChanged} readOnly={readOnly} />
@@ -205,6 +210,78 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
   );
 }
 
+function ObjectsList({ objects, onChanged, readOnly = false }) {
+  const { name } = useParams();
+  const navigate = useNavigate();
+  const [refining, setRefining] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  if (objects.length === 0)
+    return (
+      <p className="text-sm text-[var(--color-mute)]">
+        Aucun objet / produit / référence pour ce projet.
+      </p>
+    );
+  return (
+    <ul className="space-y-3">
+      {objects.map((o) => (
+        <li key={o.id} className="card p-4 bg-[var(--color-paper-soft)]/40">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div>
+              <div className="font-semibold">{o.name}</div>
+              <div className="text-xs text-[var(--color-mute)]">id: {o.id}</div>
+            </div>
+            {!readOnly && (
+              <div className="flex gap-1">
+                <button
+                  className="btn btn-ghost text-xs"
+                  onClick={() => setRefining(o)}
+                >
+                  Retoucher
+                </button>
+                <button
+                  className="btn btn-ghost text-xs text-[var(--color-rose-500)]"
+                  onClick={() => setDeleting(o)}
+                >
+                  Supprimer
+                </button>
+              </div>
+            )}
+          </div>
+          <p className="text-sm whitespace-pre-wrap">{o.description}</p>
+        </li>
+      ))}
+      {refining && (
+        <RefineDialog
+          title={`Retoucher « ${refining.name} »`}
+          hint="Décrivez la modification à apporter à l'objet. Le LLM mettra à jour cet objet uniquement."
+          onClose={() => setRefining(null)}
+          onSubmit={async (text) => {
+            await api.refineObject(name, refining.id, text);
+            await onChanged();
+          }}
+        />
+      )}
+      {deleting && (
+        <ConfirmDeleteDialog
+          title={`Supprimer « ${deleting.name} » ?`}
+          body="Cet objet et toutes les cases qui s'y réfèrent vont être retirés du scénario."
+          loadPreview={() => api.previewDeleteObject(name, deleting.id)}
+          confirmLabel="Supprimer"
+          onClose={() => setDeleting(null)}
+          onConfirm={async () => {
+            const info = await api.deleteObject(name, deleting.id, true);
+            await onChanged();
+            if (info?.job) {
+              navigate(`/projects/${encodeURIComponent(name)}/script`);
+            }
+          }}
+        />
+      )}
+    </ul>
+  );
+}
+
+
 function PagesBrowser({ script, onChanged, readOnly = false }) {
   const { name } = useParams();
   const [idx, setIdx] = useState(0);
@@ -259,6 +336,12 @@ function PagesBrowser({ script, onChanged, readOnly = false }) {
                 <strong>Lieu&nbsp;:</strong> {p.location} ·{" "}
                 <strong>Personnages&nbsp;:</strong>{" "}
                 {p.characters.length === 0 ? "(aucun)" : p.characters.join(", ")}
+                {p.objects?.length > 0 && (
+                  <>
+                    {" "}
+                    · <strong>Objets&nbsp;:</strong> {p.objects.join(", ")}
+                  </>
+                )}
               </div>
               <p className="text-sm mt-1 whitespace-pre-wrap">
                 {p.scene_description}

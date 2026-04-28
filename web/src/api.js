@@ -36,10 +36,13 @@ export const api = {
     }),
   deleteProject: (name) =>
     request(`/api/projects/${encodeURIComponent(name)}`, { method: "DELETE" }),
-  duplicateProject: (name, newProject) =>
+  duplicateProject: (name, { newProject = null, includeReferences = false } = {}) =>
     request(`/api/projects/${encodeURIComponent(name)}/duplicate`, {
       method: "POST",
-      body: JSON.stringify({ new_project: newProject || null }),
+      body: JSON.stringify({
+        new_project: newProject,
+        include_references: includeReferences,
+      }),
     }),
   restyleProject: (name, style) =>
     request(`/api/projects/${encodeURIComponent(name)}/restyle`, {
@@ -54,6 +57,39 @@ export const api = {
     fd.append("file", file);
     const res = await fetch("/api/projects/import", { method: "POST", body: fd });
     if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  listExportableReferences: (name) =>
+    request(`/api/projects/${encodeURIComponent(name)}/references/exportable`),
+  exportReferencesBundle: async (name, picks) => {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(name)}/references/export`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(picks),
+      }
+    );
+    if (!res.ok) {
+      let body;
+      try { body = await res.json(); } catch { body = { detail: await res.text() }; }
+      throw new Error(body.detail || res.statusText);
+    }
+    return res.blob();
+  },
+  importReferencesBundle: async (name, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(name)}/references/import`,
+      { method: "POST", body: fd }
+    );
+    if (!res.ok) {
+      let body;
+      try { body = await res.json(); } catch { body = { detail: await res.text() }; }
+      throw new Error(body.detail || res.statusText);
+    }
     return res.json();
   },
 
@@ -91,6 +127,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ feedback }),
     }),
+  refineObject: (name, id, feedback) =>
+    request(`/api/projects/${encodeURIComponent(name)}/refine/object/${encodeURIComponent(id)}`, {
+      method: "POST",
+      body: JSON.stringify({ feedback }),
+    }),
   refinePage: (name, n, feedback, cascade = false) =>
     request(`/api/projects/${encodeURIComponent(name)}/refine/page/${n}`, {
       method: "POST",
@@ -104,6 +145,10 @@ export const api = {
     request(
       `/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(id)}/delete-preview`
     ),
+  previewDeleteObject: (name, id) =>
+    request(
+      `/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(id)}/delete-preview`
+    ),
   deleteCharacter: (name, id, autoRegenerate = true) =>
     request(
       `/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(id)}?auto_regenerate=${autoRegenerate}`,
@@ -112,6 +157,11 @@ export const api = {
   deleteLocation: (name, id, autoRegenerate = true) =>
     request(
       `/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(id)}?auto_regenerate=${autoRegenerate}`,
+      { method: "DELETE" }
+    ),
+  deleteObject: (name, id, autoRegenerate = true) =>
+    request(
+      `/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(id)}?auto_regenerate=${autoRegenerate}`,
       { method: "DELETE" }
     ),
 
@@ -166,6 +216,117 @@ export const api = {
     }
     return res.json();
   },
+
+  characterFromPhoto: async (file, language = "fr") => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("language", language);
+    const res = await fetch("/api/character-from-photo", {
+      method: "POST",
+      body: fd,
+    });
+    if (!res.ok) {
+      let body;
+      try {
+        body = await res.json();
+      } catch {
+        body = { detail: await res.text() };
+      }
+      throw new Error(body.detail || res.statusText);
+    }
+    return res.json();
+  },
+
+  setCharacterPhoto: async (name, characterId, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(characterId)}/photo`,
+      { method: "PUT", body: fd }
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  deleteCharacterPhoto: (name, characterId) =>
+    request(
+      `/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(characterId)}/photo`,
+      { method: "DELETE" }
+    ),
+
+  objectFromPhoto: async (file, language = "fr") => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("language", language);
+    const res = await fetch("/api/object-from-photo", {
+      method: "POST",
+      body: fd,
+    });
+    if (!res.ok) {
+      let body;
+      try {
+        body = await res.json();
+      } catch {
+        body = { detail: await res.text() };
+      }
+      throw new Error(body.detail || res.statusText);
+    }
+    return res.json();
+  },
+
+  setObjectPhoto: async (name, objectId, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(objectId)}/photo`,
+      { method: "PUT", body: fd }
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  deleteObjectPhoto: (name, objectId) =>
+    request(
+      `/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(objectId)}/photo`,
+      { method: "DELETE" }
+    ),
+
+  locationFromPhoto: async (file, language = "fr") => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("language", language);
+    const res = await fetch("/api/location-from-photo", {
+      method: "POST",
+      body: fd,
+    });
+    if (!res.ok) {
+      let body;
+      try {
+        body = await res.json();
+      } catch {
+        body = { detail: await res.text() };
+      }
+      throw new Error(body.detail || res.statusText);
+    }
+    return res.json();
+  },
+
+  setLocationPhoto: async (name, locationId, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(locationId)}/photo`,
+      { method: "PUT", body: fd }
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  deleteLocationPhoto: (name, locationId) =>
+    request(
+      `/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(locationId)}/photo`,
+      { method: "DELETE" }
+    ),
 };
 
 // Subscribe to live progress. Calls onEvent(payload) for each event.

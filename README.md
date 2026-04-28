@@ -22,7 +22,7 @@ cp .env.sample .env
    uv run main.py wizard mon-projet.json
    ```
 
-   Le wizard vous guide à travers les 4 étapes du pipeline. À chaque étape vous pouvez accepter, visualiser le résultat, ou saisir un feedback qui sera intégré à la régénération.
+   Le wizard vous guide à travers les 3 étapes du pipeline. À chaque étape vous pouvez accepter, visualiser le résultat, ou saisir un feedback qui sera intégré à la régénération.
 
 Tout est généré dans `./output/<project>/`.
 
@@ -32,15 +32,13 @@ Tout est généré dans `./output/<project>/`.
 |---|---|---|
 | 1. Scénario | `script` | `bdgen-script.json` (LLM développe le synopsis en script détaillé : pages, cases, dialogues) |
 | 2. Références visuelles | `references` | `references/characters/*.png`, `references/locations/*.png` (planches modèle pour cohérence) |
-| 3. Wireframes (optionnel) | `wireframes` | `wireframes/page_XX.png` (croquis basse-qualité par page pour valider la mise en page) |
-| 4. Composition | `compose` | `pages/page_XX.png` + couverture `cover.png` + 4ème de couv `back.png` + assemblage `<project>.pdf` (page-level avec bulles intégrées) |
+| 3. Composition | `compose` | `pages/page_XX.png` + couverture `cover.png` + 4ème de couv `back.png` + assemblage `<project>.pdf` (page-level avec bulles intégrées) |
 
 ### Pas-à-pas (alternative au wizard)
 
 ```bash
 uv run main.py script mon-projet.json
 uv run main.py references ./output/mon-projet/bdgen-script.json
-uv run main.py wireframes ./output/mon-projet/bdgen-script.json   # optionnel
 uv run main.py compose ./output/mon-projet/bdgen-script.json
 ```
 
@@ -100,8 +98,6 @@ qu'une autre génération est en cours.
 - BD courte (~6 pages) : **~$2** (compose page-level) + ~$0.70 (références) ≈ **$3**
 - Album (~48 pages) : **~$15** + ~$2 ≈ **$17**
 
-Les wireframes optionnels ajoutent ~$0.10/page.
-
 ## Structure d'un projet généré
 
 ```
@@ -111,7 +107,6 @@ output/mon-projet/
 ├── references/
 │   ├── characters/         planches-modèle des personnages
 │   └── locations/          planches-modèle des décors
-├── wireframes/             croquis basse-qualité par page + cover/back (optionnel)
 ├── pages/                  pages finales en PNG (+ cover.png et back.png)
 └── mon-projet.pdf          assemblage final (cover + pages + back)
 ```

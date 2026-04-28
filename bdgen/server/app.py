@@ -100,7 +100,7 @@ class PageFeedbackPayload(BaseModel):
 
 
 class ImageFeedbackPayload(BaseModel):
-    step: str  # "references" | "wireframes" | "compose"
+    step: str  # "references" | "compose"
     target: str
     feedback: str
 
@@ -150,11 +150,9 @@ def _register_api(app: FastAPI) -> None:
             .get("quality", "high")
         )
         # Per-step asset listings the frontend uses to flip through items.
-        refs = {"characters": [], "locations": []}
-        wireframes = []
+        refs = {"characters": [], "locations": [], "objects": []}
         composed = []
         stale_refs = set(stale_idx.get("references", []))
-        stale_wf = set(stale_idx.get("wireframes", []))
         stale_compose = set(stale_idx.get("compose", []))
         if bd_script is not None:
             for c in bd_script.characters:
@@ -186,26 +184,60 @@ def _register_api(app: FastAPI) -> None:
                     ),
                     "stale": l.id in stale_refs and ref_path.exists(),
                 })
+            for o in bd_script.objects:
+                ref_path = proj_dir / "references" / "objects" / f"{o.id}.png"
+                refs["objects"].append({
+                    "id": o.id,
+                    "name": o.name,
+                    "description": o.description,
+                    "image_url": _file_url(
+                        name, f"references/objects/{o.id}.png", ref_path
+                    ),
+                    "quality": _quality_for(
+                        quality_idx, "references", o.id, ref_path, default_quality
+                    ),
+                    "stale": o.id in stale_refs and ref_path.exists(),
+                })
             if bd_script.cover is not None:
-                wireframes.append(_asset_entry(name, "cover", proj_dir, "wireframes", stale_wf))
                 composed.append(_compose_entry(name, "cover", proj_dir, quality_idx, default_quality, stale_compose))
             for p in bd_script.pages:
-                wireframes.append(_asset_entry(name, f"page_{p.page_number}", proj_dir, "wireframes", stale_wf))
                 composed.append(_compose_entry(name, f"page_{p.page_number}", proj_dir, quality_idx, default_quality, stale_compose))
             if bd_script.back_cover is not None:
-                wireframes.append(_asset_entry(name, "back", proj_dir, "wireframes", stale_wf))
                 composed.append(_compose_entry(name, "back", proj_dir, quality_idx, default_quality, stale_compose))
+        character_photos: dict[str, str | None] = {}
+        for cid, photo_path in service.list_character_photos(proj_dir).items():
+            character_photos[cid] = _file_url(
+                name,
+                f"{service.CHARACTER_PHOTOS_DIRNAME}/{cid}.png",
+                photo_path,
+            )
+        location_photos: dict[str, str | None] = {}
+        for lid, photo_path in service.list_location_photos(proj_dir).items():
+            location_photos[lid] = _file_url(
+                name,
+                f"{service.LOCATION_PHOTOS_DIRNAME}/{lid}.png",
+                photo_path,
+            )
+        object_photos: dict[str, str | None] = {}
+        for oid, photo_path in service.list_object_photos(proj_dir).items():
+            object_photos[oid] = _file_url(
+                name,
+                f"{service.OBJECT_PHOTOS_DIRNAME}/{oid}.png",
+                photo_path,
+            )
         return {
             "name": name,
             "state": state,
             "config": cfg_dict,
             "script": script_dict,
             "references": refs,
-            "wireframes": wireframes,
             "composed": composed,
             "stale": stale_idx,
             "pdf_url": _file_url(name, f"{name}.pdf", proj_dir / f"{name}.pdf"),
             "default_quality": default_quality,
+            "character_photos": character_photos,
+            "location_photos": location_photos,
+            "object_photos": object_photos,
         }
 
     @app.post("/api/projects")
@@ -252,8 +284,11 @@ def _register_api(app: FastAPI) -> None:
         if not service.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         new_id = (payload or {}).get("new_project") or None
+        include_refs = bool((payload or {}).get("include_references", False))
         try:
-            created = service.duplicate_project(name, new_id, _output_root())
+            created = service.duplicate_project(
+                name, new_id, _output_root(), include_references=include_refs
+            )
         except FileNotFoundError as e:
             raise HTTPException(404, str(e))
         except Exception as e:
@@ -322,6 +357,53 @@ def _register_api(app: FastAPI) -> None:
         except Exception as e:
             raise HTTPException(400, f"Archive invalide : {e}")
         return {"name": project_name}
+
+    # --- References bundle (.bdrefs) — share a cast across projects ---
+
+    @app.get("/api/projects/{name}/references/exportable")
+    def list_exportable_refs(name: str) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        try:
+            return service.list_exportable_references(name, _output_root())
+        except FileNotFoundError as e:
+            raise HTTPException(404, str(e))
+
+    @app.post("/api/projects/{name}/references/export")
+    def export_refs_bundle(name: str, payload: dict = Body(default_factory=dict)) -> Response:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        try:
+            blob = service.export_references_bundle(
+                name,
+                character_ids=list((payload or {}).get("characters") or []),
+                location_ids=list((payload or {}).get("locations") or []),
+                object_ids=list((payload or {}).get("objects") or []),
+                output_root=_output_root(),
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except FileNotFoundError as e:
+            raise HTTPException(404, str(e))
+        return Response(
+            content=blob,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{name}.bdrefs"',
+            },
+        )
+
+    @app.post("/api/projects/{name}/references/import")
+    async def import_refs_bundle(name: str, file: UploadFile = File(...)) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        blob = await file.read()
+        try:
+            return service.import_references_bundle(name, blob, _output_root())
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except FileNotFoundError as e:
+            raise HTTPException(404, str(e))
 
     # --- Jobs ---
 
@@ -407,19 +489,6 @@ def _register_api(app: FastAPI) -> None:
 
         return _start("references", name, runner)
 
-    @app.post("/api/projects/{name}/steps/wireframes/start")
-    def start_wireframes(name: str, payload: StartStepPayload = Body(default=StartStepPayload())) -> dict:
-        # Wireframes are always low-quality by design — quality_override is
-        # accepted but ignored.
-        def runner(reporter, interrupt):
-            service.run_step_wireframes(
-                name, reporter, interrupt,
-                output_root=_output_root(),
-                force_ids=payload.force_ids,
-            )
-
-        return _start("wireframes", name, runner)
-
     @app.post("/api/projects/{name}/steps/compose/start")
     def start_compose(name: str, payload: StartStepPayload = Body(default=StartStepPayload())) -> dict:
         _validate_quality(payload.quality_override)
@@ -451,6 +520,16 @@ def _register_api(app: FastAPI) -> None:
         try:
             service.add_feedback_and_regenerate_location(
                 name, location_id, payload.feedback, _output_root()
+            )
+        except Exception as e:
+            raise HTTPException(400, str(e))
+        return {"ok": True}
+
+    @app.post("/api/projects/{name}/refine/object/{object_id}")
+    def refine_object(name: str, object_id: str, payload: FeedbackPayload) -> dict:
+        try:
+            service.add_feedback_and_regenerate_object(
+                name, object_id, payload.feedback, _output_root()
             )
         except Exception as e:
             raise HTTPException(400, str(e))
@@ -489,7 +568,7 @@ def _register_api(app: FastAPI) -> None:
 
     @app.post("/api/projects/{name}/feedback/image")
     def add_image_feedback(name: str, payload: ImageFeedbackPayload) -> dict:
-        if payload.step not in ("references", "wireframes", "compose"):
+        if payload.step not in ("references", "compose"):
             raise HTTPException(400, "Étape invalide.")
         service.record_image_feedback(
             name, payload.step, payload.target, payload.feedback, _output_root()  # type: ignore[arg-type]
@@ -509,6 +588,13 @@ def _register_api(app: FastAPI) -> None:
     def preview_delete_loc(name: str, location_id: str) -> dict:
         try:
             return service.preview_delete_location(name, location_id, _output_root())
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+
+    @app.get("/api/projects/{name}/objects/{object_id}/delete-preview")
+    def preview_delete_obj(name: str, object_id: str) -> dict:
+        try:
+            return service.preview_delete_object(name, object_id, _output_root())
         except ValueError as e:
             raise HTTPException(404, str(e))
 
@@ -536,6 +622,21 @@ def _register_api(app: FastAPI) -> None:
         try:
             info = service.delete_location_and_cascade(
                 name, location_id, _output_root()
+            )
+        except ValueError as e:
+            raise HTTPException(404, str(e))
+        info["job"] = _maybe_autostart_script(name, info, auto_regenerate)
+        return info
+
+    @app.delete("/api/projects/{name}/objects/{object_id}")
+    def delete_object(
+        name: str,
+        object_id: str,
+        auto_regenerate: bool = True,
+    ) -> dict:
+        try:
+            info = service.delete_object_and_cascade(
+                name, object_id, _output_root()
             )
         except ValueError as e:
             raise HTTPException(404, str(e))
@@ -611,6 +712,165 @@ def _register_api(app: FastAPI) -> None:
             raise HTTPException(502, f"L'extraction a échoué : {e}")
         return result.model_dump(mode="json")
 
+    @app.post("/api/character-from-photo")
+    async def character_from_photo_endpoint(
+        file: UploadFile = File(...),
+        language: str = Form("fr"),
+    ) -> dict:
+        """Turn a portrait photo into a single character pre-fill payload:
+        ``{name, physical_description, outfit, personality}``. The photo
+        itself is NOT stored by this endpoint — the caller persists it via
+        the per-character photo endpoint after the project exists.
+        """
+        blob = await file.read()
+        mime = file.content_type or "image/jpeg"
+        try:
+            result = style_module.extract_character(blob, mime, language=language)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(502, f"L'extraction a échoué : {e}")
+        return result.model_dump(mode="json")
+
+    @app.post("/api/object-from-photo")
+    async def object_from_photo_endpoint(
+        file: UploadFile = File(...),
+        language: str = Form("fr"),
+    ) -> dict:
+        """Turn a product/object photo into a single object pre-fill payload:
+        ``{name, description}``. The photo itself is NOT stored by this
+        endpoint — the caller persists it via the per-object photo endpoint
+        after the project exists.
+        """
+        blob = await file.read()
+        mime = file.content_type or "image/jpeg"
+        try:
+            result = style_module.extract_object(blob, mime, language=language)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(502, f"L'extraction a échoué : {e}")
+        return result.model_dump(mode="json")
+
+    @app.post("/api/location-from-photo")
+    async def location_from_photo_endpoint(
+        file: UploadFile = File(...),
+        language: str = Form("fr"),
+    ) -> dict:
+        """Turn a place photo into a single location pre-fill payload:
+        ``{name, description}``. The photo itself is NOT stored by this
+        endpoint — the caller persists it via the per-location photo endpoint
+        after the project exists.
+        """
+        blob = await file.read()
+        mime = file.content_type or "image/jpeg"
+        try:
+            result = style_module.extract_location(blob, mime, language=language)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(502, f"L'extraction a échoué : {e}")
+        return result.model_dump(mode="json")
+
+    # --- Per-character reference photos ---
+
+    @app.put("/api/projects/{name}/characters/{character_id}/photo")
+    async def set_character_photo(
+        name: str, character_id: str, file: UploadFile = File(...)
+    ) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        blob = await file.read()
+        try:
+            p = service.save_character_photo(
+                name, character_id, blob, _output_root()
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {
+            "ok": True,
+            "url": _file_url(
+                name,
+                f"{service.CHARACTER_PHOTOS_DIRNAME}/{character_id}.png",
+                p,
+            ),
+        }
+
+    @app.delete("/api/projects/{name}/characters/{character_id}/photo")
+    def remove_character_photo(name: str, character_id: str) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        removed = service.delete_character_photo(
+            name, character_id, _output_root()
+        )
+        return {"ok": True, "removed": removed}
+
+    # --- Per-object reference photos ---
+
+    @app.put("/api/projects/{name}/objects/{object_id}/photo")
+    async def set_object_photo(
+        name: str, object_id: str, file: UploadFile = File(...)
+    ) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        blob = await file.read()
+        try:
+            p = service.save_object_photo(
+                name, object_id, blob, _output_root()
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {
+            "ok": True,
+            "url": _file_url(
+                name,
+                f"{service.OBJECT_PHOTOS_DIRNAME}/{object_id}.png",
+                p,
+            ),
+        }
+
+    @app.delete("/api/projects/{name}/objects/{object_id}/photo")
+    def remove_object_photo(name: str, object_id: str) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        removed = service.delete_object_photo(
+            name, object_id, _output_root()
+        )
+        return {"ok": True, "removed": removed}
+
+    # --- Per-location reference photos ---
+
+    @app.put("/api/projects/{name}/locations/{location_id}/photo")
+    async def set_location_photo(
+        name: str, location_id: str, file: UploadFile = File(...)
+    ) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        blob = await file.read()
+        try:
+            p = service.save_location_photo(
+                name, location_id, blob, _output_root()
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {
+            "ok": True,
+            "url": _file_url(
+                name,
+                f"{service.LOCATION_PHOTOS_DIRNAME}/{location_id}.png",
+                p,
+            ),
+        }
+
+    @app.delete("/api/projects/{name}/locations/{location_id}/photo")
+    def remove_location_photo(name: str, location_id: str) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        removed = service.delete_location_photo(
+            name, location_id, _output_root()
+        )
+        return {"ok": True, "removed": removed}
+
 
 def _validate_quality(q: str | None) -> None:
     if q is not None and q not in ("low", "medium", "high"):
@@ -650,26 +910,6 @@ def _target_relpath(target: str, kind: str) -> str | None:
     return None
 
 
-def _asset_entry(
-    project: str,
-    target: str,
-    proj_dir: Path,
-    kind: str,
-    stale_set: set[str] | None = None,
-) -> dict:
-    """Build {id, image_url, stale} for a wireframe or composed page target."""
-    rel = _target_relpath(target, kind)
-    if rel is None:
-        return {"id": target, "image_url": None, "stale": False}
-    full = proj_dir / rel
-    exists = full.exists()
-    return {
-        "id": target,
-        "image_url": _file_url(project, rel, full),
-        "stale": bool(stale_set and target in stale_set and exists),
-    }
-
-
 def _compose_entry(
     project: str,
     target: str,
@@ -678,7 +918,7 @@ def _compose_entry(
     default_quality: str,
     stale_set: set[str] | None = None,
 ) -> dict:
-    """Same as _asset_entry but enriched with the recorded quality."""
+    """Build {id, image_url, quality, stale} for a composed page target."""
     rel = _target_relpath(target, "pages")
     if rel is None:
         return {"id": target, "image_url": None, "quality": None, "stale": False}

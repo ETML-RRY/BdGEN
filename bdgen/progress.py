@@ -14,7 +14,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Protocol
 
 
-Step = str  # "script" | "references" | "wireframes" | "compose"
+Step = str  # "script" | "references" | "compose"
 
 
 class Interrupted(Exception):

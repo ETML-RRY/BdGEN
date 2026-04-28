@@ -21,6 +21,9 @@ class Style(BaseModel):
     color_palette: str | None = None
     line_work: str | None = None
     mood: str | None = None
+    panel_borders: str | None = None
+    speech_bubbles: str | None = None
+    character_rendering: str | None = None
 
 
 # --- Input (bdgen.json) ---
@@ -53,6 +56,19 @@ class LocationInput(BaseModel):
     description: str
 
 
+class ObjectInput(BaseModel):
+    """User-provided seed for a recurring object / product / reference.
+
+    Examples: a specific book the BD is about, a product to feature, a
+    distinctive prop. The LLM copies these verbatim during the setup phase
+    and adds the English ``reference_prompt`` used to generate a stylized
+    caricature in the project's art style.
+    """
+    id: str
+    name: str
+    description: str
+
+
 class Structure(BaseModel):
     page_count: int
     panels_per_page_avg: int | None = None
@@ -60,12 +76,13 @@ class Structure(BaseModel):
     include_cover: bool = False
     include_back_cover: bool = False
     narrative_pacing: str | None = None
-    # When False, the LLM must use ONLY the characters / locations supplied
-    # by the user. When True (default), it may invent additional ones if the
-    # story arc needs them. Defaults preserve previous behavior on existing
-    # projects loaded from disk.
+    # When False, the LLM must use ONLY the characters / locations / objects
+    # supplied by the user. When True (default), it may invent additional ones
+    # if the story arc needs them. Defaults preserve previous behavior on
+    # existing projects loaded from disk.
     allow_extra_characters: bool = True
     allow_extra_locations: bool = True
+    allow_extra_objects: bool = True
 
 
 class ScriptModelConfig(BaseModel):
@@ -105,12 +122,17 @@ class BdGenInput(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     project: str | None = None
+    # Human-readable name shown in the project listing. Distinct from
+    # ``metadata.title`` (the BD's in-content title) and from ``project``
+    # (the on-disk slug). Never appears in generated content.
+    display_name: str | None = None
     output_root: Path = Path("./output")
     metadata: Metadata
     story: Story
     style: Style
     characters: list[CharacterInput]
     locations: list[LocationInput] = Field(default_factory=list)
+    objects: list[ObjectInput] = Field(default_factory=list)
     structure: Structure
     generation_options: GenerationOptions
 
@@ -159,6 +181,15 @@ class ScriptLocation(BaseModel):
     reference_image: Path | None = None
 
 
+class ScriptObject(BaseModel):
+    """Recurring object / product / reference featured in the BD."""
+    id: str
+    name: str
+    description: str
+    reference_prompt: str
+    reference_image: Path | None = None
+
+
 class Cover(BaseModel):
     scene_description: str
     title_placement: str | None = None
@@ -184,6 +215,7 @@ class Panel(BaseModel):
     size: str | None = None
     location: str
     characters: list[str] = Field(default_factory=list)
+    objects: list[str] = Field(default_factory=list)
     shot: str | None = None
     scene_description: str
     narration: str | None = None
@@ -207,12 +239,14 @@ class BdGenScript(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     project: str | None = None
+    display_name: str | None = None
     source: ScriptSource
     metadata: Metadata
     style: Style
     generation_options: GenerationOptions | None = None
     characters: list[ScriptCharacter]
     locations: list[ScriptLocation]
+    objects: list[ScriptObject] = Field(default_factory=list)
     cover: Cover | None = None
     back_cover: BackCover | None = None
     pages: list[Page]
@@ -250,6 +284,9 @@ class BdGenScript(BaseModel):
 
     def location_by_id(self, lid: str) -> ScriptLocation | None:
         return next((l for l in self.locations if l.id == lid), None)
+
+    def object_by_id(self, oid: str) -> ScriptObject | None:
+        return next((o for o in self.objects if o.id == oid), None)
 
     def project_dir(self, fallback_script_path: Path | None = None) -> Path:
         """Return the project's directory.

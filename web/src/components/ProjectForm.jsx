@@ -1,9 +1,18 @@
 import { useState, useEffect } from "react";
+import {
+  FaPlus,
+  FaTrash,
+  FaImage,
+  FaUpload,
+  FaPalette,
+} from "react-icons/fa6";
 import { api } from "../api.js";
 import StyleFromImageDialog from "./StyleFromImageDialog.jsx";
+import ReferencesBundlePanel from "./ReferencesBundlePanel.jsx";
 
 export const DEFAULT_CONFIG = {
   project: "",
+  display_name: "",
   output_root: "./output",
   metadata: { title: "", author: "", language: "fr" },
   story: {
@@ -18,9 +27,13 @@ export const DEFAULT_CONFIG = {
     color_palette: "",
     line_work: "",
     mood: "",
+    panel_borders: "",
+    speech_bubbles: "",
+    character_rendering: "",
   },
   characters: [],
   locations: [],
+  objects: [],
   structure: {
     page_count: 6,
     panels_per_page_avg: 4,
@@ -30,6 +43,7 @@ export const DEFAULT_CONFIG = {
     narrative_pacing: "",
     allow_extra_characters: true,
     allow_extra_locations: true,
+    allow_extra_objects: true,
   },
   generation_options: {
     script_model: {
@@ -73,6 +87,14 @@ function blankLocation(i) {
   };
 }
 
+function blankObject(i) {
+  return {
+    id: `objet_${i}`,
+    name: "",
+    description: "",
+  };
+}
+
 function dedupeId(base, used) {
   let id = base;
   let suffix = 2;
@@ -82,9 +104,11 @@ function dedupeId(base, used) {
 }
 
 function normalize(cfg) {
-  // Tolerate configs saved before locations / allow_extra_* existed.
+  // Tolerate configs saved before locations / objects / allow_extra_* /
+  // display_name existed.
   const out = structuredClone(cfg);
   if (!Array.isArray(out.locations)) out.locations = [];
+  if (!Array.isArray(out.objects)) out.objects = [];
   if (!out.structure) out.structure = {};
   if (typeof out.structure.allow_extra_characters !== "boolean") {
     out.structure.allow_extra_characters = true;
@@ -92,6 +116,10 @@ function normalize(cfg) {
   if (typeof out.structure.allow_extra_locations !== "boolean") {
     out.structure.allow_extra_locations = true;
   }
+  if (typeof out.structure.allow_extra_objects !== "boolean") {
+    out.structure.allow_extra_objects = true;
+  }
+  if (typeof out.display_name !== "string") out.display_name = "";
   return out;
 }
 
@@ -99,8 +127,12 @@ export default function ProjectForm({
   initial,
   isNew = false,
   projectName = null,
+  initialCharacterPhotos = null,
+  initialLocationPhotos = null,
+  initialObjectPhotos = null,
   onSubmit,
   onCancel,
+  onReferencesImported = null,
   submitLabel = "Enregistrer",
   onApplyStyleOnly = null,
   applyStyleOnlyLabel = "Appliquer le style uniquement",
@@ -111,10 +143,78 @@ export default function ProjectForm({
   const [error, setError] = useState(null);
   const [styleFromImageOpen, setStyleFromImageOpen] = useState(false);
   const [styleRefFile, setStyleRefFile] = useState(null);
+  // Per-character photo state, keyed by character id.
+  // Each entry: { url: server-side URL or null, file: pending File or null,
+  //               extracting: bool, error: string | null }
+  const [characterPhotos, setCharacterPhotos] = useState(() => {
+    const out = {};
+    for (const [id, url] of Object.entries(initialCharacterPhotos || {})) {
+      if (url) out[id] = { url, file: null, extracting: false, error: null };
+    }
+    return out;
+  });
+  // Same shape as characterPhotos but keyed by location id.
+  const [locationPhotos, setLocationPhotos] = useState(() => {
+    const out = {};
+    for (const [id, url] of Object.entries(initialLocationPhotos || {})) {
+      if (url) out[id] = { url, file: null, extracting: false, error: null };
+    }
+    return out;
+  });
+  // Same shape as characterPhotos but keyed by object id.
+  const [objectPhotos, setObjectPhotos] = useState(() => {
+    const out = {};
+    for (const [id, url] of Object.entries(initialObjectPhotos || {})) {
+      if (url) out[id] = { url, file: null, extracting: false, error: null };
+    }
+    return out;
+  });
 
   useEffect(() => {
     if (initial) setConfig(normalize(initial));
   }, [initial]);
+
+  useEffect(() => {
+    if (!initialCharacterPhotos) return;
+    setCharacterPhotos((prev) => {
+      const next = { ...prev };
+      for (const [id, url] of Object.entries(initialCharacterPhotos)) {
+        if (!url) continue;
+        if (!next[id] || (!next[id].file && next[id].url !== url)) {
+          next[id] = { url, file: null, extracting: false, error: null };
+        }
+      }
+      return next;
+    });
+  }, [initialCharacterPhotos]);
+
+  useEffect(() => {
+    if (!initialObjectPhotos) return;
+    setObjectPhotos((prev) => {
+      const next = { ...prev };
+      for (const [id, url] of Object.entries(initialObjectPhotos)) {
+        if (!url) continue;
+        if (!next[id] || (!next[id].file && next[id].url !== url)) {
+          next[id] = { url, file: null, extracting: false, error: null };
+        }
+      }
+      return next;
+    });
+  }, [initialObjectPhotos]);
+
+  useEffect(() => {
+    if (!initialLocationPhotos) return;
+    setLocationPhotos((prev) => {
+      const next = { ...prev };
+      for (const [id, url] of Object.entries(initialLocationPhotos)) {
+        if (!url) continue;
+        if (!next[id] || (!next[id].file && next[id].url !== url)) {
+          next[id] = { url, file: null, extracting: false, error: null };
+        }
+      }
+      return next;
+    });
+  }, [initialLocationPhotos]);
 
   function set(path, value) {
     setConfig((c) => {
@@ -136,16 +236,137 @@ export default function ProjectForm({
   function updateCharacter(i, field, value) {
     setConfig((c) => {
       const next = structuredClone(c);
+      const oldId = next.characters[i].id;
       next.characters[i][field] = value;
+      if (field === "id" && oldId !== value && oldId) {
+        setCharacterPhotos((prev) => {
+          if (!prev[oldId]) return prev;
+          const out = { ...prev };
+          out[value] = prev[oldId];
+          delete out[oldId];
+          return out;
+        });
+      }
       return next;
     });
   }
   function removeCharacter(i) {
     setConfig((c) => {
       const next = structuredClone(c);
-      next.characters.splice(i, 1);
+      const removed = next.characters.splice(i, 1)[0];
+      if (removed?.id) {
+        setCharacterPhotos((prev) => {
+          if (!prev[removed.id]) return prev;
+          const out = { ...prev };
+          delete out[removed.id];
+          return out;
+        });
+        if (projectName) {
+          api.deleteCharacterPhoto(projectName, removed.id).catch(() => {});
+        }
+      }
       return next;
     });
+  }
+
+  async function onPickCharacterPhoto(i, file) {
+    if (!file) return;
+    const charId = config.characters[i]?.id;
+    if (!charId) return;
+    const localUrl = URL.createObjectURL(file);
+    setCharacterPhotos((prev) => ({
+      ...prev,
+      [charId]: {
+        url: localUrl,
+        file,
+        extracting: true,
+        error: null,
+      },
+    }));
+    try {
+      const extracted = await api.characterFromPhoto(
+        file,
+        config.metadata.language || "fr"
+      );
+      setConfig((c) => {
+        const next = structuredClone(c);
+        const row = next.characters[i];
+        if (!row) return c;
+        // Pre-fill empty fields only — never clobber what the user typed.
+        if (!row.name && extracted.name) row.name = extracted.name;
+        if (!row.physical_description && extracted.physical_description) {
+          row.physical_description = extracted.physical_description;
+        }
+        if (!row.outfit && extracted.outfit) row.outfit = extracted.outfit;
+        if (!row.personality && extracted.personality) {
+          row.personality = extracted.personality;
+        }
+        return next;
+      });
+      if (projectName) {
+        try {
+          const { url } = await api.setCharacterPhoto(
+            projectName,
+            charId,
+            file
+          );
+          setCharacterPhotos((prev) => ({
+            ...prev,
+            [charId]: {
+              url: url || localUrl,
+              file: null,
+              extracting: false,
+              error: null,
+            },
+          }));
+          return;
+        } catch (uploadErr) {
+          setCharacterPhotos((prev) => ({
+            ...prev,
+            [charId]: {
+              ...prev[charId],
+              extracting: false,
+              error: uploadErr.message || "Échec de l'upload.",
+            },
+          }));
+          return;
+        }
+      }
+      setCharacterPhotos((prev) => ({
+        ...prev,
+        [charId]: {
+          ...prev[charId],
+          extracting: false,
+          error: null,
+        },
+      }));
+    } catch (e) {
+      setCharacterPhotos((prev) => ({
+        ...prev,
+        [charId]: {
+          ...prev[charId],
+          extracting: false,
+          error: e.message || "Échec de l'extraction.",
+        },
+      }));
+    }
+  }
+
+  async function onClearCharacterPhoto(i) {
+    const charId = config.characters[i]?.id;
+    if (!charId) return;
+    setCharacterPhotos((prev) => {
+      const out = { ...prev };
+      delete out[charId];
+      return out;
+    });
+    if (projectName) {
+      try {
+        await api.deleteCharacterPhoto(projectName, charId);
+      } catch {
+        // non-fatal
+      }
+    }
   }
   function addLocation() {
     setConfig((c) => ({
@@ -156,22 +377,268 @@ export default function ProjectForm({
   function updateLocation(i, field, value) {
     setConfig((c) => {
       const next = structuredClone(c);
+      const oldId = next.locations[i].id;
       next.locations[i][field] = value;
+      if (field === "id" && oldId !== value && oldId) {
+        setLocationPhotos((prev) => {
+          if (!prev[oldId]) return prev;
+          const out = { ...prev };
+          out[value] = prev[oldId];
+          delete out[oldId];
+          return out;
+        });
+      }
       return next;
     });
   }
   function removeLocation(i) {
     setConfig((c) => {
       const next = structuredClone(c);
-      next.locations.splice(i, 1);
+      const removed = next.locations.splice(i, 1)[0];
+      if (removed?.id) {
+        setLocationPhotos((prev) => {
+          if (!prev[removed.id]) return prev;
+          const out = { ...prev };
+          delete out[removed.id];
+          return out;
+        });
+        if (projectName) {
+          api.deleteLocationPhoto(projectName, removed.id).catch(() => {});
+        }
+      }
       return next;
     });
   }
 
+  async function onPickLocationPhoto(i, file) {
+    if (!file) return;
+    const locId = config.locations[i]?.id;
+    if (!locId) return;
+    const localUrl = URL.createObjectURL(file);
+    setLocationPhotos((prev) => ({
+      ...prev,
+      [locId]: {
+        url: localUrl,
+        file,
+        extracting: true,
+        error: null,
+      },
+    }));
+    try {
+      const extracted = await api.locationFromPhoto(
+        file,
+        config.metadata.language || "fr"
+      );
+      setConfig((c) => {
+        const next = structuredClone(c);
+        const row = next.locations[i];
+        if (!row) return c;
+        if (!row.name && extracted.name) row.name = extracted.name;
+        if (!row.description && extracted.description) {
+          row.description = extracted.description;
+        }
+        return next;
+      });
+      if (projectName) {
+        try {
+          const { url } = await api.setLocationPhoto(projectName, locId, file);
+          setLocationPhotos((prev) => ({
+            ...prev,
+            [locId]: {
+              url: url || localUrl,
+              file: null,
+              extracting: false,
+              error: null,
+            },
+          }));
+          return;
+        } catch (uploadErr) {
+          setLocationPhotos((prev) => ({
+            ...prev,
+            [locId]: {
+              ...prev[locId],
+              extracting: false,
+              error: uploadErr.message || "Échec de l'upload.",
+            },
+          }));
+          return;
+        }
+      }
+      setLocationPhotos((prev) => ({
+        ...prev,
+        [locId]: {
+          ...prev[locId],
+          extracting: false,
+          error: null,
+        },
+      }));
+    } catch (e) {
+      setLocationPhotos((prev) => ({
+        ...prev,
+        [locId]: {
+          ...prev[locId],
+          extracting: false,
+          error: e.message || "Échec de l'extraction.",
+        },
+      }));
+    }
+  }
+
+  async function onClearLocationPhoto(i) {
+    const locId = config.locations[i]?.id;
+    if (!locId) return;
+    setLocationPhotos((prev) => {
+      const out = { ...prev };
+      delete out[locId];
+      return out;
+    });
+    if (projectName) {
+      try {
+        await api.deleteLocationPhoto(projectName, locId);
+      } catch {
+        // non-fatal
+      }
+    }
+  }
+
+  function addObject() {
+    setConfig((c) => ({
+      ...c,
+      objects: [...c.objects, blankObject(c.objects.length + 1)],
+    }));
+  }
+  function updateObject(i, field, value) {
+    setConfig((c) => {
+      const next = structuredClone(c);
+      const oldId = next.objects[i].id;
+      next.objects[i][field] = value;
+      if (field === "id" && oldId !== value && oldId) {
+        setObjectPhotos((prev) => {
+          if (!prev[oldId]) return prev;
+          const out = { ...prev };
+          out[value] = prev[oldId];
+          delete out[oldId];
+          return out;
+        });
+      }
+      return next;
+    });
+  }
+  function removeObject(i) {
+    setConfig((c) => {
+      const next = structuredClone(c);
+      const removed = next.objects.splice(i, 1)[0];
+      if (removed?.id) {
+        setObjectPhotos((prev) => {
+          if (!prev[removed.id]) return prev;
+          const out = { ...prev };
+          delete out[removed.id];
+          return out;
+        });
+        if (projectName) {
+          api.deleteObjectPhoto(projectName, removed.id).catch(() => {});
+        }
+      }
+      return next;
+    });
+  }
+
+  async function onPickObjectPhoto(i, file) {
+    if (!file) return;
+    const objId = config.objects[i]?.id;
+    if (!objId) return;
+    const localUrl = URL.createObjectURL(file);
+    setObjectPhotos((prev) => ({
+      ...prev,
+      [objId]: {
+        url: localUrl,
+        file,
+        extracting: true,
+        error: null,
+      },
+    }));
+    try {
+      const extracted = await api.objectFromPhoto(
+        file,
+        config.metadata.language || "fr"
+      );
+      setConfig((c) => {
+        const next = structuredClone(c);
+        const row = next.objects[i];
+        if (!row) return c;
+        if (!row.name && extracted.name) row.name = extracted.name;
+        if (!row.description && extracted.description) {
+          row.description = extracted.description;
+        }
+        return next;
+      });
+      if (projectName) {
+        try {
+          const { url } = await api.setObjectPhoto(projectName, objId, file);
+          setObjectPhotos((prev) => ({
+            ...prev,
+            [objId]: {
+              url: url || localUrl,
+              file: null,
+              extracting: false,
+              error: null,
+            },
+          }));
+          return;
+        } catch (uploadErr) {
+          setObjectPhotos((prev) => ({
+            ...prev,
+            [objId]: {
+              ...prev[objId],
+              extracting: false,
+              error: uploadErr.message || "Échec de l'upload.",
+            },
+          }));
+          return;
+        }
+      }
+      setObjectPhotos((prev) => ({
+        ...prev,
+        [objId]: {
+          ...prev[objId],
+          extracting: false,
+          error: null,
+        },
+      }));
+    } catch (e) {
+      setObjectPhotos((prev) => ({
+        ...prev,
+        [objId]: {
+          ...prev[objId],
+          extracting: false,
+          error: e.message || "Échec de l'extraction.",
+        },
+      }));
+    }
+  }
+
+  async function onClearObjectPhoto(i) {
+    const objId = config.objects[i]?.id;
+    if (!objId) return;
+    setObjectPhotos((prev) => {
+      const out = { ...prev };
+      delete out[objId];
+      return out;
+    });
+    if (projectName) {
+      try {
+        await api.deleteObjectPhoto(projectName, objId);
+      } catch {
+        // non-fatal
+      }
+    }
+  }
+
   function prepareConfig() {
     const out = structuredClone(config);
+    const slugSource = out.display_name || out.metadata.title || "projet";
     if (isNew && !out.project) {
-      out.project = (out.metadata.title || "projet")
+      out.project = slugSource
         .toLowerCase()
         .normalize("NFD")
         .replace(/[̀-ͯ]/g, "")
@@ -179,6 +646,7 @@ export default function ProjectForm({
         .replace(/^_+|_+$/g, "")
         .slice(0, 60) || "projet";
     }
+    out.display_name = out.display_name?.trim() || null;
     out.structure.page_count = Number(out.structure.page_count);
     out.structure.panels_per_page_avg = Number(out.structure.panels_per_page_avg);
     out.structure.panels_per_page_range = [
@@ -198,6 +666,90 @@ export default function ProjectForm({
     try { await api.setStyleReference(projName, styleRefFile); } catch { /* non-fatal */ }
   }
 
+  async function maybeUploadPendingCharacterPhotos(out) {
+    const projName = projectName || out.project;
+    if (!projName) return;
+    const updates = [];
+    for (const c of out.characters || []) {
+      const slot = characterPhotos[c.id];
+      if (slot?.file) {
+        updates.push(
+          api.setCharacterPhoto(projName, c.id, slot.file)
+            .then(({ url }) => [c.id, url])
+            .catch(() => [c.id, null])
+        );
+      }
+    }
+    if (!updates.length) return;
+    const results = await Promise.all(updates);
+    setCharacterPhotos((prev) => {
+      const next = { ...prev };
+      for (const [id, url] of results) {
+        if (!next[id]) continue;
+        if (url) {
+          next[id] = { url, file: null, extracting: false, error: null };
+        }
+      }
+      return next;
+    });
+  }
+
+  async function maybeUploadPendingLocationPhotos(out) {
+    const projName = projectName || out.project;
+    if (!projName) return;
+    const updates = [];
+    for (const l of out.locations || []) {
+      const slot = locationPhotos[l.id];
+      if (slot?.file) {
+        updates.push(
+          api.setLocationPhoto(projName, l.id, slot.file)
+            .then(({ url }) => [l.id, url])
+            .catch(() => [l.id, null])
+        );
+      }
+    }
+    if (!updates.length) return;
+    const results = await Promise.all(updates);
+    setLocationPhotos((prev) => {
+      const next = { ...prev };
+      for (const [id, url] of results) {
+        if (!next[id]) continue;
+        if (url) {
+          next[id] = { url, file: null, extracting: false, error: null };
+        }
+      }
+      return next;
+    });
+  }
+
+  async function maybeUploadPendingObjectPhotos(out) {
+    const projName = projectName || out.project;
+    if (!projName) return;
+    const updates = [];
+    for (const o of out.objects || []) {
+      const slot = objectPhotos[o.id];
+      if (slot?.file) {
+        updates.push(
+          api.setObjectPhoto(projName, o.id, slot.file)
+            .then(({ url }) => [o.id, url])
+            .catch(() => [o.id, null])
+        );
+      }
+    }
+    if (!updates.length) return;
+    const results = await Promise.all(updates);
+    setObjectPhotos((prev) => {
+      const next = { ...prev };
+      for (const [id, url] of results) {
+        if (!next[id]) continue;
+        if (url) {
+          next[id] = { url, file: null, extracting: false, error: null };
+        }
+      }
+      return next;
+    });
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
@@ -206,6 +758,9 @@ export default function ProjectForm({
       const out = prepareConfig();
       await onSubmit(out);
       await maybeUploadStyleRef(out);
+      await maybeUploadPendingCharacterPhotos(out);
+      await maybeUploadPendingLocationPhotos(out);
+      await maybeUploadPendingObjectPhotos(out);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -217,9 +772,9 @@ export default function ProjectForm({
     if (!onApplyStyleOnly) return;
     if (!window.confirm(
       "Le style va remplacer celui du projet. Le scénario (textes, dialogues, " +
-      "personnages, planches) reste intact, mais les images de référence, " +
-      "esquisses et planches composées seront supprimées pour pouvoir être " +
-      "régénérées avec le nouveau style.\n\nContinuer ?"
+      "personnages, planches) reste intact, mais les images de référence et " +
+      "planches composées seront supprimées pour pouvoir être régénérées avec " +
+      "le nouveau style.\n\nContinuer ?"
     )) return;
     setError(null);
     setApplyingStyleOnly(true);
@@ -237,8 +792,19 @@ export default function ProjectForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <Section title="Identité du projet">
+        <Field
+          label="Nom du projet (interface)"
+          hint="Optionnel — sert uniquement à retrouver le projet dans la liste. N'apparaît jamais dans la BD générée. Si vide, le titre de la BD est affiché."
+        >
+          <input
+            className="input"
+            value={config.display_name || ""}
+            onChange={(e) => set("display_name", e.target.value)}
+            placeholder="ex. Brouillon — version courte"
+          />
+        </Field>
         {isNew && (
-          <Field label="Identifiant du projet (slug)" hint="Optionnel — déduit du titre si vide. Lettres, chiffres et underscores.">
+          <Field label="Identifiant du projet (slug)" hint="Optionnel — déduit du nom du projet ou du titre si vide. Lettres, chiffres et underscores.">
             <input
               className="input"
               value={config.project}
@@ -248,7 +814,7 @@ export default function ProjectForm({
           </Field>
         )}
         <Grid cols={2}>
-          <Field label="Titre">
+          <Field label="Titre de la BD" hint="Apparaît sur la couverture et dans le contenu généré.">
             <input
               className="input"
               value={config.metadata.title}
@@ -324,10 +890,10 @@ export default function ProjectForm({
         action={
           <button
             type="button"
-            className="btn btn-secondary text-sm"
+            className="btn btn-secondary text-sm inline-flex items-center gap-2"
             onClick={() => setStyleFromImageOpen(true)}
           >
-            <span aria-hidden>🖼</span> Inspirez-vous d'une image
+            <FaPalette aria-hidden /> Style depuis une image
           </button>
         }
       >
@@ -363,160 +929,309 @@ export default function ProjectForm({
             />
           </Field>
         </Grid>
+        <Grid cols={3}>
+          <Field
+            label="Tour des cases"
+            hint="Cadre des cases : trait épais et tremblé, vectoriel net, gouttières larges, etc."
+          >
+            <input
+              className="input"
+              value={config.style.panel_borders || ""}
+              onChange={(e) => set("style.panel_borders", e.target.value)}
+              placeholder="ex. cadre noir épais légèrement irrégulier"
+            />
+          </Field>
+          <Field
+            label="Dessin des bulles"
+            hint="Forme des bulles : contour propre, tracé à la main, pointe de queue, fond, etc."
+          >
+            <input
+              className="input"
+              value={config.style.speech_bubbles || ""}
+              onChange={(e) => set("style.speech_bubbles", e.target.value)}
+              placeholder="ex. bulles blanches contour fin et rond"
+            />
+          </Field>
+          <Field
+            label="Dessin des personnages"
+            hint="Stylisation des persos : visages, yeux, proportions, ombrage, etc."
+          >
+            <input
+              className="input"
+              value={config.style.character_rendering || ""}
+              onChange={(e) => set("style.character_rendering", e.target.value)}
+              placeholder="ex. visages ronds, yeux en points, peu d'ombres"
+            />
+          </Field>
+        </Grid>
       </Section>
 
       <Section
-        title="Personnages"
+        title="Casting"
+        intro="Personnages, décors et objets — descriptions, photos optionnelles et images de référence. Importez ou exportez un sous-ensemble en .bdrefs pour le réutiliser dans une autre BD (ex. Tome 2)."
         action={
-          <button type="button" className="btn btn-secondary text-sm" onClick={addCharacter}>
-            ＋ Ajouter
-          </button>
+          projectName ? (
+            <ReferencesBundlePanel
+              projectName={projectName}
+              onImported={onReferencesImported}
+            />
+          ) : null
         }
       >
-        <Toggle
-          label="Autoriser l'IA à inventer des personnages supplémentaires si l'histoire en a besoin"
-          value={config.structure.allow_extra_characters}
-          onChange={(v) => set("structure.allow_extra_characters", v)}
-        />
-        {config.characters.length === 0 && (
-          <p className="text-sm text-[var(--color-mute)]">
-            Aucun personnage défini pour l'instant.
-            {config.structure.allow_extra_characters
-              ? " L'IA en proposera selon les besoins du scénario."
-              : ""}
-          </p>
-        )}
-        <div className="space-y-4">
-          {config.characters.map((c, i) => (
-            <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">
-                  Personnage {i + 1}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-ghost text-xs"
-                  onClick={() => removeCharacter(i)}
-                >
-                  Supprimer
-                </button>
-              </div>
-              <Grid cols={2}>
-                <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
-                  <input
-                    className="input"
-                    value={c.id}
-                    onChange={(e) => updateCharacter(i, "id", e.target.value.replace(/\s+/g, "_"))}
-                  />
-                </Field>
-                <Field label="Nom">
-                  <input
-                    className="input"
-                    value={c.name}
-                    onChange={(e) => updateCharacter(i, "name", e.target.value)}
+        <Subsection
+          title="Personnages"
+          action={
+            <button
+              type="button"
+              className="btn btn-secondary text-sm inline-flex items-center gap-2"
+              onClick={addCharacter}
+            >
+              <FaPlus aria-hidden /> Ajouter
+            </button>
+          }
+        >
+          <Toggle
+            label="Autoriser l'IA à inventer des personnages supplémentaires si l'histoire en a besoin"
+            value={config.structure.allow_extra_characters}
+            onChange={(v) => set("structure.allow_extra_characters", v)}
+          />
+          {config.characters.length === 0 && (
+            <p className="text-sm text-[var(--color-mute)]">
+              Aucun personnage défini pour l'instant.
+              {config.structure.allow_extra_characters
+                ? " L'IA en proposera selon les besoins du scénario."
+                : ""}
+            </p>
+          )}
+          <div className="space-y-4">
+            {config.characters.map((c, i) => (
+              <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">
+                    Personnage {i + 1}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost text-xs inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
+                    onClick={() => removeCharacter(i)}
+                    title="Supprimer ce personnage"
+                  >
+                    <FaTrash aria-hidden /> Supprimer
+                  </button>
+                </div>
+                <CharacterPhotoField
+                  slot={characterPhotos[c.id]}
+                  onPick={(file) => onPickCharacterPhoto(i, file)}
+                  onClear={() => onClearCharacterPhoto(i)}
+                />
+                <Grid cols={2}>
+                  <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
+                    <input
+                      className="input"
+                      value={c.id}
+                      onChange={(e) => updateCharacter(i, "id", e.target.value.replace(/\s+/g, "_"))}
+                    />
+                  </Field>
+                  <Field label="Nom">
+                    <input
+                      className="input"
+                      value={c.name}
+                      onChange={(e) => updateCharacter(i, "name", e.target.value)}
+                      required
+                    />
+                  </Field>
+                  <Field label="Rôle">
+                    <input
+                      className="input"
+                      value={c.role || ""}
+                      onChange={(e) => updateCharacter(i, "role", e.target.value)}
+                      placeholder="ex. protagoniste"
+                    />
+                  </Field>
+                  <Field label="Personnalité">
+                    <input
+                      className="input"
+                      value={c.personality || ""}
+                      onChange={(e) => updateCharacter(i, "personality", e.target.value)}
+                    />
+                  </Field>
+                </Grid>
+                <Field label="Description physique">
+                  <textarea
+                    className="textarea"
+                    value={c.physical_description}
+                    onChange={(e) => updateCharacter(i, "physical_description", e.target.value)}
                     required
                   />
                 </Field>
-                <Field label="Rôle">
-                  <input
-                    className="input"
-                    value={c.role || ""}
-                    onChange={(e) => updateCharacter(i, "role", e.target.value)}
-                    placeholder="ex. protagoniste"
+                <Field label="Tenue / accessoires">
+                  <textarea
+                    className="textarea"
+                    value={c.outfit || ""}
+                    onChange={(e) => updateCharacter(i, "outfit", e.target.value)}
                   />
                 </Field>
-                <Field label="Personnalité">
-                  <input
-                    className="input"
-                    value={c.personality || ""}
-                    onChange={(e) => updateCharacter(i, "personality", e.target.value)}
-                  />
-                </Field>
-              </Grid>
-              <Field label="Description physique">
-                <textarea
-                  className="textarea"
-                  value={c.physical_description}
-                  onChange={(e) => updateCharacter(i, "physical_description", e.target.value)}
-                  required
-                />
-              </Field>
-              <Field label="Tenue / accessoires">
-                <textarea
-                  className="textarea"
-                  value={c.outfit || ""}
-                  onChange={(e) => updateCharacter(i, "outfit", e.target.value)}
-                />
-              </Field>
-            </div>
-          ))}
-        </div>
-      </Section>
+              </div>
+            ))}
+          </div>
+        </Subsection>
 
-      <Section
-        title="Décors"
-        action={
-          <button type="button" className="btn btn-secondary text-sm" onClick={addLocation}>
-            ＋ Ajouter
-          </button>
-        }
-      >
-        <Toggle
-          label="Autoriser l'IA à inventer des décors supplémentaires si l'histoire en a besoin"
-          value={config.structure.allow_extra_locations}
-          onChange={(v) => set("structure.allow_extra_locations", v)}
-        />
-        {config.locations.length === 0 && (
-          <p className="text-sm text-[var(--color-mute)]">
-            Aucun décor défini pour l'instant.
-            {config.structure.allow_extra_locations
-              ? " L'IA en inventera selon les besoins du scénario."
-              : " ⚠️ Aucun décor disponible — l'IA ne pourra pas situer les scènes."}
-          </p>
-        )}
-        <div className="space-y-4">
-          {config.locations.map((l, i) => (
-            <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">
-                  Décor {i + 1}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-ghost text-xs"
-                  onClick={() => removeLocation(i)}
-                >
-                  Supprimer
-                </button>
-              </div>
-              <Grid cols={2}>
-                <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
-                  <input
-                    className="input"
-                    value={l.id}
-                    onChange={(e) => updateLocation(i, "id", e.target.value.replace(/\s+/g, "_"))}
-                  />
-                </Field>
-                <Field label="Nom">
-                  <input
-                    className="input"
-                    value={l.name}
-                    onChange={(e) => updateLocation(i, "name", e.target.value)}
+        <Subsection
+          title="Décors"
+          action={
+            <button
+              type="button"
+              className="btn btn-secondary text-sm inline-flex items-center gap-2"
+              onClick={addLocation}
+            >
+              <FaPlus aria-hidden /> Ajouter
+            </button>
+          }
+        >
+          <Toggle
+            label="Autoriser l'IA à inventer des décors supplémentaires si l'histoire en a besoin"
+            value={config.structure.allow_extra_locations}
+            onChange={(v) => set("structure.allow_extra_locations", v)}
+          />
+          {config.locations.length === 0 && (
+            <p className="text-sm text-[var(--color-mute)]">
+              Aucun décor défini pour l'instant.
+              {config.structure.allow_extra_locations
+                ? " L'IA en inventera selon les besoins du scénario."
+                : " ⚠️ Aucun décor disponible — l'IA ne pourra pas situer les scènes."}
+            </p>
+          )}
+          <div className="space-y-4">
+            {config.locations.map((l, i) => (
+              <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">
+                    Décor {i + 1}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost text-xs inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
+                    onClick={() => removeLocation(i)}
+                    title="Supprimer ce décor"
+                  >
+                    <FaTrash aria-hidden /> Supprimer
+                  </button>
+                </div>
+                <LocationPhotoField
+                  slot={locationPhotos[l.id]}
+                  onPick={(file) => onPickLocationPhoto(i, file)}
+                  onClear={() => onClearLocationPhoto(i)}
+                />
+                <Grid cols={2}>
+                  <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
+                    <input
+                      className="input"
+                      value={l.id}
+                      onChange={(e) => updateLocation(i, "id", e.target.value.replace(/\s+/g, "_"))}
+                    />
+                  </Field>
+                  <Field label="Nom">
+                    <input
+                      className="input"
+                      value={l.name}
+                      onChange={(e) => updateLocation(i, "name", e.target.value)}
+                      required
+                    />
+                  </Field>
+                </Grid>
+                <Field label="Description" hint="Décrivez le lieu : éléments visuels, ambiance, époque…">
+                  <textarea
+                    className="textarea"
+                    value={l.description}
+                    onChange={(e) => updateLocation(i, "description", e.target.value)}
                     required
                   />
                 </Field>
-              </Grid>
-              <Field label="Description" hint="Décrivez le lieu : éléments visuels, ambiance, époque…">
-                <textarea
-                  className="textarea"
-                  value={l.description}
-                  onChange={(e) => updateLocation(i, "description", e.target.value)}
-                  required
+              </div>
+            ))}
+          </div>
+        </Subsection>
+
+        <Subsection
+          title="Objets / produits / références"
+          action={
+            <button
+              type="button"
+              className="btn btn-secondary text-sm inline-flex items-center gap-2"
+              onClick={addObject}
+            >
+              <FaPlus aria-hidden /> Ajouter
+            </button>
+          }
+        >
+          <p className="text-sm text-[var(--color-mute)]">
+            Optionnel. Ajoutez ici un livre, un produit, un objet symbolique qui doit
+            revenir dans l'histoire. Une photo (optionnelle) servira de guide pour en
+            dessiner une version caricaturée dans le style de la BD.
+          </p>
+          <Toggle
+            label="Autoriser l'IA à inventer des objets supplémentaires si l'histoire en a besoin"
+            value={config.structure.allow_extra_objects}
+            onChange={(v) => set("structure.allow_extra_objects", v)}
+          />
+          {config.objects.length === 0 && (
+            <p className="text-sm text-[var(--color-mute)]">
+              Aucun objet défini pour l'instant.
+              {config.structure.allow_extra_objects
+                ? " L'IA n'en inventera qu'à la marge."
+                : ""}
+            </p>
+          )}
+          <div className="space-y-4">
+            {config.objects.map((o, i) => (
+              <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">
+                    Objet {i + 1}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost text-xs inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
+                    onClick={() => removeObject(i)}
+                    title="Supprimer cet objet"
+                  >
+                    <FaTrash aria-hidden /> Supprimer
+                  </button>
+                </div>
+                <ObjectPhotoField
+                  slot={objectPhotos[o.id]}
+                  onPick={(file) => onPickObjectPhoto(i, file)}
+                  onClear={() => onClearObjectPhoto(i)}
                 />
-              </Field>
-            </div>
-          ))}
-        </div>
+                <Grid cols={2}>
+                  <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
+                    <input
+                      className="input"
+                      value={o.id}
+                      onChange={(e) => updateObject(i, "id", e.target.value.replace(/\s+/g, "_"))}
+                    />
+                  </Field>
+                  <Field label="Nom">
+                    <input
+                      className="input"
+                      value={o.name}
+                      onChange={(e) => updateObject(i, "name", e.target.value)}
+                      required
+                    />
+                  </Field>
+                </Grid>
+                <Field label="Description" hint="Décrivez l'objet et son rôle dans l'histoire.">
+                  <textarea
+                    className="textarea"
+                    value={o.description}
+                    onChange={(e) => updateObject(i, "description", e.target.value)}
+                    required
+                  />
+                </Field>
+              </div>
+            ))}
+          </div>
+        </Subsection>
       </Section>
 
       <Section title="Structure">
@@ -665,11 +1380,12 @@ export default function ProjectForm({
         {onApplyStyleOnly && (
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary inline-flex items-center gap-2"
             onClick={handleApplyStyleOnly}
             disabled={submitting || applyingStyleOnly}
             title="Mettre à jour le style et réinitialiser les images sans toucher au scénario."
           >
+            <FaPalette aria-hidden />
             {applyingStyleOnly ? "Application…" : applyStyleOnlyLabel}
           </button>
         )}
@@ -697,6 +1413,12 @@ export default function ProjectForm({
                     style.color_palette ?? c.style.color_palette,
                   line_work: style.line_work ?? c.style.line_work,
                   mood: style.mood ?? c.style.mood,
+                  panel_borders:
+                    style.panel_borders ?? c.style.panel_borders,
+                  speech_bubbles:
+                    style.speech_bubbles ?? c.style.speech_bubbles,
+                  character_rendering:
+                    style.character_rendering ?? c.style.character_rendering,
                 },
               };
               if (Array.isArray(characters) && characters.length > 0) {
@@ -728,11 +1450,30 @@ export default function ProjectForm({
   );
 }
 
-function Section({ title, action, children }) {
+function Section({ title, intro, action, children }) {
   return (
     <div className="card p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold">{title}</h3>
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+        <div className="flex-1 min-w-[12rem]">
+          <h3 className="text-base font-semibold">{title}</h3>
+          {intro && (
+            <p className="text-sm text-[var(--color-mute)] mt-1">{intro}</p>
+          )}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </div>
+      <div className="space-y-4">{children}</div>
+    </div>
+  );
+}
+
+function Subsection({ title, action, children }) {
+  return (
+    <div className="border-t border-[var(--color-line)] pt-5 first:border-t-0 first:pt-0">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-ink-soft)]">
+          {title}
+        </h4>
         {action}
       </div>
       <div className="space-y-4">{children}</div>
@@ -755,6 +1496,203 @@ function Grid({ cols = 2, children }) {
     <div className={`grid grid-cols-1 md:grid-cols-${cols} gap-4`}>{children}</div>
   );
 }
+
+function CharacterPhotoField({ slot, onPick, onClear }) {
+  const inputId = `char-photo-${Math.random().toString(36).slice(2, 8)}`;
+  const url = slot?.url || null;
+  const extracting = slot?.extracting || false;
+  const error = slot?.error || null;
+  return (
+    <div className="mb-4 flex items-start gap-4">
+      <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0">
+        {url ? (
+          <img src={url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <span>Aucune photo</span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <label className="label">Photo de référence (optionnel)</label>
+        <p className="text-xs text-[var(--color-mute)] mb-2">
+          Si vous ajoutez une photo, l'IA en extrait les caractéristiques pour
+          pré-remplir la fiche puis l'utilise comme guide de ressemblance lors
+          de la génération de la référence (effet caricature). Le style défini
+          reste prioritaire sur la photo.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <label
+            htmlFor={inputId}
+            className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2"
+          >
+            <FaUpload aria-hidden />
+            {url ? "Remplacer" : "Choisir une photo"}
+          </label>
+          <input
+            id={inputId}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) onPick(f);
+            }}
+          />
+          {url && (
+            <button
+              type="button"
+              className="btn btn-ghost text-sm inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
+              onClick={onClear}
+              title="Retirer la photo"
+            >
+              <FaTrash aria-hidden /> Retirer
+            </button>
+          )}
+          {extracting && (
+            <span className="text-xs text-[var(--color-mute)]">
+              Analyse de la photo…
+            </span>
+          )}
+        </div>
+        {error && (
+          <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function LocationPhotoField({ slot, onPick, onClear }) {
+  const inputId = `loc-photo-${Math.random().toString(36).slice(2, 8)}`;
+  const url = slot?.url || null;
+  const extracting = slot?.extracting || false;
+  const error = slot?.error || null;
+  return (
+    <div className="mb-4 flex items-start gap-4">
+      <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0">
+        {url ? (
+          <img src={url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <span>Aucune photo</span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <label className="label">Photo de référence (optionnel)</label>
+        <p className="text-xs text-[var(--color-mute)] mb-2">
+          Si vous ajoutez une photo du lieu, l'IA en extrait nom + description
+          pour pré-remplir la fiche, puis l'utilise comme guide visuel pour
+          dessiner le décor (architecture, ambiance) dans le style de la BD.
+          Aucun personnage ne sera repris depuis la photo.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <label
+            htmlFor={inputId}
+            className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2"
+          >
+            <FaUpload aria-hidden />
+            {url ? "Remplacer" : "Choisir une photo"}
+          </label>
+          <input
+            id={inputId}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) onPick(f);
+            }}
+          />
+          {url && (
+            <button
+              type="button"
+              className="btn btn-ghost text-sm inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
+              onClick={onClear}
+              title="Retirer la photo"
+            >
+              <FaTrash aria-hidden /> Retirer
+            </button>
+          )}
+          {extracting && (
+            <span className="text-xs text-[var(--color-mute)]">
+              Analyse de la photo…
+            </span>
+          )}
+        </div>
+        {error && (
+          <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function ObjectPhotoField({ slot, onPick, onClear }) {
+  const inputId = `obj-photo-${Math.random().toString(36).slice(2, 8)}`;
+  const url = slot?.url || null;
+  const extracting = slot?.extracting || false;
+  const error = slot?.error || null;
+  return (
+    <div className="mb-4 flex items-start gap-4">
+      <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0">
+        {url ? (
+          <img src={url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <span>Aucune photo</span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <label className="label">Photo de référence (optionnel)</label>
+        <p className="text-xs text-[var(--color-mute)] mb-2">
+          Si vous ajoutez une photo, l'IA en extrait nom + description pour
+          pré-remplir la fiche, puis l'utilise comme guide visuel pour produire
+          une version caricaturée de l'objet dans le style de la BD.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <label
+            htmlFor={inputId}
+            className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2"
+          >
+            <FaUpload aria-hidden />
+            {url ? "Remplacer" : "Choisir une photo"}
+          </label>
+          <input
+            id={inputId}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) onPick(f);
+            }}
+          />
+          {url && (
+            <button
+              type="button"
+              className="btn btn-ghost text-sm inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
+              onClick={onClear}
+              title="Retirer la photo"
+            >
+              <FaTrash aria-hidden /> Retirer
+            </button>
+          )}
+          {extracting && (
+            <span className="text-xs text-[var(--color-mute)]">
+              Analyse de la photo…
+            </span>
+          )}
+        </div>
+        {error && (
+          <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 function Toggle({ label, value, onChange }) {
   return (

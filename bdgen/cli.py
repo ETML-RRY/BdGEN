@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 from . import compose as compose_module
 from . import references as references_module
 from . import script as script_module
-from . import wireframes as wireframes_module
 from . import wizard as wizard_module
 from .feedback import FeedbackStore, feedback_path_for
 from .models import BdGenInput, BdGenScript, GenerationOptions
@@ -23,10 +22,6 @@ def _project_dir(bd_script: BdGenScript, script_path: Path) -> Path:
 
 def _default_pages_dir(bd_script: BdGenScript, script_path: Path) -> Path:
     return _project_dir(bd_script, script_path) / "pages"
-
-
-def _default_wireframes_dir(bd_script: BdGenScript, script_path: Path) -> Path:
-    return _project_dir(bd_script, script_path) / "wireframes"
 
 
 def cmd_script(args: argparse.Namespace) -> None:
@@ -66,24 +61,6 @@ def cmd_references(args: argparse.Namespace) -> None:
     print(f"References written under {opts.references.output_dir}")
 
 
-def cmd_wireframes(args: argparse.Namespace) -> None:
-    bd_script = BdGenScript.load(args.script)
-    opts = _resolve_options(bd_script, args.input)
-    wireframes_dir = (
-        Path(args.wireframes_dir)
-        if args.wireframes_dir
-        else _default_wireframes_dir(bd_script, args.script)
-    )
-    feedback_store = FeedbackStore.load_or_empty(feedback_path_for(args.script))
-    wireframes_module.generate_wireframes(
-        bd_script, opts, wireframes_dir,
-        feedback_store=feedback_store,
-        force=args.force,
-        reporter=StdoutReporter(),
-    )
-    print(f"Wireframes written under {wireframes_dir}")
-
-
 def cmd_compose(args: argparse.Namespace) -> None:
     bd_script = BdGenScript.load(args.script)
     opts = _resolve_options(bd_script, args.input)
@@ -92,15 +69,9 @@ def cmd_compose(args: argparse.Namespace) -> None:
         if args.pages_dir
         else _default_pages_dir(bd_script, args.script)
     )
-    wireframes_dir = (
-        Path(args.wireframes_dir)
-        if args.wireframes_dir
-        else _default_wireframes_dir(bd_script, args.script)
-    )
     feedback_store = FeedbackStore.load_or_empty(feedback_path_for(args.script))
     out = compose_module.compose_output(
         bd_script, opts, pages_dir,
-        wireframes_dir if wireframes_dir.exists() else None,
         feedback_store=feedback_store,
         force=args.force,
         reporter=StdoutReporter(),
@@ -134,7 +105,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     bd_script.save(opts.script_path)
     project_dir = opts.script_path.parent
     out = compose_module.compose_output(
-        bd_script, opts, project_dir / "pages", project_dir / "wireframes",
+        bd_script, opts, project_dir / "pages",
         feedback_store=feedback_store,
         reporter=reporter,
     )
@@ -148,13 +119,8 @@ def cmd_wizard(args: argparse.Namespace) -> None:
         raise SystemExit("Cannot determine script_path. Set 'project' in the input.")
     project_dir = opts.script_path.parent
     pages_dir = Path(args.pages_dir) if args.pages_dir else project_dir / "pages"
-    wireframes_dir = (
-        Path(args.wireframes_dir)
-        if args.wireframes_dir
-        else project_dir / "wireframes"
-    )
     wizard_module.run_wizard(
-        Path(args.input), pages_dir, wireframes_dir, preview_pages=args.preview
+        Path(args.input), pages_dir, preview_pages=args.preview
     )
 
 
@@ -200,24 +166,12 @@ def main(argv: list[str] | None = None) -> None:
     p.set_defaults(func=cmd_references)
 
     p = sub.add_parser(
-        "wireframes",
-        help="(Optional) Generate one low-res wireframe per page for layout validation",
-    )
-    p.add_argument("script", type=Path)
-    p.add_argument("--input", type=Path, default=None, help=input_help)
-    p.add_argument("--wireframes-dir", type=Path, default=None)
-    p.add_argument("--force", action="store_true", help=force_help)
-    p.set_defaults(func=cmd_wireframes)
-
-    p = sub.add_parser(
         "compose",
-        help="Generate one image per page (page-level) and assemble the final output. "
-        "Wireframes from the wireframes step, if present, are injected as layout guides.",
+        help="Generate one image per page (page-level) and assemble the final output.",
     )
     p.add_argument("script", type=Path)
     p.add_argument("--input", type=Path, default=None, help=input_help)
     p.add_argument("--pages-dir", type=Path, default=None)
-    p.add_argument("--wireframes-dir", type=Path, default=None)
     p.add_argument("--force", action="store_true", help=force_help)
     p.set_defaults(func=cmd_compose)
 
@@ -232,7 +186,6 @@ def main(argv: list[str] | None = None) -> None:
     )
     p.add_argument("input", type=Path)
     p.add_argument("--pages-dir", type=Path, default=None)
-    p.add_argument("--wireframes-dir", type=Path, default=None)
     p.add_argument("--preview", type=int, default=None, help=preview_help)
     p.set_defaults(func=cmd_wizard)
 

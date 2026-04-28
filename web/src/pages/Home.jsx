@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { FaPlus, FaUpload, FaCopy } from "react-icons/fa6";
 import { api } from "../api.js";
 import StateChip from "../components/StateChip.jsx";
 import RunningBanner from "../components/RunningBanner.jsx";
@@ -8,7 +9,6 @@ const STATE_LABELS = {
   preparation: "Préparation",
   script: "Écriture",
   references: "Références",
-  wireframes: "Esquisses",
   compose: "Planches",
   done: "Terminé",
 };
@@ -38,10 +38,15 @@ export default function Home() {
     e.preventDefault();
     e.stopPropagation();
     if (duplicating) return;
+    const includeReferences = window.confirm(
+      "Inclure les images de référence (personnages, décors, objets) dans la copie ?\n\n" +
+      "OK : conserver les références déjà générées (utile pour un Tome 2 — pas besoin de les régénérer).\n" +
+      "Annuler : repartir d'une copie sans images, à régénérer."
+    );
     setDuplicating(sourceName);
     setError(null);
     try {
-      const { name } = await api.duplicateProject(sourceName);
+      const { name } = await api.duplicateProject(sourceName, { includeReferences });
       navigate(`/projects/${encodeURIComponent(name)}`);
     } catch (err) {
       setError(err.message);
@@ -78,22 +83,22 @@ export default function Home() {
           Bienvenue sur BdGEN
         </h1>
         <p className="text-[var(--color-ink-soft)] max-w-2xl mb-6">
-          BdGEN écrit le scénario, dessine les références, esquisse les planches
-          puis assemble une BD complète à partir d'une simple description. Lancez
+          BdGEN écrit le scénario, dessine les références puis assemble une BD
+          complète à partir d'une simple description. Lancez
           un nouveau projet, reprenez-en un en cours, ou importez une archive
           <code className="px-1 py-0.5 bg-[var(--color-paper-soft)] rounded mx-1">.bdgen</code>
           pour continuer où vous l'aviez laissé.
         </p>
         <div className="flex flex-wrap gap-3">
-          <Link to="/new" className="btn btn-primary">
-            <span>＋</span> Nouveau projet
+          <Link to="/new" className="btn btn-primary inline-flex items-center gap-2">
+            <FaPlus aria-hidden /> Nouveau projet
           </Link>
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary inline-flex items-center gap-2"
             onClick={() => fileRef.current?.click()}
           >
-            <span>↑</span> Charger un .bdgen
+            <FaUpload aria-hidden /> Importer un projet
           </button>
           <input
             ref={fileRef}
@@ -135,8 +140,13 @@ export default function Home() {
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div>
                       <div className="font-semibold">
-                        {p.title || p.name}
+                        {p.display_name || p.title || p.name}
                       </div>
+                      {p.display_name && p.title && p.title !== p.display_name && (
+                        <div className="text-xs text-[var(--color-mute)] italic">
+                          {p.title}
+                        </div>
+                      )}
                       {p.author && (
                         <div className="text-sm text-[var(--color-ink-soft)]">
                           {p.author}
@@ -146,11 +156,12 @@ export default function Home() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        className="btn btn-ghost text-xs"
-                        title="Dupliquer la configuration dans un nouveau projet (sans script ni images)"
+                        className="btn btn-ghost text-xs inline-flex items-center gap-1.5"
+                        title="Dupliquer ce projet (avec ou sans les références images)"
                         onClick={(e) => onDuplicate(e, p.name)}
                         disabled={duplicating === p.name}
                       >
+                        <FaCopy aria-hidden />
                         {duplicating === p.name ? "…" : "Dupliquer"}
                       </button>
                       <StateChip state={p.state} label={STATE_LABELS[p.state]} />

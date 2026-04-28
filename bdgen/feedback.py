@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Step = Literal["script", "references", "wireframes", "compose"]
+Step = Literal["script", "references", "compose"]
 
 
 class FeedbackItem(BaseModel):

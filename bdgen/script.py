@@ -22,6 +22,7 @@ from .models import (
     ScriptCharacter,
     ScriptLocation,
     ScriptModelConfig,
+    ScriptObject,
     ScriptSource,
 )
 from .progress import (
@@ -42,9 +43,9 @@ SETUP_SYSTEM_PROMPT = dedent("""\
     You are a professional comic book ("bande dessinée") scriptwriter and storyboard director.
 
     You are working on a multi-page BD project. Your current task is the SETUP phase ONLY:
-    produce the characters, locations, cover, and back cover. The page contents (panels,
-    dialogs) will be generated in subsequent calls — DO NOT include any pages in this
-    response.
+    produce the characters, locations, objects, cover, and back cover. The page contents
+    (panels, dialogs) will be generated in subsequent calls — DO NOT include any pages in
+    this response.
 
     You must produce JSON containing:
 
@@ -64,13 +65,26 @@ SETUP_SYSTEM_PROMPT = dedent("""\
        Whether you may invent ADDITIONAL locations is decided by the AUTHORING RULES
        at the end of the user message.
 
-    3. COVER — only if `structure.include_cover` is true. Provide:
+    3. OBJECTS — first, for EACH entry in the input `objects` array (which may be
+       empty), copy `id`, `name`, and `description` verbatim. ADD `reference_prompt`:
+       an English image-generation prompt for an isolated object reference rendered
+       as a stylized caricature in the project's art style, on a neutral background,
+       no characters, no text. The prompt MUST include the global art style and end
+       with "No text. No characters." If the user provided a photo of this object
+       (passed at image-generation time), the resulting illustration must remain
+       recognizably the SAME object — same shape, key markings, characteristic
+       silhouette — but rendered ENTIRELY in the project's art style (never as a
+       photograph). Plan how each object will recur across the story so panels can
+       reference it consistently. Whether you may invent ADDITIONAL objects is
+       decided by the AUTHORING RULES at the end of the user message.
+
+    4. COVER — only if `structure.include_cover` is true. Provide:
        - `scene_description`: an evocative illustration concept for the front cover
        - `title_placement`: hint for where and how the title is laid out
        - `subtitle`: optional subtitle or null
        - `tagline`: optional short marketing tagline or null
 
-    4. BACK COVER — only if `structure.include_back_cover` is true. Provide:
+    5. BACK COVER — only if `structure.include_back_cover` is true. Provide:
        - `synopsis_blurb`: a 3-5 sentence marketing-tone presentation of the story
          WITHOUT spoilers, ending on a hook
        - `scene_description`: optional small illustration concept for the back, or null
@@ -78,15 +92,16 @@ SETUP_SYSTEM_PROMPT = dedent("""\
        - `layout_notes`: optional layout hints (e.g. "barcode bottom-right corner")
 
     HARD CONSTRAINTS:
-    - Write narrative content (location names and descriptions, blurb) in the language
-      specified by `metadata.language`.
+    - Write narrative content (location/object names and descriptions, blurb) in the
+      language specified by `metadata.language`.
     - Write all `reference_prompt` fields in English regardless of `metadata.language`.
     - NEVER include the proper name of any real-world artist, illustrator, studio,
       franchise or copyrighted character in any `reference_prompt`. Use generic
       stylistic descriptors instead.
     - Honor the AUTHORING RULES at the end of the user message regarding inventing
-      additional characters or locations.
-    - Plan characters and locations for the full story arc, not just for the opening.
+      additional characters, locations or objects.
+    - Plan characters, locations and objects for the full story arc, not just for the
+      opening.
     - Output ONLY the JSON object. No markdown fences, no commentary.
     """)
 
@@ -95,8 +110,8 @@ PAGE_SYSTEM_PROMPT = dedent("""\
     You are a professional comic book ("bande dessinée") scriptwriter.
 
     You are writing ONE page of a multi-page comic book. The project brief, the setup
-    (characters, locations, cover, back cover) and any previously generated pages are
-    provided in the user message.
+    (characters, locations, objects, cover, back cover) and any previously generated
+    pages are provided in the user message.
 
     Your task: produce ONLY the requested page. Honor the structural constraints (panels
     per page average, range), populate panels with vivid scene descriptions and dialogs,
@@ -113,6 +128,7 @@ PAGE_SYSTEM_PROMPT = dedent("""\
           "size": "small" | "medium" | "large" | "half_page" | "full_page",
           "location": "<id from the setup's locations list>",
           "characters": ["<character id>", ...],
+          "objects": ["<object id>", ...],
           "shot": "<e.g. plan large, plan moyen, gros plan, contre-plongée>",
           "scene_description": "<1-3 vivid sentences>",
           "narration": "<optional off-frame caption text, or null>",
@@ -129,8 +145,11 @@ PAGE_SYSTEM_PROMPT = dedent("""\
       in the language specified by `metadata.language`.
     - The page's `layout` description MUST exactly describe the number of panels you
       produce. Don't say "3 cases" if you emit 4 panels.
-    - Use ONLY character ids and location ids defined in the setup. Do not introduce
-      new ones in this call.
+    - Use ONLY character ids, location ids and object ids defined in the setup. Do not
+      introduce new ones in this call.
+    - List in `objects` the ids of EVERY object visible in the panel (only objects from
+      the setup; leave the array empty if none). When an object is in the panel,
+      reference it explicitly in `scene_description` so its placement is unambiguous.
     - Honor `structure.panels_per_page_avg` and `structure.panels_per_page_range`.
     - Vary panel sizes and camera shots for visual rhythm.
     - Keep dialog lines short — they have to fit in speech bubbles.
@@ -156,9 +175,17 @@ class _DraftLocation(BaseModel):
     reference_prompt: str
 
 
+class _DraftObject(BaseModel):
+    id: str
+    name: str
+    description: str
+    reference_prompt: str
+
+
 class _LLMSetupDraft(BaseModel):
     characters: list[_DraftCharacter]
     locations: list[_DraftLocation]
+    objects: list[_DraftObject] = []
     cover: Cover | None = None
     back_cover: BackCover | None = None
 
@@ -213,6 +240,37 @@ LOCATION_REFINE_SYSTEM_PROMPT = dedent("""\
       }
 
     Do NOT echo back `metadata`, `style`, `current_location`, or
+    `user_feedback`. Do NOT wrap the output under any key. Do NOT add extra
+    fields.
+
+    HARD CONSTRAINTS:
+    - Keep `id` unchanged.
+    - Write narrative content in the language specified by `metadata.language`.
+    - Keep `reference_prompt` in English; it must end with "No text. No characters."
+    - Never name a real-world artist, studio, franchise or copyrighted character.
+    - Output ONLY the JSON object. No markdown fences, no commentary.
+    """)
+
+
+OBJECT_REFINE_SYSTEM_PROMPT = dedent("""\
+    You are revising a single object / product / reference record for a comic
+    book project.
+
+    The user message contains a JSON wrapper with `metadata`, `style`,
+    `current_object`, and `user_feedback`. Treat it as INPUT CONTEXT only.
+    Apply the feedback to `current_object` and return the UPDATED object
+    record. The `id` MUST stay unchanged.
+
+    OUTPUT SHAPE — your response is a flat JSON object with EXACTLY these
+    top-level keys, and nothing else:
+      {
+        "id": "<unchanged>",
+        "name": "...",
+        "description": "...",
+        "reference_prompt": "..."
+      }
+
+    Do NOT echo back `metadata`, `style`, `current_object`, or
     `user_feedback`. Do NOT wrap the output under any key. Do NOT add extra
     fields.
 
@@ -449,6 +507,7 @@ def _build_skeleton(
     )
     return BdGenScript(
         project=config.project,
+        display_name=config.display_name,
         source=source,
         metadata=config.metadata,
         style=config.style,
@@ -460,6 +519,10 @@ def _build_skeleton(
         locations=[
             ScriptLocation(**l.model_dump(), reference_image=None)
             for l in setup.locations
+        ],
+        objects=[
+            ScriptObject(**o.model_dump(), reference_image=None)
+            for o in setup.objects
         ],
         cover=setup.cover,
         back_cover=setup.back_cover,
@@ -487,6 +550,7 @@ def _build_setup_prompt(
 
     n_chars = len(config.characters)
     n_locs = len(config.locations)
+    n_objs = len(config.objects)
     if config.structure.allow_extra_characters:
         char_rule = (
             f"You MAY invent additional supporting characters if the story arc "
@@ -515,15 +579,38 @@ def _build_setup_prompt(
             f"STRICT: Use ONLY the {n_locs} input location(s). Do NOT invent any "
             f"new location."
         )
+    if n_objs == 0 and config.structure.allow_extra_objects:
+        obj_rule = (
+            "The user provided no objects. Do NOT invent any: leave the `objects` "
+            "array empty unless the brief explicitly requires a recurring object."
+        )
+    elif n_objs == 0:
+        obj_rule = (
+            "STRICT: The user provided no objects and disallowed inventing any. "
+            "Leave the `objects` array empty."
+        )
+    elif config.structure.allow_extra_objects:
+        obj_rule = (
+            f"You MAY add a small number of additional objects if a recurring "
+            f"prop genuinely needs to be tracked. Always copy the {n_objs} input "
+            f"object(s) verbatim first; weave them prominently into the story."
+        )
+    else:
+        obj_rule = (
+            f"STRICT: Use ONLY the {n_objs} input object(s). Do NOT invent any "
+            f"new object. Weave each input object prominently into the story."
+        )
     authoring_rules = (
         "\n\nAUTHORING RULES — APPLY STRICTLY:\n"
         f"- Characters: {char_rule}\n"
         f"- Locations: {loc_rule}\n"
+        f"- Objects: {obj_rule}\n"
     )
 
     base = (
         "Here is the project brief. Generate the SETUP only (characters, locations, "
-        "cover, back cover). Pages will be requested separately, one at a time.\n\n"
+        "objects, cover, back cover). Pages will be requested separately, one at a "
+        "time.\n\n"
         + json.dumps(brief, ensure_ascii=False, indent=2)
         + preview_note
         + authoring_rules
@@ -556,6 +643,10 @@ def _build_page_prompt(
             {"id": l.id, "name": l.name, "description": l.description}
             for l in bd_script.locations
         ],
+        "objects": [
+            {"id": o.id, "name": o.name, "description": o.description}
+            for o in bd_script.objects
+        ],
     }
     prior_pages = [p.model_dump(mode="json") for p in bd_script.pages]
 
@@ -576,7 +667,7 @@ def _build_page_prompt(
         "PROJECT BRIEF:",
         json.dumps(brief, ensure_ascii=False, indent=2),
         "",
-        "SETUP (already generated — use these character and location ids verbatim):",
+        "SETUP (already generated — use these character, location and object ids verbatim):",
         json.dumps(setup, ensure_ascii=False, indent=2),
         "",
     ]
@@ -898,6 +989,47 @@ def regenerate_location(
     return loc
 
 
+def regenerate_object(
+    bd_script: BdGenScript,
+    object_id: str,
+    feedback_text: str,
+    reporter: ProgressReporter | None = None,
+) -> ScriptObject:
+    """Rewrite a single object via a focused LLM call."""
+    rep = _coerce_reporter(reporter)
+    if bd_script.generation_options is None:
+        raise RuntimeError("Le script n'a pas de generation_options ; impossible de retoucher.")
+    obj = bd_script.object_by_id(object_id)
+    if obj is None:
+        raise RuntimeError(f"Objet inconnu : {object_id}")
+    rep.emit(ProgressEvent(
+        step="script", phase=f"refine_object_{object_id}",
+        message=f"Retouche de l'objet « {obj.name} »…",
+    ))
+    user_prompt = json.dumps({
+        "metadata": bd_script.metadata.model_dump(mode="json"),
+        "style": bd_script.style.model_dump(mode="json"),
+        "current_object": obj.model_dump(mode="json", exclude={"reference_image"}),
+        "user_feedback": feedback_text,
+    }, ensure_ascii=False, indent=2)
+    draft = _call_llm(
+        OBJECT_REFINE_SYSTEM_PROMPT,
+        user_prompt,
+        bd_script.generation_options.script_model,
+        _DraftObject,
+    )
+    if draft.id != object_id:
+        draft.id = object_id
+    obj.name = draft.name
+    obj.description = draft.description
+    obj.reference_prompt = draft.reference_prompt
+    rep.emit(ProgressEvent(
+        step="script", phase=f"refine_object_{object_id}_done",
+        message=f"Objet « {obj.name} » mis à jour.",
+    ))
+    return obj
+
+
 def regenerate_page(
     bd_script: BdGenScript,
     page_number: int,
@@ -932,6 +1064,10 @@ def regenerate_page(
         "locations": [
             {"id": l.id, "name": l.name, "description": l.description}
             for l in bd_script.locations
+        ],
+        "objects": [
+            {"id": o.id, "name": o.name, "description": o.description}
+            for o in bd_script.objects
         ],
     }
     prior = [p.model_dump(mode="json") for p in bd_script.pages[:idx]]

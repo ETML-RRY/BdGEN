@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 const STEP_LABEL = {
   script: "écriture",
   references: "références",
-  wireframes: "esquisses",
   compose: "planches",
 };
 

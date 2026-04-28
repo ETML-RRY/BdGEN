@@ -34,7 +34,6 @@ def compose_output(
     script: BdGenScript,
     options: GenerationOptions,
     pages_dir: Path,
-    wireframes_dir: Path | None = None,
     feedback_store: FeedbackStore | None = None,
     force: bool = False,
     reporter: ProgressReporter | None = None,
@@ -44,14 +43,11 @@ def compose_output(
     """Generate one image per page (full-page render with bubbles), then assemble.
 
     Skips pages whose final PNG already exists on disk so the step is resumable
-    (unless ``force`` is True). When ``wireframes_dir`` is provided and contains a
-    wireframe for a given page, that wireframe is injected as an additional
-    layout-guide reference image into the page prompt. When ``feedback_store`` is
-    provided, any feedback recorded for a page is appended to its prompt.
-    ``reporter`` receives structured progress events; ``interrupt`` is checked
-    between each page so generation can stop cleanly. Returns the path to the
-    assembled output (PDF) or to the pages directory if output_format is
-    "images".
+    (unless ``force`` is True). When ``feedback_store`` is provided, any
+    feedback recorded for a page is appended to its prompt. ``reporter``
+    receives structured progress events; ``interrupt`` is checked between each
+    page so generation can stop cleanly. Returns the path to the assembled
+    output (PDF) or to the pages directory if output_format is "images".
     """
     rep = _coerce_reporter(reporter)
     flag = _coerce_flag(interrupt)
@@ -83,7 +79,7 @@ def compose_output(
             ))
             _generate_cover(
                 client, options.image_model, script, script.cover,
-                cover_image, wireframes_dir, feedback_store, style_ref=style_ref,
+                cover_image, feedback_store, style_ref=style_ref,
             )
             rep.emit(ProgressEvent(
                 step="compose", phase="cover_done",
@@ -113,7 +109,7 @@ def compose_output(
             ))
             _generate_page(
                 client, options.image_model, script, page, target,
-                wireframes_dir, feedback_store, style_ref=style_ref,
+                feedback_store, style_ref=style_ref,
             )
             rep.emit(ProgressEvent(
                 step="compose", phase=f"page_{page.page_number}_done",
@@ -143,7 +139,7 @@ def compose_output(
             ))
             _generate_back(
                 client, options.image_model, script, script.back_cover,
-                back_image, wireframes_dir, feedback_store, style_ref=style_ref,
+                back_image, feedback_store, style_ref=style_ref,
             )
             rep.emit(ProgressEvent(
                 step="compose", phase="back_done",
@@ -198,13 +194,12 @@ def _generate_page(
     script: BdGenScript,
     page: Page,
     target: Path,
-    wireframes_dir: Path | None = None,
     feedback_store: FeedbackStore | None = None,
     style_ref: Path | None = None,
 ) -> None:
     """Call gpt-image-2 with all relevant character/location refs as input images."""
     refs_with_labels = _prepend_style_ref(
-        _collect_refs(script, page, wireframes_dir), style_ref
+        _collect_refs(script, page), style_ref
     )
     refs = [path for path, _ in refs_with_labels]
     labels = [label for _, label in refs_with_labels]
@@ -217,7 +212,7 @@ def _generate_page(
 
 
 def _collect_refs(
-    script: BdGenScript, page: Page, wireframes_dir: Path | None = None
+    script: BdGenScript, page: Page
 ) -> list[tuple[Path, str]]:
     """Collect refs for this page as (path, label) pairs.
 
@@ -227,9 +222,11 @@ def _collect_refs(
     """
     char_ids: set[str] = set()
     loc_ids: set[str] = set()
+    obj_ids: set[str] = set()
     for panel in page.panels:
         char_ids.update(panel.characters)
         loc_ids.add(panel.location)
+        obj_ids.update(panel.objects)
 
     refs: list[tuple[Path, str]] = []
     for cid in sorted(char_ids):
@@ -249,23 +246,18 @@ def _collect_refs(
                 f"atmosphere and visual elements when this location appears."
             )
             refs.append((Path(loc.reference_image), label))
-
-    if wireframes_dir is not None:
-        wireframe = _page_wireframe(wireframes_dir, page)
-        if wireframe.exists() and wireframe.stat().st_size > 0:
+    for oid in sorted(obj_ids):
+        obj = script.object_by_id(oid)
+        if obj and obj.reference_image:
             label = (
-                "Wireframe (rough grayscale sketch) of THIS page — follow its "
-                "panel layout, panel sizes and character placement exactly, "
-                "but render the final art in full color and final style, with "
-                "all detail, dialog bubbles and publication specs."
+                f'Object reference for "{obj.name}" — this is the canonical '
+                f"stylized appearance of this object. Whenever it is visible "
+                f"in a panel, match its shape, key markings and silhouette "
+                f"EXACTLY so it stays recognizable across the album."
             )
-            refs.append((wireframe, label))
+            refs.append((Path(obj.reference_image), label))
 
     return refs
-
-
-def _page_wireframe(wireframes_dir: Path, page: Page) -> Path:
-    return wireframes_dir / f"page_{page.page_number:02d}.png"
 
 
 def _build_page_prompt(
@@ -283,6 +275,8 @@ def _build_page_prompt(
         loc_text = f"{loc.name} - {loc.description}" if loc else panel.location
         chars = [script.character_by_id(c) for c in panel.characters]
         chars_text = ", ".join(c.name for c in chars if c) or "(no character)"
+        objs = [script.object_by_id(o) for o in panel.objects]
+        objs_text = ", ".join(o.name for o in objs if o) or "(no object)"
 
         dialogs_block = ""
         if panel.dialogs:
@@ -319,6 +313,7 @@ def _build_page_prompt(
             f"{panel.shot or 'medium shot'}):\n"
             f"  Location: {loc_text}\n"
             f"  Characters in frame: {chars_text}\n"
+            f"  Objects in frame: {objs_text}\n"
             f"  Scene: {panel.scene_description}"
             f"{narration_block}{dialogs_block}{sfx_block}"
         )
@@ -332,6 +327,9 @@ def _build_page_prompt(
         - Color palette: {style.color_palette or "as appropriate to the mood"}
         - Line work: {style.line_work or "clean black ink, consistent thickness"}
         - Mood: {style.mood or "neutral"}
+        - Panel borders: {style.panel_borders or "crisp, consistent thickness, fully closed black ink rectangles (or shapes per the layout)"}
+        - Speech bubbles: {style.speech_bubbles or "clean white bubbles with a thin black outline, matching the line-work weight"}
+        - Character rendering: {style.character_rendering or "consistent with the art style above"}
 
         PAGE LAYOUT:
         {page.layout or "balanced grid"}
@@ -352,8 +350,6 @@ def _build_page_prompt(
           text) within 5mm inside the trim line.
         - Inter-panel gutters: approximately 5mm uniform white space between
           panels.
-        - Panel borders: crisp, consistent thickness, fully closed black ink
-          rectangles (or shapes per the layout).
         - Folio: render the page number "{page_n}" in sober typography in the
           bottom {folio_side} corner of the page.
 
@@ -424,12 +420,11 @@ def _generate_cover(
     script: BdGenScript,
     cover: Cover,
     target: Path,
-    wireframes_dir: Path | None = None,
     feedback_store: FeedbackStore | None = None,
     style_ref: Path | None = None,
 ) -> None:
     refs_with_labels = _prepend_style_ref(
-        _collect_album_refs(script, wireframes_dir, "cover"), style_ref
+        _collect_album_refs(script, "cover"), style_ref
     )
     refs = [p for p, _ in refs_with_labels]
     labels = [l for _, l in refs_with_labels]
@@ -447,12 +442,11 @@ def _generate_back(
     script: BdGenScript,
     back: BackCover,
     target: Path,
-    wireframes_dir: Path | None = None,
     feedback_store: FeedbackStore | None = None,
     style_ref: Path | None = None,
 ) -> None:
     refs_with_labels = _prepend_style_ref(
-        _collect_album_refs(script, wireframes_dir, "back"), style_ref
+        _collect_album_refs(script, "back"), style_ref
     )
     refs = [p for p, _ in refs_with_labels]
     labels = [l for _, l in refs_with_labels]
@@ -466,10 +460,9 @@ def _generate_back(
 
 def _collect_album_refs(
     script: BdGenScript,
-    wireframes_dir: Path | None,
     kind: str,
 ) -> list[tuple[Path, str]]:
-    """Collect refs for the cover/back: every character + the matching wireframe."""
+    """Collect refs for the cover/back: every character + every object."""
     refs: list[tuple[Path, str]] = []
     for c in script.characters:
         if c.reference_image:
@@ -479,15 +472,13 @@ def _collect_album_refs(
                 f"appear on the {kind}."
             )
             refs.append((Path(c.reference_image), label))
-    if wireframes_dir is not None:
-        wf = wireframes_dir / f"{kind}.png"
-        if wf.exists() and wf.stat().st_size > 0:
+    for o in script.objects:
+        if o.reference_image:
             label = (
-                f"Wireframe (rough grayscale sketch) of THIS {kind} — follow "
-                f"its layout (title block, illustration zone, text placement) "
-                f"exactly, but render the final art in full color and style."
+                f'Object reference for "{o.name}" — match its shape, key '
+                f"markings and silhouette EXACTLY if it appears on the {kind}."
             )
-            refs.append((wf, label))
+            refs.append((Path(o.reference_image), label))
     return refs
 
 
@@ -539,6 +530,7 @@ def _build_cover_prompt(
         - Color palette: {style.color_palette or "as appropriate"}
         - Line work: {style.line_work or "clean black ink"}
         - Mood: {style.mood or "neutral"}
+        - Character rendering: {style.character_rendering or "consistent with the art style above"}
 
         COVER ILLUSTRATION:
         {cover.scene_description}
@@ -607,6 +599,7 @@ def _build_back_prompt(
         - Art style: {style.art_style}
         - Color palette: {style.color_palette or "as appropriate, consistent with the front cover"}
         - Mood: {style.mood or "neutral"}
+        - Character rendering: {style.character_rendering or "consistent with the art style above"}
 
         SYNOPSIS BLURB (render this exact text, language: {language}):
         \"\"\"
