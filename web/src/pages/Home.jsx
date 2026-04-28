@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaPlus, FaUpload, FaCopy } from "react-icons/fa6";
+import { FaPlus, FaUpload, FaCopy, FaTrash } from "react-icons/fa6";
 import { api } from "../api.js";
 import StateChip from "../components/StateChip.jsx";
 import RunningBanner from "../components/RunningBanner.jsx";
+import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog.jsx";
 
 const STATE_LABELS = {
   preparation: "Préparation",
@@ -18,6 +19,7 @@ export default function Home() {
   const [job, setJob] = useState(null);
   const [error, setError] = useState(null);
   const [duplicating, setDuplicating] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const fileRef = useRef(null);
   const navigate = useNavigate();
 
@@ -53,6 +55,19 @@ export default function Home() {
     } finally {
       setDuplicating(null);
     }
+  }
+
+  function onAskDelete(e, project) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDeleteTarget(project);
+  }
+
+  async function onConfirmDelete() {
+    if (!deleteTarget) return;
+    setError(null);
+    await api.deleteProject(deleteTarget.name);
+    await refresh();
   }
 
   useEffect(() => {
@@ -135,58 +150,86 @@ export default function Home() {
               <li key={p.name}>
                 <Link
                   to={`/projects/${encodeURIComponent(p.name)}`}
-                  className="card p-5 block hover:border-[var(--color-primary-300)] transition"
+                  className="card p-5 block hover:border-[var(--color-primary-300)] transition group relative"
                 >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div>
-                      <div className="font-semibold">
-                        {p.display_name || p.title || p.name}
+                  <div className="flex items-start gap-4">
+                    {p.thumbnail_url ? (
+                      <img
+                        src={p.thumbnail_url}
+                        alt=""
+                        loading="lazy"
+                        className="w-16 h-24 object-cover rounded-md border border-[var(--color-paper-soft)] bg-[var(--color-paper-soft)] flex-shrink-0"
+                      />
+                    ) : (
+                      <div
+                        aria-hidden
+                        className="w-16 h-24 rounded-md border border-dashed border-[var(--color-paper-soft)] bg-[var(--color-paper-soft)] flex-shrink-0"
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="min-w-0">
+                          <div className="font-semibold truncate">
+                            {p.display_name || p.title || p.name}
+                          </div>
+                          {p.display_name && p.title && p.title !== p.display_name && (
+                            <div className="text-xs text-[var(--color-mute)] italic truncate">
+                              {p.title}
+                            </div>
+                          )}
+                          {p.author && (
+                            <div className="text-sm text-[var(--color-ink-soft)] truncate">
+                              {p.author}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              className="p-1.5 rounded-md text-[var(--color-ink-soft)] hover:bg-[var(--color-paper-soft)] hover:text-[var(--color-primary-600)] transition-colors disabled:opacity-50"
+                              title="Dupliquer ce projet (avec ou sans les références images)"
+                              aria-label="Dupliquer ce projet"
+                              onClick={(e) => onDuplicate(e, p.name)}
+                              disabled={duplicating === p.name}
+                            >
+                              <FaCopy aria-hidden />
+                            </button>
+                            <button
+                              type="button"
+                              className="p-1.5 rounded-md text-[var(--color-ink-soft)] hover:bg-[var(--color-rose-100)] hover:text-[var(--color-rose-500)] transition-colors"
+                              title="Supprimer définitivement ce projet"
+                              aria-label="Supprimer ce projet"
+                              onClick={(e) => onAskDelete(e, p)}
+                            >
+                              <FaTrash aria-hidden />
+                            </button>
+                          </div>
+                          <StateChip state={p.state} label={STATE_LABELS[p.state]} />
+                        </div>
                       </div>
-                      {p.display_name && p.title && p.title !== p.display_name && (
-                        <div className="text-xs text-[var(--color-mute)] italic">
-                          {p.title}
-                        </div>
-                      )}
-                      {p.author && (
-                        <div className="text-sm text-[var(--color-ink-soft)]">
-                          {p.author}
-                        </div>
-                      )}
+                      <div className="text-xs text-[var(--color-mute)] flex flex-wrap gap-x-4 gap-y-1 mt-3">
+                        {p.page_count !== null && (
+                          <span>
+                            Planches écrites&nbsp;:{" "}
+                            <strong className="text-[var(--color-ink-soft)]">
+                              {p.pages_written}/{p.page_count}
+                            </strong>
+                          </span>
+                        )}
+                        {p.references_total > 0 && (
+                          <span>
+                            Références&nbsp;:{" "}
+                            <strong className="text-[var(--color-ink-soft)]">
+                              {p.references_ready}/{p.references_total}
+                            </strong>
+                          </span>
+                        )}
+                        {p.pdf_ready && (
+                          <span className="chip chip-mint">PDF prêt</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="btn btn-ghost text-xs inline-flex items-center gap-1.5"
-                        title="Dupliquer ce projet (avec ou sans les références images)"
-                        onClick={(e) => onDuplicate(e, p.name)}
-                        disabled={duplicating === p.name}
-                      >
-                        <FaCopy aria-hidden />
-                        {duplicating === p.name ? "…" : "Dupliquer"}
-                      </button>
-                      <StateChip state={p.state} label={STATE_LABELS[p.state]} />
-                    </div>
-                  </div>
-                  <div className="text-xs text-[var(--color-mute)] flex flex-wrap gap-x-4 gap-y-1 mt-3">
-                    {p.page_count !== null && (
-                      <span>
-                        Planches écrites&nbsp;:{" "}
-                        <strong className="text-[var(--color-ink-soft)]">
-                          {p.pages_written}/{p.page_count}
-                        </strong>
-                      </span>
-                    )}
-                    {p.references_total > 0 && (
-                      <span>
-                        Références&nbsp;:{" "}
-                        <strong className="text-[var(--color-ink-soft)]">
-                          {p.references_ready}/{p.references_total}
-                        </strong>
-                      </span>
-                    )}
-                    {p.pdf_ready && (
-                      <span className="chip chip-mint">PDF prêt</span>
-                    )}
                   </div>
                 </Link>
               </li>
@@ -194,6 +237,16 @@ export default function Home() {
           </ul>
         )}
       </section>
+
+      {deleteTarget && (
+        <ConfirmDeleteDialog
+          title="Supprimer ce projet ?"
+          body={`« ${deleteTarget.display_name || deleteTarget.title || deleteTarget.name} » sera supprimé définitivement, avec son scénario, ses références et ses planches. Cette action est irréversible.`}
+          confirmLabel="Supprimer définitivement"
+          onConfirm={onConfirmDelete}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }

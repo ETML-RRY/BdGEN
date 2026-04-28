@@ -254,13 +254,33 @@ SYSTEM_PROMPT = dedent("""\
     1. The visual STYLE of the image (art_style, color_palette, line_work,
        mood, panel_borders, speech_bubbles, character_rendering). You are
        NOT summarizing the image's content here; you focus exclusively on
-       its STYLE. If the image is a comic page or a panel from one, look
-       carefully at HOW its panel frames are drawn, HOW the speech bubbles
-       are inked, and HOW the characters are stylized — those three traits
-       are critical for downstream BD generation. If the image is not a
-       comic page (e.g. a single illustration, a photo of a painting, a
-       cover), infer the most plausible BD treatment that would match its
-       overall art style and describe that.
+       its STYLE.
+
+       THREE TRAITS ARE PRIMARY (NOT optional, NOT secondary) — they must
+       receive a thorough, prescriptive description even when the image
+       does not display them obviously:
+         • panel_borders — how panel FRAMES are drawn (stroke, regularity,
+           corners, gutters, ornament). If the image is a single
+           illustration with no visible panels, INFER the most plausible
+           BD treatment that matches the overall art style and describe
+           THAT inferred treatment in detail. Never leave this generic.
+         • speech_bubbles — how SPEECH / THOUGHT / SHOUT bubbles are
+           drawn (outline, fill, tail, signature traits). If no bubble
+           is visible, INFER the most plausible bubble style that would
+           match the rest of the artwork and describe THAT in detail.
+           Never leave this generic.
+         • character_rendering — how CHARACTERS are drawn (face geometry,
+           eye/nose/mouth treatment, body proportions, hands, hair,
+           shading on skin). If no character is visible, INFER the most
+           plausible character treatment matching the art style and
+           describe THAT in detail. Never leave this generic.
+
+       These three fields will be quoted verbatim into image-generation
+       prompts; vague or missing content here directly degrades the
+       generated BD's visual coherence. Treat them with the same care as
+       art_style itself. If the image is a comic page or panel, look
+       carefully at HOW its frames are drawn, HOW the bubbles are inked,
+       and HOW the characters are stylized.
 
     2. A list of CHARACTERS visible in the image. For each visible character,
        provide a generic placeholder name plus physical description, outfit,
@@ -334,11 +354,25 @@ def extract(
         f"character_rendering) — ces champs seront utilisés verbatim "
         f"dans des prompts de génération d'images : sois très prescriptif "
         f"et inclus dans art_style des contraintes négatives explicites "
-        f"('no smooth gradients', 'no photorealism'…). Décris en "
-        f"particulier le tour des cases (panel_borders), le dessin des "
-        f"bulles (speech_bubbles) et le dessin des personnages "
-        f"(character_rendering) — ces trois aspects sont déterminants "
-        f"pour la cohérence visuelle de la BD générée ;\n"
+        f"('no smooth gradients', 'no photorealism'…).\n"
+        f"  • TROIS CHAMPS PRIMAIRES À TRAITER AVEC AUTANT DE SOIN QUE "
+        f"art_style — ils doivent être renseignés de manière détaillée "
+        f"même si l'image ne les montre pas directement (dans ce cas, "
+        f"INFÈRE le traitement BD le plus cohérent avec le reste de l'œuvre "
+        f"et décris-le précisément) :\n"
+        f"      – panel_borders : comment sont dessinés les TOURS DES CASES "
+        f"(épaisseur, régularité, irrégularités, coins, gouttières, "
+        f"ornements, bleeds éventuels) ;\n"
+        f"      – speech_bubbles : comment sont dessinées les BULLES (contour, "
+        f"remplissage, forme de la queue, variantes pour pensée/cri/"
+        f"chuchotement, traits caractéristiques) ;\n"
+        f"      – character_rendering : comment sont dessinés les "
+        f"PERSONNAGES (géométrie du visage, traitement des yeux/nez/bouche, "
+        f"proportions du corps, mains, cheveux, ombrage sur la peau).\n"
+        f"    Ces trois aspects sont déterminants pour la cohérence visuelle "
+        f"de la BD générée et seront repris tels quels dans tous les prompts "
+        f"de planches, de couvertures et de références — ne les laisse "
+        f"jamais génériques.\n"
         f"  • la liste des personnages visibles avec un nom de remplacement "
         f"générique (jamais le nom réel d'un personnage protégé), une "
         f"description physique et la tenue ;\n"
@@ -371,9 +405,25 @@ def extract(
         )
 
     draft = msg.parsed
-    # Append negative_constraints to art_style so it rides along verbatim in
-    # every downstream image prompt — it's the single most influential lever.
+    # Build a richer art_style that always carries the four highest-leverage
+    # traits with it: character rendering, panel borders, speech bubbles and
+    # negative constraints. Any downstream prompt that only consumes art_style
+    # (cover/back covers, LLM-generated reference prompts) still benefits from
+    # them. The dedicated fields stay populated for prompts that read them
+    # individually (page generation in compose.py).
     art_style = _sanitize(draft.style.art_style)
+    char_rendering = _sanitize(draft.style.character_rendering)
+    panel_borders = _sanitize(draft.style.panel_borders)
+    speech_bubbles = _sanitize(draft.style.speech_bubbles)
+    extras: list[str] = []
+    if char_rendering and char_rendering.lower() not in art_style.lower():
+        extras.append(f"Character rendering: {char_rendering}")
+    if panel_borders and panel_borders.lower() not in art_style.lower():
+        extras.append(f"Panel borders: {panel_borders}")
+    if speech_bubbles and speech_bubbles.lower() not in art_style.lower():
+        extras.append(f"Speech bubbles: {speech_bubbles}")
+    if extras:
+        art_style = f"{art_style} {' '.join(extras)}"
     if draft.style.negative_constraints:
         neg = _sanitize(draft.style.negative_constraints)
         if neg and not art_style.lower().strip().endswith(neg.lower().strip()):
@@ -383,9 +433,9 @@ def extract(
         color_palette=_sanitize(draft.style.color_palette),
         line_work=_sanitize(draft.style.line_work),
         mood=_sanitize(draft.style.mood),
-        panel_borders=_sanitize(draft.style.panel_borders) or None,
-        speech_bubbles=_sanitize(draft.style.speech_bubbles) or None,
-        character_rendering=_sanitize(draft.style.character_rendering) or None,
+        panel_borders=panel_borders or None,
+        speech_bubbles=speech_bubbles or None,
+        character_rendering=char_rendering or None,
     )
     used_char_ids: set[str] = set()
     characters = [

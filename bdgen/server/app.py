@@ -124,7 +124,17 @@ def _register_api(app: FastAPI) -> None:
 
     @app.get("/api/projects")
     def list_projects() -> dict:
-        items = [s.to_dict() for s in service.list_projects(_output_root())]
+        root = _output_root()
+        items = []
+        for s in service.list_projects(root):
+            d = s.to_dict()
+            rel = d.pop("thumbnail_rel", None)
+            d["thumbnail_url"] = (
+                _file_url(s.name, rel, service.get_project_dir(s.name, root) / rel)
+                if rel
+                else None
+            )
+            items.append(d)
         return {"projects": items}
 
     @app.get("/api/projects/{name}")
@@ -225,6 +235,16 @@ def _register_api(app: FastAPI) -> None:
                 f"{service.OBJECT_PHOTOS_DIRNAME}/{oid}.png",
                 photo_path,
             )
+        reference_images: dict[str, dict[str, str | None]] = {
+            "characters": {},
+            "locations": {},
+            "objects": {},
+        }
+        for kind, items in service.list_reference_images(proj_dir).items():
+            for ref_id, ref_path in items.items():
+                reference_images[kind][ref_id] = _file_url(
+                    name, f"references/{kind}/{ref_id}.png", ref_path
+                )
         return {
             "name": name,
             "state": state,
@@ -238,6 +258,7 @@ def _register_api(app: FastAPI) -> None:
             "character_photos": character_photos,
             "location_photos": location_photos,
             "object_photos": object_photos,
+            "reference_images": reference_images,
         }
 
     @app.post("/api/projects")

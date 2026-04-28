@@ -130,6 +130,7 @@ export default function ProjectForm({
   initialCharacterPhotos = null,
   initialLocationPhotos = null,
   initialObjectPhotos = null,
+  initialReferenceImages = null,
   onSubmit,
   onCancel,
   onReferencesImported = null,
@@ -1024,6 +1025,10 @@ export default function ProjectForm({
                   onPick={(file) => onPickCharacterPhoto(i, file)}
                   onClear={() => onClearCharacterPhoto(i)}
                 />
+                <ReferenceImagePreview
+                  url={initialReferenceImages?.characters?.[c.id]}
+                  label={`Référence — ${c.name || c.id}`}
+                />
                 <Grid cols={2}>
                   <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
                     <input
@@ -1122,6 +1127,10 @@ export default function ProjectForm({
                   onPick={(file) => onPickLocationPhoto(i, file)}
                   onClear={() => onClearLocationPhoto(i)}
                 />
+                <ReferenceImagePreview
+                  url={initialReferenceImages?.locations?.[l.id]}
+                  label={`Référence — ${l.name || l.id}`}
+                />
                 <Grid cols={2}>
                   <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
                     <input
@@ -1202,6 +1211,10 @@ export default function ProjectForm({
                   slot={objectPhotos[o.id]}
                   onPick={(file) => onPickObjectPhoto(i, file)}
                   onClear={() => onClearObjectPhoto(i)}
+                />
+                <ReferenceImagePreview
+                  url={initialReferenceImages?.objects?.[o.id]}
+                  label={`Référence — ${o.name || o.id}`}
                 />
                 <Grid cols={2}>
                   <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
@@ -1494,6 +1507,24 @@ function Field({ label, hint, children }) {
 function Grid({ cols = 2, children }) {
   return (
     <div className={`grid grid-cols-1 md:grid-cols-${cols} gap-4`}>{children}</div>
+  );
+}
+
+function ReferenceImagePreview({ url, label }) {
+  if (!url) return null;
+  return (
+    <div className="mb-4 flex items-start gap-4">
+      <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center shrink-0">
+        <img src={url} alt={label || "Image de référence"} className="w-full h-full object-cover" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <label className="label">Image de référence générée</label>
+        <p className="text-xs text-[var(--color-mute)]">
+          Image utilisée comme guide visuel lors de la composition des planches.
+          Pour la régénérer, modifiez la fiche puis relancez l'étape Références.
+        </p>
+      </div>
+    </div>
   );
 }
 

@@ -53,30 +53,36 @@ SETUP_SYSTEM_PROMPT = dedent("""\
        `name`, `physical_description` and `outfit` verbatim. ADD `reference_prompt`: a
        detailed English image-generation prompt for a character sheet showing THREE
        views on a single image with a neutral white background — face close-up, full
-       body front, and an expressions sheet. The prompt MUST include the global art
-       style and the character's full appearance and outfit, and MUST end with
+       body front, and an expressions sheet. The prompt MUST quote the project's
+       full global style: `style.art_style`, `style.line_work`, `style.color_palette`
+       and — CRITICALLY — `style.character_rendering` verbatim (face geometry, eye/
+       nose/mouth treatment, body proportions, hands, hair, skin shading). It must
+       also describe the character's full appearance and outfit, and MUST end with
        "No text. No speech bubbles." Whether you may invent ADDITIONAL characters is
        decided by the AUTHORING RULES at the end of the user message.
 
     2. LOCATIONS — first, for EACH entry in the input `locations` array (which may be
        empty), copy `id`, `name`, and `description` verbatim. ADD `reference_prompt`:
        an English image-generation prompt for an establishing shot, no characters, no
-       text, including the global art style and ending with "No text. No characters."
-       Whether you may invent ADDITIONAL locations is decided by the AUTHORING RULES
-       at the end of the user message.
+       text. The prompt MUST quote the project's `style.art_style`,
+       `style.color_palette` and `style.line_work` verbatim so the location matches
+       the album's visual identity, and end with "No text. No characters." Whether
+       you may invent ADDITIONAL locations is decided by the AUTHORING RULES at the
+       end of the user message.
 
     3. OBJECTS — first, for EACH entry in the input `objects` array (which may be
        empty), copy `id`, `name`, and `description` verbatim. ADD `reference_prompt`:
        an English image-generation prompt for an isolated object reference rendered
        as a stylized caricature in the project's art style, on a neutral background,
-       no characters, no text. The prompt MUST include the global art style and end
-       with "No text. No characters." If the user provided a photo of this object
-       (passed at image-generation time), the resulting illustration must remain
-       recognizably the SAME object — same shape, key markings, characteristic
-       silhouette — but rendered ENTIRELY in the project's art style (never as a
-       photograph). Plan how each object will recur across the story so panels can
-       reference it consistently. Whether you may invent ADDITIONAL objects is
-       decided by the AUTHORING RULES at the end of the user message.
+       no characters, no text. The prompt MUST quote `style.art_style`,
+       `style.color_palette` and `style.line_work` verbatim, and end with "No text.
+       No characters." If the user provided a photo of this object (passed at image-
+       generation time), the resulting illustration must remain recognizably the
+       SAME object — same shape, key markings, characteristic silhouette — but
+       rendered ENTIRELY in the project's art style (never as a photograph). Plan
+       how each object will recur across the story so panels can reference it
+       consistently. Whether you may invent ADDITIONAL objects is decided by the
+       AUTHORING RULES at the end of the user message.
 
     4. COVER — only if `structure.include_cover` is true. Provide:
        - `scene_description`: an evocative illustration concept for the front cover

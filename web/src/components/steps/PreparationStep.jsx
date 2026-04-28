@@ -40,6 +40,7 @@ export default function PreparationStep({ project, onSaved }) {
       initialCharacterPhotos={project.character_photos || {}}
       initialLocationPhotos={project.location_photos || {}}
       initialObjectPhotos={project.object_photos || {}}
+      initialReferenceImages={project.reference_images || {}}
       onSubmit={onSubmit}
       onReferencesImported={onSaved}
       submitLabel="Enregistrer & passer à l'écriture"

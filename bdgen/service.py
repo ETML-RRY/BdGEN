@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import shutil
+import stat
+import time
 import unicodedata
 import zipfile
 from dataclasses import dataclass
@@ -56,6 +59,7 @@ class ProjectSummary:
     pages_composed: int
     pdf_ready: bool
     updated_at: str
+    thumbnail_rel: str | None = None
 
     def to_dict(self) -> dict:
         return self.__dict__.copy()
@@ -133,10 +137,33 @@ def load_script_if_present(name: str, output_root: Path | None = None) -> BdGenS
         return None
 
 
+def _force_writable_and_retry(func, target, _exc_info):
+    # rmtree handler: clear the read-only bit (Windows often sets it on cached
+    # files inside OneDrive) and retry the failing op.
+    try:
+        os.chmod(target, stat.S_IWRITE)
+    except OSError:
+        pass
+    func(target)
+
+
 def delete_project(name: str, output_root: Path | None = None) -> None:
     d = get_project_dir(name, output_root)
-    if d.exists():
-        shutil.rmtree(d)
+    if not d.exists():
+        return
+    # OneDrive / antivirus / file explorer can briefly hold handles on freshly
+    # closed files on Windows, making rmtree fail with WinError 5. Retry a few
+    # times with a small backoff before giving up.
+    last_error: OSError | None = None
+    for attempt in range(6):
+        try:
+            shutil.rmtree(d, onerror=_force_writable_and_retry)
+            return
+        except OSError as exc:
+            last_error = exc
+            time.sleep(0.25 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
 
 
 def _slugify(text: str) -> str:
@@ -431,7 +458,21 @@ def _summary(proj_dir: Path) -> ProjectSummary:
         pages_composed=pages_composed,
         pdf_ready=pdf.exists(),
         updated_at=datetime.fromtimestamp(updated, tz=timezone.utc).isoformat(),
+        thumbnail_rel=_pick_thumbnail_rel(proj_dir),
     )
+
+
+def _pick_thumbnail_rel(proj_dir: Path) -> str | None:
+    pages_dir = proj_dir / "pages"
+    if not pages_dir.is_dir():
+        return None
+    cover = pages_dir / "cover.png"
+    if cover.exists():
+        return "pages/cover.png"
+    candidates = sorted(pages_dir.glob("page_*.png"))
+    if candidates:
+        return f"pages/{candidates[0].name}"
+    return None
 
 
 # --- Style reference image ---
@@ -474,6 +515,31 @@ def list_character_photos(proj_dir: Path) -> dict[str, Path]:
     for p in d.iterdir():
         if p.is_file() and p.suffix.lower() == ".png" and p.stat().st_size > 0:
             out[p.stem] = p
+    return out
+
+
+def list_reference_images(proj_dir: Path) -> dict[str, dict[str, Path]]:
+    """Return ``{kind: {id: path}}`` for every existing reference PNG on disk.
+
+    Independent of the bd_script: scans ``references/{kind}/*.png`` directly.
+    Used by the project form so imported .bdrefs references show up even
+    before the script step has run.
+    """
+    out: dict[str, dict[str, Path]] = {
+        "characters": {},
+        "locations": {},
+        "objects": {},
+    }
+    base = proj_dir / "references"
+    if not base.is_dir():
+        return out
+    for kind in out.keys():
+        d = base / kind
+        if not d.is_dir():
+            continue
+        for p in d.iterdir():
+            if p.is_file() and p.suffix.lower() == ".png" and p.stat().st_size > 0:
+                out[kind][p.stem] = p
     return out
 
 
