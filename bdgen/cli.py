@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from . import compose as compose_module
 from . import references as references_module
 from . import script as script_module
+from . import upscale as upscale_module
 from . import wizard as wizard_module
 from .feedback import FeedbackStore, feedback_path_for
 from .models import BdGenInput, BdGenScript, GenerationOptions
@@ -109,7 +110,28 @@ def cmd_run(args: argparse.Namespace) -> None:
         feedback_store=feedback_store,
         reporter=reporter,
     )
+    if opts.upscale.enabled:
+        upscale_module.upscale_pages(
+            bd_script,
+            project_dir,
+            opts.upscale,
+            reporter=reporter,
+        )
     print(f"Done: {out}")
+
+
+def cmd_upscale(args: argparse.Namespace) -> None:
+    bd_script = BdGenScript.load(args.script)
+    opts = _resolve_options(bd_script, args.input)
+    project_dir = _project_dir(bd_script, args.script)
+    out = upscale_module.upscale_pages(
+        bd_script,
+        project_dir,
+        opts.upscale,
+        reporter=StdoutReporter(),
+        force=args.force,
+    )
+    print(f"Upscaled pages written under {out}")
 
 
 def cmd_wizard(args: argparse.Namespace) -> None:
@@ -179,6 +201,15 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("input", type=Path)
     p.add_argument("--preview", type=int, default=None, help=preview_help)
     p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser(
+        "upscale",
+        help="Optional local CPU-only upscale step applied to composed pages.",
+    )
+    p.add_argument("script", type=Path)
+    p.add_argument("--input", type=Path, default=None, help=input_help)
+    p.add_argument("--force", action="store_true", help=force_help)
+    p.set_defaults(func=cmd_upscale)
 
     p = sub.add_parser(
         "wizard",

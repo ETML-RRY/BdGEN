@@ -30,6 +30,7 @@ from pydantic import BaseModel
 
 from .. import service
 from .. import style_from_image as style_module
+from .. import upscale as upscale_module
 from ..models import BdGenInput
 from .jobs import JobManager
 
@@ -141,14 +142,17 @@ def _register_api(app: FastAPI) -> None:
     def get_project(name: str) -> dict:
         if not service.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
+        proj_dir = service.get_project_dir(name, _output_root())
+        cfg_path = proj_dir / service.PROJECT_CONFIG_NAME
+        script_path = proj_dir / "bdgen-script.json"
+        cfg = None
         try:
             cfg = service.load_config(name, _output_root())
-            cfg_dict = cfg.model_dump(mode="json")
+            cfg_dict = cfg.to_portable_dict(cfg_path)
         except FileNotFoundError:
             cfg_dict = None
         bd_script = service.load_script_if_present(name, _output_root())
-        script_dict = bd_script.model_dump(mode="json") if bd_script else None
-        proj_dir = service.get_project_dir(name, _output_root())
+        script_dict = bd_script.to_portable_dict(script_path) if bd_script else None
         state = service.derive_state(proj_dir)
         quality_idx = service.read_quality_index(proj_dir)
         stale_idx = service.read_stale_index(proj_dir)
@@ -162,8 +166,16 @@ def _register_api(app: FastAPI) -> None:
         # Per-step asset listings the frontend uses to flip through items.
         refs = {"characters": [], "locations": [], "objects": []}
         composed = []
+        upscaled = []
         stale_refs = set(stale_idx.get("references", []))
         stale_compose = set(stale_idx.get("compose", []))
+        upscale_dir = service.get_upscale_output_dir(proj_dir, bd_script, cfg)
+        upscale_ext = (
+            (cfg_dict or {})
+            .get("generation_options", {})
+            .get("upscale", {})
+            .get("output_format", "png")
+        )
         if bd_script is not None:
             for c in bd_script.characters:
                 ref_path = proj_dir / "references" / "characters" / f"{c.id}.png"
@@ -210,10 +222,13 @@ def _register_api(app: FastAPI) -> None:
                 })
             if bd_script.cover is not None:
                 composed.append(_compose_entry(name, "cover", proj_dir, quality_idx, default_quality, stale_compose))
+                upscaled.append(_upscale_entry(name, "cover", proj_dir, upscale_dir, upscale_ext))
             for p in bd_script.pages:
                 composed.append(_compose_entry(name, f"page_{p.page_number}", proj_dir, quality_idx, default_quality, stale_compose))
+                upscaled.append(_upscale_entry(name, f"page_{p.page_number}", proj_dir, upscale_dir, upscale_ext))
             if bd_script.back_cover is not None:
                 composed.append(_compose_entry(name, "back", proj_dir, quality_idx, default_quality, stale_compose))
+                upscaled.append(_upscale_entry(name, "back", proj_dir, upscale_dir, upscale_ext))
         character_photos: dict[str, str | None] = {}
         for cid, photo_path in service.list_character_photos(proj_dir).items():
             character_photos[cid] = _file_url(
@@ -252,6 +267,9 @@ def _register_api(app: FastAPI) -> None:
             "script": script_dict,
             "references": refs,
             "composed": composed,
+            "upscaled": upscaled,
+            "upscale": (cfg_dict or {}).get("generation_options", {}).get("upscale", {}),
+            "upscale_available": upscale_module.is_available(),
             "stale": stale_idx,
             "pdf_url": _file_url(name, f"{name}.pdf", proj_dir / f"{name}.pdf"),
             "default_quality": default_quality,
@@ -532,6 +550,38 @@ def _register_api(app: FastAPI) -> None:
             )
 
         return _start("compose", name, runner)
+
+    @app.post("/api/projects/{name}/steps/upscale/start")
+    def start_upscale(name: str, payload: StartStepPayload = Body(default=StartStepPayload())) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        try:
+            cfg = service.load_config(name, _output_root())
+        except FileNotFoundError:
+            raise HTTPException(400, "Configuration du projet introuvable.")
+        if not cfg.generation_options.upscale.enabled:
+            raise HTTPException(
+                400,
+                "L'upscale n'est pas activé pour ce projet. "
+                "Activez-le dans la section Préparation.",
+            )
+        if not upscale_module.is_available():
+            raise HTTPException(
+                400,
+                "REPLICATE_API_TOKEN non défini. "
+                "Ajoutez votre clé API Replicate dans le fichier .env du serveur.",
+            )
+
+        def runner(reporter, interrupt):
+            service.run_step_upscale(
+                name,
+                reporter,
+                interrupt,
+                output_root=_output_root(),
+                force_ids=payload.force_ids,
+            )
+
+        return _start("upscale", name, runner)
 
     # --- Targeted refinement (synchronous) ---
 
@@ -961,6 +1011,42 @@ def _compose_entry(
             quality_idx, "compose", target, full, default_quality
         ),
         "stale": bool(stale_set and target in stale_set and exists),
+    }
+
+
+def _upscale_entry(
+    project: str,
+    target: str,
+    proj_dir: Path,
+    upscale_dir: Path,
+    output_format: str,
+) -> dict:
+    src_rel = _target_relpath(target, "pages")
+    if src_rel is None:
+        return {"id": target, "image_url": None, "quality": None, "stale": False}
+    suffix = output_format if output_format.startswith(".") else f".{output_format}"
+    if target == "cover":
+        full = upscale_dir / f"cover{suffix}"
+    elif target == "back":
+        full = upscale_dir / f"back{suffix}"
+    elif target.startswith("page_"):
+        try:
+            n = int(target.split("_", 1)[1])
+        except (ValueError, IndexError):
+            return {"id": target, "image_url": None, "quality": None, "stale": False}
+        full = upscale_dir / f"page_{n:02d}{suffix}"
+    else:
+        return {"id": target, "image_url": None, "quality": None, "stale": False}
+    try:
+        rel = full.relative_to(proj_dir).as_posix()
+    except ValueError:
+        rel = None
+    source = proj_dir / src_rel
+    return {
+        "id": target,
+        "image_url": _file_url(project, rel, full) if rel is not None else None,
+        "quality": None,
+        "stale": service.is_upscaled_stale(source, full),
     }
 
 

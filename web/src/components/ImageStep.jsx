@@ -31,6 +31,7 @@ export default function ImageStep({
   title,
   intro,
   feedbackStep = stepId,
+  allowRefine = true,
   allowSkip = false,
   onSkip,
   onContinue,
@@ -103,7 +104,7 @@ export default function ImageStep({
         idx={idx}
         setIdx={setIdx}
         layout={layout}
-        onRefine={isRunning ? null : (item) => setRefining(item)}
+        onRefine={isRunning || !allowRefine ? null : (item) => setRefining(item)}
         onUpgrade={
           isRunning || !supportsQuality
             ? null
@@ -130,7 +131,9 @@ export default function ImageStep({
           job={stream.job}
           events={stream.events}
           onInterrupt={stream.interrupt}
-          hint="Vous pouvez feuilleter les images déjà générées. Pour donner un retour, interrompez d'abord la génération."
+          hint={allowRefine
+            ? "Vous pouvez feuilleter les images déjà générées. Pour donner un retour, interrompez d'abord la génération."
+            : "Vous pouvez feuilleter les images déjà générées pendant l'upscale local."}
         />
         {flipper}
       </div>
@@ -276,7 +279,7 @@ export default function ImageStep({
         {flipper}
       </div>
 
-      {refining && (
+      {allowRefine && refining && (
         <RefineDialog
           title={`Retoucher « ${refining.label} »`}
           hint="Décrivez ce qui doit changer. La génération sera relancée pour cet élément uniquement (les autres restent intacts)."

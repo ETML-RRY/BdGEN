@@ -2,10 +2,32 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+def _resolve_path(value: Path | str | None, base_dir: Path) -> Path | None:
+    if value is None:
+        return None
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return (base_dir / path).resolve()
+
+
+def _portable_path(value: Path | str | None, base_dir: Path) -> str | None:
+    if value is None:
+        return None
+    path = Path(value)
+    if not path.is_absolute():
+        return path.as_posix()
+    try:
+        return Path(os.path.relpath(path, start=base_dir)).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 # --- Shared ---
@@ -21,6 +43,8 @@ class Style(BaseModel):
     color_palette: str | None = None
     line_work: str | None = None
     mood: str | None = None
+    negative_constraints: str | None = None
+    stylization_level: str | None = None
     panel_borders: str | None = None
     speech_bubbles: str | None = None
     character_rendering: str | None = None
@@ -98,6 +122,18 @@ class ImageModelConfig(BaseModel):
     quality: str = "high"
 
 
+class UpscaleOptions(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = False
+    mode: Literal["target", "factor"] = "target"
+    target_megapixels: int = 4
+    scale_factor: float = 2.0
+    output_format: Literal["png", "jpg", "webp"] = "png"
+    output_quality: int = 90
+    output_dir: Path | None = None
+
+
 class ReferencesOptions(BaseModel):
     generate: bool = True
     output_dir: Path | None = None
@@ -111,6 +147,7 @@ class ReferencesOptions(BaseModel):
 class GenerationOptions(BaseModel):
     script_model: ScriptModelConfig
     image_model: ImageModelConfig
+    upscale: UpscaleOptions = Field(default_factory=UpscaleOptions)
     references: ReferencesOptions = Field(default_factory=ReferencesOptions)
     render_dialogs_separately: bool = True
     output_format: Literal["pdf", "images", "html"] = "pdf"
@@ -138,13 +175,14 @@ class BdGenInput(BaseModel):
 
     @classmethod
     def load(cls, path: Path) -> "BdGenInput":
-        obj = cls.model_validate(json.loads(Path(path).read_text(encoding="utf-8")))
+        config_path = Path(path)
+        obj = cls.model_validate(json.loads(config_path.read_text(encoding="utf-8")))
         if obj.project is None:
-            obj.project = Path(path).stem
-        obj._fill_default_paths()
+            obj.project = config_path.stem
+        obj._fill_default_paths(config_path)
         return obj
 
-    def _fill_default_paths(self) -> None:
+    def _fill_default_paths(self, config_path: Path | None = None) -> None:
         """Force every output path under ``{output_root}/{project}/``.
 
         Any explicit ``script_path``, ``output_path``, or ``references.output_dir``
@@ -155,11 +193,45 @@ class BdGenInput(BaseModel):
         """
         if self.project is None:
             return
-        proj_dir = self.output_root / self.project
+        if config_path is not None and config_path.name == "bdgen.json":
+            proj_dir = config_path.parent.resolve()
+            self.output_root = proj_dir.parent
+        else:
+            base_dir = config_path.parent if config_path is not None else Path.cwd()
+            resolved_root = _resolve_path(self.output_root, base_dir) or Path("./output").resolve()
+            self.output_root = resolved_root
+            proj_dir = resolved_root / self.project
         go = self.generation_options
         go.script_path = proj_dir / "bdgen-script.json"
         go.output_path = proj_dir / f"{self.project}.pdf"
         go.references.output_dir = proj_dir / "references"
+        go.upscale.output_dir = proj_dir / "pages_upscaled"
+
+    def to_portable_dict(self, config_path: Path | None = None) -> dict:
+        payload = self.model_dump(mode="json", exclude_none=False)
+        if config_path is None:
+            return payload
+        config_dir = config_path.parent
+        payload["output_root"] = _portable_path(self.output_root, config_dir)
+        generation_options = payload.get("generation_options", {})
+        generation_options["script_path"] = _portable_path(
+            self.generation_options.script_path, config_dir
+        )
+        generation_options["output_path"] = _portable_path(
+            self.generation_options.output_path, config_dir
+        )
+        references = generation_options.get("references", {})
+        references["output_dir"] = _portable_path(
+            self.generation_options.references.output_dir, config_dir
+        )
+        generation_options["references"] = references
+        upscale = generation_options.get("upscale", {})
+        upscale["output_dir"] = _portable_path(
+            self.generation_options.upscale.output_dir, config_dir
+        )
+        generation_options["upscale"] = upscale
+        payload["generation_options"] = generation_options
+        return payload
 
 
 # --- Output (bdgen-script.json) ---
@@ -253,8 +325,9 @@ class BdGenScript(BaseModel):
 
     @classmethod
     def load(cls, path: Path) -> "BdGenScript":
-        obj = cls.model_validate(json.loads(Path(path).read_text(encoding="utf-8")))
-        obj._enforce_path_consistency(Path(path))
+        script_path = Path(path)
+        obj = cls.model_validate(json.loads(script_path.read_text(encoding="utf-8")))
+        obj._enforce_path_consistency(script_path)
         return obj
 
     def _enforce_path_consistency(self, script_path: Path) -> None:
@@ -267,17 +340,66 @@ class BdGenScript(BaseModel):
         """
         if self.generation_options is None:
             return
-        proj_dir = script_path.parent
+        proj_dir = script_path.parent.resolve()
         project_name = self.project or proj_dir.name
         go = self.generation_options
+        self.source.input_file = str(proj_dir / "bdgen.json")
         go.script_path = proj_dir / "bdgen-script.json"
         go.output_path = proj_dir / f"{project_name}.pdf"
         go.references.output_dir = proj_dir / "references"
+        go.upscale.output_dir = proj_dir / "pages_upscaled"
+        for character in self.characters:
+            character.reference_image = _resolve_path(character.reference_image, proj_dir)
+        for location in self.locations:
+            location.reference_image = _resolve_path(location.reference_image, proj_dir)
+        for obj in self.objects:
+            obj.reference_image = _resolve_path(obj.reference_image, proj_dir)
 
     def save(self, path: Path) -> None:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+        p.write_text(
+            json.dumps(self.to_portable_dict(p), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    def to_portable_dict(self, script_path: Path | None = None) -> dict:
+        payload = self.model_dump(mode="json", exclude_none=False)
+        if script_path is None:
+            return payload
+        project_dir = script_path.parent
+        source = payload.get("source", {})
+        source["input_file"] = _portable_path(self.source.input_file, project_dir)
+        payload["source"] = source
+        generation_options = payload.get("generation_options", {})
+        generation_options["script_path"] = _portable_path(
+            self.generation_options.script_path, project_dir
+        )
+        generation_options["output_path"] = _portable_path(
+            self.generation_options.output_path, project_dir
+        )
+        references = generation_options.get("references", {})
+        references["output_dir"] = _portable_path(
+            self.generation_options.references.output_dir, project_dir
+        )
+        generation_options["references"] = references
+        upscale = generation_options.get("upscale", {})
+        upscale["output_dir"] = _portable_path(
+            self.generation_options.upscale.output_dir, project_dir
+        )
+        generation_options["upscale"] = upscale
+        payload["generation_options"] = generation_options
+        for items_key, items in (
+            ("characters", self.characters),
+            ("locations", self.locations),
+            ("objects", self.objects),
+        ):
+            serialised_items = payload.get(items_key, [])
+            for item_payload, item in zip(serialised_items, items, strict=False):
+                item_payload["reference_image"] = _portable_path(
+                    item.reference_image, project_dir
+                )
+        return payload
 
     def character_by_id(self, cid: str) -> ScriptCharacter | None:
         return next((c for c in self.characters if c.id == cid), None)

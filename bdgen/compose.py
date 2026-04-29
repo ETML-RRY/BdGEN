@@ -328,9 +328,11 @@ def _build_page_prompt(
         - Color palette: {style.color_palette or "as appropriate to the mood"}
         - Line work: {style.line_work or "clean black ink, consistent thickness"}
         - Mood: {style.mood or "neutral"}
+        - Stylization level: {style.stylization_level or "moderately stylized"}
         - Panel borders: {style.panel_borders or "crisp, consistent thickness, fully closed black ink rectangles (or shapes per the layout)"}
         - Speech bubbles: {style.speech_bubbles or "clean white bubbles with a thin black outline, matching the line-work weight"}
         - Character rendering: {style.character_rendering or "consistent with the art style above"}
+        {f"- NEGATIVE CONSTRAINTS: {style.negative_constraints}" if style.negative_constraints else ""}
 
         PAGE LAYOUT:
         {page.layout or "balanced grid"}
@@ -531,7 +533,9 @@ def _build_cover_prompt(
         - Color palette: {style.color_palette or "as appropriate"}
         - Line work: {style.line_work or "clean black ink"}
         - Mood: {style.mood or "neutral"}
+        - Stylization level: {style.stylization_level or "moderately stylized"}
         - Character rendering: {style.character_rendering or "consistent with the art style above"}
+        {f"- NEGATIVE CONSTRAINTS: {style.negative_constraints}" if style.negative_constraints else ""}
 
         COVER ILLUSTRATION:
         {cover.scene_description}
@@ -600,7 +604,9 @@ def _build_back_prompt(
         - Art style: {style.art_style}
         - Color palette: {style.color_palette or "as appropriate, consistent with the front cover"}
         - Mood: {style.mood or "neutral"}
+        - Stylization level: {style.stylization_level or "moderately stylized"}
         - Character rendering: {style.character_rendering or "consistent with the art style above"}
+        {f"- NEGATIVE CONSTRAINTS: {style.negative_constraints}" if style.negative_constraints else ""}
 
         SYNOPSIS BLURB (render this exact text, language: {language}):
         \"\"\"

@@ -257,7 +257,32 @@ def _style_enforcement_block(style: Style) -> str:
     if style.line_work:
         lines.append(f"- Line work: {style.line_work}")
     if style.character_rendering:
-        lines.append(f"- Character rendering: {style.character_rendering}")
+        lines.append(f"- Character rendering (STRICT): {style.character_rendering}")
+        lines.append(
+            "  Match the EXACT degree of anatomical distortion described above. "
+            "If the style calls for exaggerated/bloated/crude proportions, the "
+            "output MUST look equally exaggerated — do NOT clean up, do NOT "
+            "regularize proportions, do NOT add anatomical precision that the "
+            "style does not call for. A polished or realistic rendering when "
+            "the style demands crude/abstract is a failure."
+        )
+    if style.stylization_level:
+        lines.append(f"- Stylization intensity (CRITICAL): {style.stylization_level}")
+        lines.append(
+            "  This is the REQUIRED level of distortion. You MUST match it. "
+            "If 'heavily stylized' or 'extremely abstract', the output must "
+            "look raw, crude, and deliberately imperfect — NOT polished, NOT "
+            "well-proportioned, NOT clean. Err on the side of MORE distortion "
+            "rather than less. A clean, polished output when the style demands "
+            "heavy stylization is worse than an overly crude one."
+        )
+    if style.negative_constraints:
+        lines.append("")
+        lines.append(f"FORBIDDEN — {style.negative_constraints}")
+        lines.append(
+            "Violating any of the above negative constraints is an automatic "
+            "failure regardless of how good the output looks otherwise."
+        )
     return "\n".join(lines)
 
 
@@ -279,6 +304,19 @@ STYLE_REF_LABEL = (
     "visual style reference. Study its drawing technique, line quality, "
     "coloring method, level of detail, body proportions, palette and overall "
     "visual tone, and replicate THOSE STYLISTIC QUALITIES in your output.\n\n"
+    "DEGREE OF STYLIZATION — CRITICAL:\n"
+    "- Match the EXACT level of crudeness, distortion and imperfection you "
+    "  see in this reference. If the characters in this reference look like "
+    "  rough ink blobs with exaggerated limbs, your output MUST look equally "
+    "  rough and exaggerated. Do NOT 'improve' or 'polish' the style.\n"
+    "- If the reference has messy, chaotic line work, your output must be "
+    "  equally messy and chaotic. If proportions are wildly exaggerated, "
+    "  yours must be too. If faces are barely recognizable, yours must be "
+    "  too. NEVER default to clean, polished, well-proportioned comic art "
+    "  when the reference is crude and raw.\n"
+    "- Think of it as: if someone placed your output next to this reference, "
+    "  they should believe the SAME ARTIST drew both. Same energy, same "
+    "  level of finish, same degree of anatomical distortion.\n\n"
     "STRICT NON-COPYING RULE — MANDATORY, NO EXCEPTIONS (this is a copyright "
     "constraint, not a stylistic suggestion):\n"
     "- DO NOT reproduce, paraphrase, OCR, or recreate ANY text visible in "

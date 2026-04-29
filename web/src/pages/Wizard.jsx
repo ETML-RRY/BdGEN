@@ -7,6 +7,7 @@ import PreparationStep from "../components/steps/PreparationStep.jsx";
 import ScriptStep from "../components/steps/ScriptStep.jsx";
 import ReferencesStep from "../components/steps/ReferencesStep.jsx";
 import ComposeStep from "../components/steps/ComposeStep.jsx";
+import UpscaleStep from "../components/steps/UpscaleStep.jsx";
 import DuplicateProjectDialog from "../components/DuplicateProjectDialog.jsx";
 
 export const STEPS = [
@@ -14,6 +15,7 @@ export const STEPS = [
   { id: "script", label: "Écriture" },
   { id: "references", label: "Références" },
   { id: "compose", label: "Planches" },
+  { id: "upscale", label: "Upscale", optional: true },
 ];
 
 export default function Wizard() {
@@ -145,6 +147,10 @@ export default function Wizard() {
           <Route
             path="compose"
             element={<ComposeStep project={project} onChanged={reload} />}
+          />
+          <Route
+            path="upscale"
+            element={<UpscaleStep project={project} onChanged={reload} />}
           />
           <Route path="*" element={<Navigate to="preparation" replace />} />
         </Routes>

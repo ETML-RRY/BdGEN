@@ -25,6 +25,7 @@ from typing import Literal
 from . import compose as compose_module
 from . import references as references_module
 from . import script as script_module
+from . import upscale as upscale_module
 from .feedback import FeedbackStore, feedback_path_for
 from .models import BdGenInput, BdGenScript, Style
 from .progress import InterruptFlag, ProgressReporter
@@ -35,6 +36,7 @@ PROJECT_CONFIG_NAME = "bdgen.json"
 QUALITY_INDEX_NAME = "bdgen-quality.json"
 STALE_INDEX_NAME = "bdgen-stale.json"
 STYLE_REF_NAME = "bdgen-style-ref.png"
+UPSCALED_DIRNAME = "pages_upscaled"
 CHARACTER_PHOTOS_DIRNAME = "character_photos"
 LOCATION_PHOTOS_DIRNAME = "location_photos"
 OBJECT_PHOTOS_DIRNAME = "object_photos"
@@ -225,7 +227,7 @@ def save_config(config: BdGenInput, output_root: Path | None = None) -> Path:
     proj_dir = config.output_root / config.project
     proj_dir.mkdir(parents=True, exist_ok=True)
     config_path = proj_dir / PROJECT_CONFIG_NAME
-    payload = config.model_dump(mode="json", exclude_none=False)
+    payload = config.to_portable_dict(config_path)
     config_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -575,6 +577,28 @@ def _pick_thumbnail_rel(proj_dir: Path) -> str | None:
     if candidates:
         return f"pages/{candidates[0].name}"
     return None
+
+
+def get_upscale_output_dir(
+    proj_dir: Path,
+    bd_script: BdGenScript | None = None,
+    config: BdGenInput | None = None,
+) -> Path:
+    if bd_script is not None and bd_script.generation_options is not None:
+        out = bd_script.generation_options.upscale.output_dir
+        if out is not None:
+            return out
+    if config is not None:
+        out = config.generation_options.upscale.output_dir
+        if out is not None:
+            return out
+    return proj_dir / UPSCALED_DIRNAME
+
+
+def is_upscaled_stale(source_path: Path, upscaled_path: Path) -> bool:
+    if not source_path.exists() or not upscaled_path.exists():
+        return False
+    return source_path.stat().st_mtime > upscaled_path.stat().st_mtime
 
 
 # --- Style reference image ---
@@ -1186,6 +1210,27 @@ def run_step_compose(
     return out
 
 
+def run_step_upscale(
+    name: str,
+    reporter: ProgressReporter,
+    interrupt: InterruptFlag,
+    output_root: Path | None = None,
+    force_ids: list[str] | None = None,
+) -> Path:
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+    opts = _resolve_options(bd_script, name, output_root)
+    return upscale_module.upscale_pages(
+        bd_script,
+        project_dir=proj_dir,
+        options=opts.upscale,
+        reporter=reporter,
+        interrupt=interrupt,
+        force_ids=force_ids,
+    )
+
+
 # --- Targeted refinement (synchronous; called outside the JobManager) ---
 
 def add_feedback_and_regenerate_character(
@@ -1595,16 +1640,21 @@ def import_zip(
                 shutil.rmtree(target_dir, onerror=_force_writable_and_retry)
             target_dir.mkdir(parents=True, exist_ok=True)
             zf.extractall(root)
-    # If config carries a different ``project`` name, normalize it to the dir name.
-    cfg_path = (output_root or Path("./output")).resolve() / project_name / PROJECT_CONFIG_NAME
+    # Normalize extracted documents so they become portable across machines.
+    cfg_path = root / project_name / PROJECT_CONFIG_NAME
     if cfg_path.exists():
         try:
-            data = json.loads(cfg_path.read_text(encoding="utf-8"))
-            if data.get("project") != project_name:
-                data["project"] = project_name
-                cfg_path.write_text(
-                    json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-                )
+            config = BdGenInput.load(cfg_path)
+            config.project = project_name
+            save_config(config, root)
+        except Exception:
+            pass
+    script_path = root / project_name / "bdgen-script.json"
+    if script_path.exists():
+        try:
+            bd_script = BdGenScript.load(script_path)
+            bd_script.project = project_name
+            bd_script.save(script_path)
         except Exception:
             pass
     return project_name
@@ -1865,4 +1915,18 @@ def _composed_path(pages_dir: Path, target: str) -> Path | None:
         except ValueError:
             return None
         return pages_dir / f"page_{n:02d}.png"
+    return None
+
+
+def _upscaled_path(output_dir: Path, target: str, suffix: str = ".png") -> Path | None:
+    if target == "cover":
+        return output_dir / f"cover{suffix}"
+    if target == "back":
+        return output_dir / f"back{suffix}"
+    if target.startswith("page_"):
+        try:
+            n = int(target.split("_", 1)[1])
+        except ValueError:
+            return None
+        return output_dir / f"page_{n:02d}{suffix}"
     return None

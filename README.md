@@ -22,7 +22,7 @@ cp .env.sample .env
    uv run main.py wizard mon-projet.json
    ```
 
-   Le wizard vous guide à travers les 3 étapes du pipeline. À chaque étape vous pouvez accepter, visualiser le résultat, ou saisir un feedback qui sera intégré à la régénération.
+   Le wizard vous guide à travers les 3 étapes principales du pipeline, puis peut proposer une 4ᵉ étape optionnelle d'upscale local CPU si elle est activée dans la configuration. À chaque étape vous pouvez accepter, visualiser le résultat, ou saisir un feedback qui sera intégré à la régénération.
 
 Tout est généré dans `./output/<project>/`.
 
@@ -33,6 +33,7 @@ Tout est généré dans `./output/<project>/`.
 | 1. Scénario | `script` | `bdgen-script.json` (LLM développe le synopsis en script détaillé : pages, cases, dialogues) |
 | 2. Références visuelles | `references` | `references/characters/*.png`, `references/locations/*.png` (planches modèle pour cohérence) |
 | 3. Composition | `compose` | `pages/page_XX.png` + couverture `cover.png` + 4ème de couv `back.png` + assemblage `<project>.pdf` (page-level avec bulles intégrées) |
+| 4. Upscale local (optionnel) | `upscale` | `pages_upscaled/page_XX.*` + couverture / dos en version agrandie sur CPU local |
 
 ### Pas-à-pas (alternative au wizard)
 
@@ -40,6 +41,7 @@ Tout est généré dans `./output/<project>/`.
 uv run main.py script mon-projet.json
 uv run main.py references ./output/mon-projet/bdgen-script.json
 uv run main.py compose ./output/mon-projet/bdgen-script.json
+uv run main.py upscale ./output/mon-projet/bdgen-script.json
 ```
 
 ### Pipeline complet non-interactif
@@ -47,6 +49,8 @@ uv run main.py compose ./output/mon-projet/bdgen-script.json
 ```bash
 uv run main.py run mon-projet.json
 ```
+
+Si `generation_options.upscale.enabled` vaut `true`, la commande `run` enchaîne aussi l'étape d'upscale local après `compose`.
 
 ## Itérer avec feedback
 
@@ -92,6 +96,42 @@ L'interface permet de sauvegarder un projet sous forme de fichier `.bdgen`
 (une archive zip du dossier projet) et d'en réimporter un. Une seule
 génération est autorisée à la fois ; un bandeau s'affiche pour signaler
 qu'une autre génération est en cours.
+
+## Upscale local CPU
+
+Une étape optionnelle `Upscale` est disponible après `Planches`.
+
+- Elle fonctionne **entièrement en local** et **sur CPU uniquement**.
+- Elle charge un vrai modèle local via `from pruna import SmashedModel`.
+- Le dossier du modèle doit être disponible on-prem, par exemple `./models/p-image-upscale-v1`.
+
+Configuration possible dans `bdgen.json` :
+
+```json
+{
+   "generation_options": {
+      "upscale": {
+         "enabled": true,
+         "mode": "target",
+         "target_megapixels": 4,
+         "scale_factor": 2.0,
+         "output_format": "png",
+         "output_quality": 90
+      }
+   }
+}
+```
+
+Le provider, le runtime et le chemin du modèle Pruna sont fixés dans la configuration de base de l'outil ; ils ne sont plus exposés dans l'interface.
+
+Le chargement local suit ce schéma :
+
+```python
+from pruna import SmashedModel
+
+model = SmashedModel.load("./models/p-image-upscale-v1", device="cpu")
+output_image = model.predict(image)
+```
 
 ## Coût indicatif (gpt-image-2 high quality)
 

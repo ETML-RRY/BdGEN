@@ -49,7 +49,7 @@ export const DEFAULT_CONFIG = {
   generation_options: {
     script_model: {
       provider: "anthropic",
-      model: "claude-opus-4-7",
+      model: "claude-sonnet-4-6",
       temperature: 0.8,
     },
     image_model: {
@@ -63,6 +63,14 @@ export const DEFAULT_CONFIG = {
       character_views: ["face_closeup", "full_body_front", "expressions_sheet"],
       location_view: "establishing_shot",
       use_as_input_for_panels: true,
+    },
+    upscale: {
+      enabled: false,
+      mode: "target",
+      target_megapixels: 4,
+      scale_factor: 2,
+      output_format: "png",
+      output_quality: 90,
     },
     render_dialogs_separately: true,
     output_format: "pdf",
@@ -108,6 +116,21 @@ function normalize(cfg) {
   // Tolerate configs saved before locations / objects / allow_extra_* /
   // display_name existed.
   const out = structuredClone(cfg);
+  if (!out.generation_options) {
+    out.generation_options = structuredClone(DEFAULT_CONFIG.generation_options);
+  }
+  if (!out.generation_options.script_model) {
+    out.generation_options.script_model = structuredClone(DEFAULT_CONFIG.generation_options.script_model);
+  }
+  if (!out.generation_options.image_model) {
+    out.generation_options.image_model = structuredClone(DEFAULT_CONFIG.generation_options.image_model);
+  }
+  if (!out.generation_options.references) {
+    out.generation_options.references = structuredClone(DEFAULT_CONFIG.generation_options.references);
+  }
+  if (!out.generation_options.upscale) {
+    out.generation_options.upscale = structuredClone(DEFAULT_CONFIG.generation_options.upscale);
+  }
   if (!Array.isArray(out.locations)) out.locations = [];
   if (!Array.isArray(out.objects)) out.objects = [];
   if (!out.structure) out.structure = {};
@@ -121,6 +144,24 @@ function normalize(cfg) {
     out.structure.allow_extra_objects = true;
   }
   if (typeof out.display_name !== "string") out.display_name = "";
+  if (typeof out.generation_options.upscale.enabled !== "boolean") {
+    out.generation_options.upscale.enabled = false;
+  }
+  if (!["target", "factor"].includes(out.generation_options.upscale.mode)) {
+    out.generation_options.upscale.mode = "target";
+  }
+  if (typeof out.generation_options.upscale.target_megapixels !== "number") {
+    out.generation_options.upscale.target_megapixels = 4;
+  }
+  if (typeof out.generation_options.upscale.scale_factor !== "number") {
+    out.generation_options.upscale.scale_factor = 2;
+  }
+  if (!["png", "jpg", "webp"].includes(out.generation_options.upscale.output_format)) {
+    out.generation_options.upscale.output_format = "png";
+  }
+  if (typeof out.generation_options.upscale.output_quality !== "number") {
+    out.generation_options.upscale.output_quality = 90;
+  }
   return out;
 }
 
@@ -666,6 +707,15 @@ export default function ProjectForm({
     ];
     out.generation_options.script_model.temperature = Number(
       out.generation_options.script_model.temperature
+    );
+    out.generation_options.upscale.target_megapixels = Number(
+      out.generation_options.upscale.target_megapixels
+    );
+    out.generation_options.upscale.scale_factor = Number(
+      out.generation_options.upscale.scale_factor
+    );
+    out.generation_options.upscale.output_quality = Number(
+      out.generation_options.upscale.output_quality
     );
     return out;
   }
@@ -1326,6 +1376,94 @@ export default function ProjectForm({
             </select>
           </Field>
         </Grid>
+
+        <Subsection title="Upscale (Pruna via Replicate)">
+          <Grid cols={2}>
+            <Toggle
+              label="Activer l'étape d'upscale"
+              value={config.generation_options.upscale.enabled}
+              onChange={(v) => set("generation_options.upscale.enabled", v)}
+            />
+            <Field
+              label="Mode d'agrandissement"
+              hint="Choisissez une cible en mégapixels ou un facteur multiplicatif."
+            >
+              <select
+                className="select"
+                value={config.generation_options.upscale.mode}
+                onChange={(e) => set("generation_options.upscale.mode", e.target.value)}
+              >
+                <option value="target">Taille cible (MP)</option>
+                <option value="factor">Facteur ×N</option>
+              </select>
+            </Field>
+          </Grid>
+
+          <Grid cols={2}>
+            <Field
+              label="Mégapixels cibles"
+              hint="Utilisé en mode “taille cible”. Exemple : 4 MP."
+            >
+              <input
+                type="number"
+                min={1}
+                max={8}
+                step={1}
+                className="input"
+                value={config.generation_options.upscale.target_megapixels}
+                onChange={(e) => set("generation_options.upscale.target_megapixels", e.target.value)}
+                disabled={config.generation_options.upscale.mode !== "target"}
+              />
+            </Field>
+            <Field
+              label="Facteur d'agrandissement"
+              hint="Utilisé en mode “facteur”. Exemple : 2 = largeur et hauteur ×2."
+            >
+              <input
+                type="number"
+                min={1}
+                max={8}
+                step={0.1}
+                className="input"
+                value={config.generation_options.upscale.scale_factor}
+                onChange={(e) => set("generation_options.upscale.scale_factor", e.target.value)}
+                disabled={config.generation_options.upscale.mode !== "factor"}
+              />
+            </Field>
+            <Field label="Format de sortie upscalé">
+              <select
+                className="select"
+                value={config.generation_options.upscale.output_format}
+                onChange={(e) => set("generation_options.upscale.output_format", e.target.value)}
+              >
+                <option value="png">PNG</option>
+                <option value="jpg">JPEG</option>
+                <option value="webp">WebP</option>
+              </select>
+            </Field>
+            <Field
+              label="Qualité fichier"
+              hint="Appliquée aux formats JPEG et WebP. Ignorée pour PNG."
+            >
+              <input
+                type="number"
+                min={1}
+                max={100}
+                step={1}
+                className="input"
+                value={config.generation_options.upscale.output_quality}
+                onChange={(e) => set("generation_options.upscale.output_quality", e.target.value)}
+                disabled={config.generation_options.upscale.output_format === "png"}
+              />
+            </Field>
+          </Grid>
+
+          <p className="text-xs text-[var(--color-mute)]">
+            Utilise le modèle Pruna P-Image-Upscale via l'API Replicate.
+            Coût : ~$0.005/image (1-4 MP) ou ~$0.01/image (5-8 MP).
+            Nécessite <code>REPLICATE_API_TOKEN</code> dans le <code>.env</code> du serveur.
+          </p>
+        </Subsection>
       </Section>
 
       {error && (

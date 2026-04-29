@@ -13,6 +13,7 @@ from pathlib import Path
 from . import compose as compose_module
 from . import references as references_module
 from . import script as script_module
+from . import upscale as upscale_module
 from .feedback import FeedbackStore, feedback_path_for
 from .models import BdGenInput, BdGenScript, GenerationOptions, ReferencesOptions
 from .progress import StdoutReporter
@@ -23,7 +24,7 @@ def run_wizard(
     pages_dir: Path,
     preview_pages: int | None = None,
 ) -> None:
-    """Walk the user through script -> references -> compose."""
+    """Walk the user through script -> references -> compose -> optional upscale."""
     config = BdGenInput.load(input_path)
     opts = config.generation_options
     script_path = opts.script_path
@@ -35,6 +36,8 @@ def run_wizard(
     )
     bd_script = _step_references(bd_script, opts, script_path, feedback_store, feedback_path)
     _step_compose(bd_script, opts, pages_dir, script_path, feedback_store, feedback_path)
+    if opts.upscale.enabled and _prompt_yes_no("Lancer l'upscale local CPU ?", default=True):
+        _step_upscale(bd_script, opts, script_path)
 
     print(f"\n== Pipeline terminé ==\nBD : {opts.output_path}")
 
@@ -220,6 +223,23 @@ def _step_compose(
                     bd_script, opts, pages_dir, feedback_store=feedback_store,
                     reporter=StdoutReporter(),
                 )
+
+
+def _step_upscale(
+    bd_script: BdGenScript,
+    opts: GenerationOptions,
+    script_path: Path,
+) -> None:
+    print("\n== Étape 4/4 : Upscale local (optionnel) ==")
+    project_dir = script_path.parent
+    upscale_module.upscale_pages(
+        bd_script,
+        project_dir=project_dir,
+        options=opts.upscale,
+        reporter=StdoutReporter(),
+    )
+    output_dir = opts.upscale.output_dir or (project_dir / "pages_upscaled")
+    print(f"  Images upscalées : {output_dir}")
 
 
 # --- Helpers ---

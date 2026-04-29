@@ -9,6 +9,7 @@ dependencies = [
     "openai>=2.0",
     "anthropic>=0.50.0",
     "pillow>=10.0",
+    "replicate>=1.0",
     "python-dotenv>=1.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",

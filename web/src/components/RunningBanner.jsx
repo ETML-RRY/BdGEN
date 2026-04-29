@@ -4,6 +4,7 @@ const STEP_LABEL = {
   script: "écriture",
   references: "références",
   compose: "planches",
+  upscale: "upscale",
 };
 
 export default function RunningBanner({ job, className = "" }) {

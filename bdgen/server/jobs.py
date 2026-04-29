@@ -24,7 +24,7 @@ from ..progress import (
     StdoutReporter,
 )
 
-JobStep = Literal["script", "references", "compose"]
+JobStep = Literal["script", "references", "compose", "upscale"]
 JobStatus = Literal["running", "completed", "interrupted", "failed"]
 
 

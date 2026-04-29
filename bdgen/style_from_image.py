@@ -131,6 +131,21 @@ class _StyleDraft(BaseModel):
             "comic aesthetics.'"
         )
     )
+    stylization_level: str = Field(
+        description=(
+            "How far from photorealism this style sits. Use a concrete "
+            "descriptor from this spectrum: 'slightly stylized' (minor "
+            "simplifications), 'moderately stylized' (clear cartoon "
+            "conventions), 'heavily stylized' (strong distortion, "
+            "exaggerated proportions), 'extremely abstract' (barely "
+            "recognizable anatomy, crude/primitive forms). Then add one "
+            "sentence explaining WHAT is distorted: e.g. 'Extremely "
+            "abstract — characters are amorphous ink blobs with stick "
+            "limbs, heads twice body width, facial features reduced to "
+            "dots and slashes.' Be as concrete as possible about what "
+            "DEVIATES from realistic anatomy."
+        )
+    )
     panel_borders: str = Field(
         description=(
             "How panels are framed in this style. Be prescriptive about "
@@ -356,11 +371,11 @@ def extract(
     user_text = (
         f"Analyse cette image. Renvoie en {language} :\n"
         f"  • le style visuel (art_style, color_palette, line_work, mood, "
-        f"negative_constraints, panel_borders, speech_bubbles, "
-        f"character_rendering) — ces champs seront utilisés verbatim "
-        f"dans des prompts de génération d'images : sois très prescriptif "
-        f"et inclus dans art_style des contraintes négatives explicites "
-        f"('no smooth gradients', 'no photorealism'…).\n"
+        f"negative_constraints, stylization_level, panel_borders, "
+        f"speech_bubbles, character_rendering) — ces champs seront utilisés "
+        f"verbatim dans des prompts de génération d'images : sois très "
+        f"prescriptif et inclus dans art_style des contraintes négatives "
+        f"explicites ('no smooth gradients', 'no photorealism'…).\n"
         f"  • TROIS CHAMPS PRIMAIRES À TRAITER AVEC AUTANT DE SOIN QUE "
         f"art_style — ils doivent être renseignés de manière détaillée "
         f"même si l'image ne les montre pas directement (dans ce cas, "
@@ -415,11 +430,10 @@ def extract(
 
     draft = msg.parsed
     # Build a richer art_style that always carries the four highest-leverage
-    # traits with it: character rendering, panel borders, speech bubbles and
-    # negative constraints. Any downstream prompt that only consumes art_style
-    # (cover/back covers, LLM-generated reference prompts) still benefits from
-    # them. The dedicated fields stay populated for prompts that read them
-    # individually (page generation in compose.py).
+    # traits with it: character rendering, panel borders, speech bubbles.
+    # Negative constraints and stylization level are stored as SEPARATE fields
+    # so the style enforcement block can render them prominently at the end of
+    # every image prompt — burying them inside art_style diluted their signal.
     art_style = _sanitize(draft.style.art_style)
     char_rendering = _sanitize(draft.style.character_rendering)
     panel_borders = _sanitize(draft.style.panel_borders)
@@ -433,15 +447,15 @@ def extract(
         extras.append(f"Speech bubbles: {speech_bubbles}")
     if extras:
         art_style = f"{art_style} {' '.join(extras)}"
-    if draft.style.negative_constraints:
-        neg = _sanitize(draft.style.negative_constraints)
-        if neg and not art_style.lower().strip().endswith(neg.lower().strip()):
-            art_style = f"{art_style} {neg}"
+    neg = _sanitize(draft.style.negative_constraints) if draft.style.negative_constraints else None
+    stylization = _sanitize(draft.style.stylization_level) if draft.style.stylization_level else None
     style = Style(
         art_style=art_style,
         color_palette=_sanitize(draft.style.color_palette),
         line_work=_sanitize(draft.style.line_work),
         mood=_sanitize(draft.style.mood),
+        negative_constraints=neg or None,
+        stylization_level=stylization or None,
         panel_borders=panel_borders or None,
         speech_bubbles=speech_bubbles or None,
         character_rendering=char_rendering or None,
