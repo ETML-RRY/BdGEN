@@ -11,6 +11,7 @@ from PIL import Image
 from .feedback import FeedbackStore, feedback_block
 from .image_rules import IMAGE_CONSTRAINTS
 from .references import STYLE_REF_LABEL as _STYLE_REF_LABEL
+from .references import _style_enforcement_block
 from .models import (
     BackCover,
     BdGenScript,
@@ -390,7 +391,7 @@ def _build_page_prompt(
 
         """) + _build_refs_section(ref_labels)
 
-    return header + "\n\n".join(panels_text) + footer
+    return header + "\n\n".join(panels_text) + footer + "\n\n" + _style_enforcement_block(style)
 
 
 def _build_refs_section(ref_labels: list[str] | None) -> str:
@@ -560,7 +561,7 @@ def _build_cover_prompt(
         - All text in {language}
         - Typography integrated harmoniously with the illustration style
 
-        """) + _build_refs_section(ref_labels)
+        """) + _build_refs_section(ref_labels) + "\n\n" + _style_enforcement_block(style)
     return base
 
 
@@ -663,7 +664,7 @@ def _build_back_prompt(
           MANDATORY AI-assistance disclaimer at the bottom. NOTHING ELSE —
           no fake ISBN digits, no fake publisher name, no placeholder phrases.
 
-        """) + _build_refs_section(ref_labels)
+        """) + _build_refs_section(ref_labels) + "\n\n" + _style_enforcement_block(style)
     return base
 
 

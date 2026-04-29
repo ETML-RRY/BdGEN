@@ -12,6 +12,7 @@ from .models import (
     BdGenScript,
     ImageModelConfig,
     ReferencesOptions,
+    Style,
 )
 from .progress import (
     InterruptFlag,
@@ -95,7 +96,8 @@ def generate_references(
                 extra={"id": character.id, "kind": "character"},
             ))
             prompt = _augment_prompt(
-                character.reference_prompt, feedback_store, character.id
+                character.reference_prompt, feedback_store, character.id,
+                style=script.style,
             )
             photo = (character_photos or {}).get(character.id)
             _generate_image(
@@ -140,7 +142,8 @@ def generate_references(
                 extra={"id": location.id, "kind": "location"},
             ))
             prompt = _augment_prompt(
-                location.reference_prompt, feedback_store, location.id
+                location.reference_prompt, feedback_store, location.id,
+                style=script.style,
             )
             photo = (location_photos or {}).get(location.id)
             _generate_image(
@@ -185,7 +188,8 @@ def generate_references(
                 extra={"id": obj.id, "kind": "object"},
             ))
             prompt = _augment_prompt(
-                obj.reference_prompt, feedback_store, obj.id
+                obj.reference_prompt, feedback_store, obj.id,
+                style=script.style,
             )
             photo = (object_photos or {}).get(obj.id)
             _generate_image(
@@ -217,14 +221,44 @@ def generate_references(
 
 
 def _augment_prompt(
-    prompt: str, feedback_store: FeedbackStore | None, target: str
+    prompt: str, feedback_store: FeedbackStore | None, target: str,
+    style: Style | None = None,
 ) -> str:
     parts = [prompt, IMAGE_CONSTRAINTS]
+    if style is not None:
+        parts.append(_style_enforcement_block(style))
     if feedback_store is not None:
         feedbacks = feedback_store.get_for("references", target)
         if feedbacks:
             parts.append(feedback_block(feedbacks))
     return "\n\n".join(parts)
+
+
+def _style_enforcement_block(style: Style) -> str:
+    """Build a mandatory style-enforcement block appended at the end of every
+    image-generation prompt. Repeating the style at the tail of the prompt
+    ensures gpt-image-2 treats it as a hard constraint, even when a photo
+    reference introduces conflicting colors or rendering.
+    """
+    lines = [
+        "MANDATORY STYLE ENFORCEMENT — these constraints override any "
+        "conflicting visual cue from input images or prior instructions:"
+    ]
+    lines.append(f"- Art style: {style.art_style}")
+    if style.color_palette:
+        lines.append(f"- Color palette (STRICT): {style.color_palette}")
+        lines.append(
+            "  YOU MUST follow this palette exactly. If it specifies black and "
+            "white, the output MUST contain NO color whatsoever — no skin "
+            "tones, no colored clothing, no colored backgrounds, no warm or "
+            "cool tints. Use ONLY black ink, white paper, and gray values for "
+            "shading. Any color in the output is a failure."
+        )
+    if style.line_work:
+        lines.append(f"- Line work: {style.line_work}")
+    if style.character_rendering:
+        lines.append(f"- Character rendering: {style.character_rendering}")
+    return "\n".join(lines)
 
 
 def _is_complete(path: Path) -> bool:
@@ -275,11 +309,11 @@ PHOTO_REF_LABEL = (
     "reference photo. The art style described in the prompt above (and shown "
     "in the style reference if present) is the master and ALWAYS overrides "
     "any photographic quality of this image.\n\n"
-    "PRESERVE FROM THE PHOTO (likeness):\n"
+    "PRESERVE FROM THE PHOTO (likeness — structural features only):\n"
     "- Face shape, jawline, head proportions.\n"
     "- Nose shape, eye spacing and shape, eyebrow shape.\n"
-    "- Hair color, texture and approximate length / silhouette.\n"
-    "- Skin tone, approximate age.\n"
+    "- Hair texture and approximate length / silhouette.\n"
+    "- Approximate age and build.\n"
     "- Distinguishing features: glasses, beard, freckles, moles, scars, "
     "  visible piercings, dimples.\n\n"
     "DO NOT PRESERVE FROM THE PHOTO (style stays in charge):\n"
@@ -288,11 +322,18 @@ PHOTO_REF_LABEL = (
     "- DO NOT reuse the photo's background, props, pose or framing.\n"
     "- DO NOT copy the photo's clothing — apply the outfit described in the "
     "  text prompt instead.\n"
+    "- DO NOT reproduce the photo's COLORS. The project's color palette is "
+    "  the sole authority on what colors appear in the output. If the "
+    "  project's palette is black and white, render ALL skin, hair, eyes "
+    "  and clothing as grayscale values — no skin tones, no colored irises, "
+    "  no colored hair. Translate the photo's tonal relationships into the "
+    "  project's palette.\n"
     "- DO NOT introduce any photo-derived rendering technique that would "
     "  conflict with the defined comic-book style. If in doubt, the style "
     "  always wins; the photo is only there for likeness, not for look.\n\n"
     "Output a stylized comic-book character drawn ENTIRELY in the project's "
-    "art style, that recognizably resembles the person in the photo."
+    "art style and color palette, that recognizably resembles the person in "
+    "the photo."
 )
 
 

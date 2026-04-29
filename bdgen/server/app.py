@@ -286,6 +286,7 @@ def _register_api(app: FastAPI) -> None:
             raise HTTPException(
                 400, "Le champ 'project' ne peut pas être renommé via cette route."
             )
+        service.detect_and_mark_stale(name, cfg, _output_root())
         service.save_config(cfg, _output_root())
         return {"name": name}
 

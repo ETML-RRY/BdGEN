@@ -98,10 +98,12 @@ class _StyleDraft(BaseModel):
     )
     color_palette: str = Field(
         description=(
-            "Precise palette for an image generator: list the actual colors "
-            "used (e.g. 'black ink line work, flat cobalt blue fills, white "
-            "background, occasional red/orange for emphasis, no skin-tone "
-            "gradients, no color blending'). Include what is absent."
+            "Precise palette for an image generator: list ONLY the colors "
+            "that are ACTUALLY VISIBLE in the image — do not invent or "
+            "hallucinate colors that are not there. If the image is purely "
+            "black and white, say so explicitly (e.g. 'strictly black ink "
+            "on white paper, no color whatsoever'). If there are only two "
+            "or three colors, list exactly those. Include what is absent."
         )
     )
     line_work: str = Field(
@@ -308,6 +310,10 @@ SYSTEM_PROMPT = dedent("""\
       place ("Tour Eiffel", "Hogwarts", "Tatooine"…). Use generic
       descriptors of WHAT the place looks like ("la tour de fer dans une
       capitale européenne", "le château de magie sur une falaise"…).
+    - CRITICAL: describe ONLY what you ACTUALLY SEE in the image. Do NOT
+      hallucinate or infer colors, textures or details that are not present.
+      If the image is black-and-white, say "black and white" — do not invent
+      a color palette. If there are only two tones, list exactly those two.
     - Stay descriptive and concrete. Vague hand-waving wastes downstream
       signal.
     - Each style field is 1–3 sentences. Each character/location field is
@@ -379,6 +385,9 @@ def extract(
         f"  • la liste des décors / lieux visibles (souvent un seul, "
         f"parfois plusieurs si l'image est découpée en plusieurs scènes), "
         f"avec un nom générique et une description vivante.\n"
+        f"IMPORTANT : décris UNIQUEMENT ce que tu VOIS réellement dans "
+        f"l'image. Si l'image est en noir et blanc, indique-le clairement "
+        f"dans color_palette — n'invente pas de couleurs absentes.\n"
         f"Rappel : aucune citation d'auteur, studio, franchise, personnage "
         f"ou lieu protégé. Descripteurs génériques uniquement."
     )
