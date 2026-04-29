@@ -5,6 +5,7 @@ import {
   FaImage,
   FaUpload,
   FaPalette,
+  FaChevronDown,
 } from "react-icons/fa6";
 import { api } from "../api.js";
 import StyleFromImageDialog from "./StyleFromImageDialog.jsx";
@@ -144,6 +145,8 @@ export default function ProjectForm({
   const [error, setError] = useState(null);
   const [styleFromImageOpen, setStyleFromImageOpen] = useState(false);
   const [styleRefFile, setStyleRefFile] = useState(null);
+  const [styleRefUrl, setStyleRefUrl] = useState(null);
+  const [styleRefLocalPreview, setStyleRefLocalPreview] = useState(null);
   // Per-character photo state, keyed by character id.
   // Each entry: { url: server-side URL or null, file: pending File or null,
   //               extracting: bool, error: string | null }
@@ -174,6 +177,13 @@ export default function ProjectForm({
   useEffect(() => {
     if (initial) setConfig(normalize(initial));
   }, [initial]);
+
+  useEffect(() => {
+    if (!projectName) return;
+    api.getStyleReferenceInfo(projectName).then((info) => {
+      if (info?.url) setStyleRefUrl(info.url);
+    }).catch(() => {});
+  }, [projectName]);
 
   useEffect(() => {
     if (!initialCharacterPhotos) return;
@@ -898,73 +908,13 @@ export default function ProjectForm({
           </button>
         }
       >
-        <Field label="Style artistique" hint="Évitez de citer des artistes ou marques.">
-          <input
-            className="input"
-            value={config.style.art_style}
-            onChange={(e) => set("style.art_style", e.target.value)}
-            placeholder="ex. ligne claire, aquarelle douce"
-            required
-          />
-        </Field>
-        <Grid cols={3}>
-          <Field label="Palette de couleurs">
-            <input
-              className="input"
-              value={config.style.color_palette || ""}
-              onChange={(e) => set("style.color_palette", e.target.value)}
-            />
-          </Field>
-          <Field label="Encrage / traits">
-            <input
-              className="input"
-              value={config.style.line_work || ""}
-              onChange={(e) => set("style.line_work", e.target.value)}
-            />
-          </Field>
-          <Field label="Atmosphère">
-            <input
-              className="input"
-              value={config.style.mood || ""}
-              onChange={(e) => set("style.mood", e.target.value)}
-            />
-          </Field>
-        </Grid>
-        <Grid cols={3}>
-          <Field
-            label="Tour des cases"
-            hint="Cadre des cases : trait épais et tremblé, vectoriel net, gouttières larges, etc."
-          >
-            <input
-              className="input"
-              value={config.style.panel_borders || ""}
-              onChange={(e) => set("style.panel_borders", e.target.value)}
-              placeholder="ex. cadre noir épais légèrement irrégulier"
-            />
-          </Field>
-          <Field
-            label="Dessin des bulles"
-            hint="Forme des bulles : contour propre, tracé à la main, pointe de queue, fond, etc."
-          >
-            <input
-              className="input"
-              value={config.style.speech_bubbles || ""}
-              onChange={(e) => set("style.speech_bubbles", e.target.value)}
-              placeholder="ex. bulles blanches contour fin et rond"
-            />
-          </Field>
-          <Field
-            label="Dessin des personnages"
-            hint="Stylisation des persos : visages, yeux, proportions, ombrage, etc."
-          >
-            <input
-              className="input"
-              value={config.style.character_rendering || ""}
-              onChange={(e) => set("style.character_rendering", e.target.value)}
-              placeholder="ex. visages ronds, yeux en points, peu d'ombres"
-            />
-          </Field>
-        </Grid>
+        <StyleReferenceCard
+          url={styleRefLocalPreview || styleRefUrl}
+          onPickImage={() => setStyleFromImageOpen(true)}
+          artStyle={config.style.art_style}
+          config={config}
+          set={set}
+        />
       </Section>
 
       <Section
@@ -1413,8 +1363,13 @@ export default function ProjectForm({
           onClose={() => setStyleFromImageOpen(false)}
           onApply={({ style, characters, locations, file }) => {
             setStyleRefFile(file || null);
-            if (file && projectName) {
-              api.setStyleReference(projectName, file).catch(() => {});
+            if (file) {
+              setStyleRefLocalPreview(URL.createObjectURL(file));
+              if (projectName) {
+                api.setStyleReference(projectName, file).then(({ url }) => {
+                  if (url) setStyleRefUrl(url);
+                }).catch(() => {});
+              }
             }
             setConfig((c) => {
               const next = {
@@ -1724,6 +1679,104 @@ function ObjectPhotoField({ slot, onPick, onClear }) {
   );
 }
 
+
+function StyleReferenceCard({ url, onPickImage, artStyle, config, set }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="flex items-start gap-4">
+      <div
+        className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0 cursor-pointer"
+        onClick={onPickImage}
+        title={url ? "Changer l'image de style" : "Choisir une image de style"}
+      >
+        {url ? (
+          <img src={url} alt="Référence de style" className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-center px-1">Aucune image</span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0 space-y-3">
+        <div>
+          <label className="label">Style artistique</label>
+          <input
+            className="input"
+            value={config.style.art_style}
+            onChange={(e) => set("style.art_style", e.target.value)}
+            placeholder="ex. ligne claire, aquarelle douce"
+            required
+          />
+          <p className="text-xs text-[var(--color-mute)] mt-1">
+            Évitez de citer des artistes ou marques.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)] inline-flex items-center gap-1 transition-colors"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <FaChevronDown
+            aria-hidden
+            className={"transition-transform " + (expanded ? "rotate-180" : "")}
+          />
+          {expanded ? "Masquer les détails" : "Détails du style"}
+        </button>
+        {expanded && (
+          <div className="space-y-3">
+            <Grid cols={3}>
+              <Field label="Palette de couleurs">
+                <input
+                  className="input"
+                  value={config.style.color_palette || ""}
+                  onChange={(e) => set("style.color_palette", e.target.value)}
+                />
+              </Field>
+              <Field label="Encrage / traits">
+                <input
+                  className="input"
+                  value={config.style.line_work || ""}
+                  onChange={(e) => set("style.line_work", e.target.value)}
+                />
+              </Field>
+              <Field label="Atmosphère">
+                <input
+                  className="input"
+                  value={config.style.mood || ""}
+                  onChange={(e) => set("style.mood", e.target.value)}
+                />
+              </Field>
+            </Grid>
+            <Grid cols={3}>
+              <Field label="Tour des cases">
+                <input
+                  className="input"
+                  value={config.style.panel_borders || ""}
+                  onChange={(e) => set("style.panel_borders", e.target.value)}
+                  placeholder="ex. cadre noir épais légèrement irrégulier"
+                />
+              </Field>
+              <Field label="Dessin des bulles">
+                <input
+                  className="input"
+                  value={config.style.speech_bubbles || ""}
+                  onChange={(e) => set("style.speech_bubbles", e.target.value)}
+                  placeholder="ex. bulles blanches contour fin et rond"
+                />
+              </Field>
+              <Field label="Dessin des personnages">
+                <input
+                  className="input"
+                  value={config.style.character_rendering || ""}
+                  onChange={(e) => set("style.character_rendering", e.target.value)}
+                  placeholder="ex. visages ronds, yeux en points, peu d'ombres"
+                />
+              </Field>
+            </Grid>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function Toggle({ label, value, onChange }) {
   return (

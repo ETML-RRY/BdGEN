@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaPlus, FaUpload, FaCopy, FaTrash } from "react-icons/fa6";
+import { FaPlus, FaUpload, FaCopy, FaTrash, FaDownload } from "react-icons/fa6";
 import { api } from "../api.js";
 import StateChip from "../components/StateChip.jsx";
 import RunningBanner from "../components/RunningBanner.jsx";
 import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog.jsx";
+import DuplicateProjectDialog from "../components/DuplicateProjectDialog.jsx";
 
 const STATE_LABELS = {
   preparation: "Préparation",
@@ -19,6 +20,7 @@ export default function Home() {
   const [job, setJob] = useState(null);
   const [error, setError] = useState(null);
   const [duplicating, setDuplicating] = useState(null);
+  const [duplicateTarget, setDuplicateTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const fileRef = useRef(null);
   const navigate = useNavigate();
@@ -36,22 +38,23 @@ export default function Home() {
     }
   }
 
-  async function onDuplicate(e, sourceName) {
+  function onAskDuplicate(e, project) {
     e.preventDefault();
     e.stopPropagation();
     if (duplicating) return;
-    const includeReferences = window.confirm(
-      "Inclure les images de référence (personnages, décors, objets) dans la copie ?\n\n" +
-      "OK : conserver les références déjà générées (utile pour un Tome 2 — pas besoin de les régénérer).\n" +
-      "Annuler : repartir d'une copie sans images, à régénérer."
-    );
-    setDuplicating(sourceName);
+    setDuplicateTarget(project);
+  }
+
+  async function onConfirmDuplicate(options) {
+    if (!duplicateTarget) return;
+    setDuplicating(duplicateTarget.name);
     setError(null);
     try {
-      const { name } = await api.duplicateProject(sourceName, { includeReferences });
+      const { name } = await api.duplicateProject(duplicateTarget.name, options);
       navigate(`/projects/${encodeURIComponent(name)}`);
     } catch (err) {
       setError(err.message);
+      throw err;
     } finally {
       setDuplicating(null);
     }
@@ -185,12 +188,24 @@ export default function Home() {
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            {p.pdf_ready && (
+                              <a
+                                href={`/api/projects/${encodeURIComponent(p.name)}/files/${encodeURIComponent(p.name)}.pdf`}
+                                download
+                                className="p-1.5 rounded-md text-[var(--color-ink-soft)] hover:bg-[var(--color-mint-100)] hover:text-[var(--color-mint-700)] transition-colors"
+                                title="Télécharger le PDF"
+                                aria-label="Télécharger le PDF"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <FaDownload aria-hidden />
+                              </a>
+                            )}
                             <button
                               type="button"
                               className="p-1.5 rounded-md text-[var(--color-ink-soft)] hover:bg-[var(--color-paper-soft)] hover:text-[var(--color-primary-600)] transition-colors disabled:opacity-50"
-                              title="Dupliquer ce projet (avec ou sans les références images)"
+                              title="Dupliquer ce projet (choisir les éléments à reprendre)"
                               aria-label="Dupliquer ce projet"
-                              onClick={(e) => onDuplicate(e, p.name)}
+                              onClick={(e) => onAskDuplicate(e, p)}
                               disabled={duplicating === p.name}
                             >
                               <FaCopy aria-hidden />
@@ -225,9 +240,6 @@ export default function Home() {
                             </strong>
                           </span>
                         )}
-                        {p.pdf_ready && (
-                          <span className="chip chip-mint">PDF prêt</span>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -245,6 +257,18 @@ export default function Home() {
           confirmLabel="Supprimer définitivement"
           onConfirm={onConfirmDelete}
           onClose={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {duplicateTarget && (
+        <DuplicateProjectDialog
+          sourceLabel={
+            duplicateTarget.display_name ||
+            duplicateTarget.title ||
+            duplicateTarget.name
+          }
+          onClose={() => setDuplicateTarget(null)}
+          onConfirm={onConfirmDuplicate}
         />
       )}
     </div>

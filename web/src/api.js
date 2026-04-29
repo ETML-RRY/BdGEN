@@ -36,12 +36,22 @@ export const api = {
     }),
   deleteProject: (name) =>
     request(`/api/projects/${encodeURIComponent(name)}`, { method: "DELETE" }),
-  duplicateProject: (name, { newProject = null, includeReferences = false } = {}) =>
+  duplicateProject: (
+    name,
+    {
+      newProject = null,
+      includeReferences = false,
+      includePhotos = true,
+      includeStyleReference = true,
+    } = {}
+  ) =>
     request(`/api/projects/${encodeURIComponent(name)}/duplicate`, {
       method: "POST",
       body: JSON.stringify({
         new_project: newProject,
         include_references: includeReferences,
+        include_photos: includePhotos,
+        include_style_reference: includeStyleReference,
       }),
     }),
   restyleProject: (name, style) =>

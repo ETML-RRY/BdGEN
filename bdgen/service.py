@@ -190,19 +190,24 @@ def duplicate_project(
     new_project_id: str | None = None,
     output_root: Path | None = None,
     include_references: bool = False,
+    include_photos: bool = True,
+    include_style_reference: bool = True,
 ) -> str:
     """Clone the source project's configuration into a fresh project.
 
     Copies ``bdgen.json`` (story, style, characters, locations, structure,
-    generation_options) and the optional style-reference image. Does NOT copy
-    the script, composed pages, PDF, or feedback — the duplicate starts at the
-    Préparation step. Per-entity reference photos are always copied so the
-    user keeps the same likeness anchors.
+    generation_options). Does NOT copy the script, composed pages, PDF, or
+    feedback — the duplicate starts at the Préparation step.
 
-    When ``include_references`` is True, the cast's reference PNGs and the
-    quality index are also copied. The duplicate then behaves like a Tome 2
-    starting point: when the user runs script → references on the new project,
-    the references step skips every entity whose PNG is already on disk.
+    Optional carry-overs (default behavior preserves the previous defaults):
+      - ``include_style_reference`` (default True): copy the style reference
+        image when present.
+      - ``include_photos`` (default True): copy the per-entity reference
+        photos (characters, objects, locations) — the user's likeness anchors.
+      - ``include_references`` (default False): copy the AI-generated
+        reference PNGs and the quality index. The duplicate then behaves like
+        a Tome 2 starting point: when the user runs script → references, the
+        references step skips every entity whose PNG is already on disk.
 
     Returns the slug of the freshly created project.
     """
@@ -226,35 +231,27 @@ def duplicate_project(
     save_config(new_cfg, output_root)
 
     src_dir = get_project_dir(source_name, output_root)
-    style_ref = src_dir / STYLE_REF_NAME
     dst_dir = get_project_dir(new_id, output_root)
-    if style_ref.exists() and style_ref.stat().st_size > 0:
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(style_ref, dst_dir / STYLE_REF_NAME)
 
-    src_photos = src_dir / CHARACTER_PHOTOS_DIRNAME
-    if src_photos.is_dir():
-        dst_photos = dst_dir / CHARACTER_PHOTOS_DIRNAME
-        dst_photos.mkdir(parents=True, exist_ok=True)
-        for p in src_photos.iterdir():
-            if p.is_file():
-                shutil.copy2(p, dst_photos / p.name)
+    if include_style_reference:
+        style_ref = src_dir / STYLE_REF_NAME
+        if style_ref.exists() and style_ref.stat().st_size > 0:
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(style_ref, dst_dir / STYLE_REF_NAME)
 
-    src_obj_photos = src_dir / OBJECT_PHOTOS_DIRNAME
-    if src_obj_photos.is_dir():
-        dst_obj_photos = dst_dir / OBJECT_PHOTOS_DIRNAME
-        dst_obj_photos.mkdir(parents=True, exist_ok=True)
-        for p in src_obj_photos.iterdir():
-            if p.is_file():
-                shutil.copy2(p, dst_obj_photos / p.name)
-
-    src_loc_photos = src_dir / LOCATION_PHOTOS_DIRNAME
-    if src_loc_photos.is_dir():
-        dst_loc_photos = dst_dir / LOCATION_PHOTOS_DIRNAME
-        dst_loc_photos.mkdir(parents=True, exist_ok=True)
-        for p in src_loc_photos.iterdir():
-            if p.is_file():
-                shutil.copy2(p, dst_loc_photos / p.name)
+    if include_photos:
+        for photos_dirname in (
+            CHARACTER_PHOTOS_DIRNAME,
+            OBJECT_PHOTOS_DIRNAME,
+            LOCATION_PHOTOS_DIRNAME,
+        ):
+            src_photos = src_dir / photos_dirname
+            if src_photos.is_dir():
+                dst_photos = dst_dir / photos_dirname
+                dst_photos.mkdir(parents=True, exist_ok=True)
+                for p in src_photos.iterdir():
+                    if p.is_file():
+                        shutil.copy2(p, dst_photos / p.name)
 
     if include_references:
         src_refs = src_dir / "references"

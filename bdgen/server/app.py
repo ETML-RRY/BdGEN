@@ -304,11 +304,19 @@ def _register_api(app: FastAPI) -> None:
     def duplicate_project(name: str, payload: dict = Body(default_factory=dict)) -> dict:
         if not service.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
-        new_id = (payload or {}).get("new_project") or None
-        include_refs = bool((payload or {}).get("include_references", False))
+        data = payload or {}
+        new_id = data.get("new_project") or None
+        include_refs = bool(data.get("include_references", False))
+        include_photos = bool(data.get("include_photos", True))
+        include_style_ref = bool(data.get("include_style_reference", True))
         try:
             created = service.duplicate_project(
-                name, new_id, _output_root(), include_references=include_refs
+                name,
+                new_id,
+                _output_root(),
+                include_references=include_refs,
+                include_photos=include_photos,
+                include_style_reference=include_style_ref,
             )
         except FileNotFoundError as e:
             raise HTTPException(404, str(e))

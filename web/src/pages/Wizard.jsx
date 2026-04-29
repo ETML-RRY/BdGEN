@@ -7,6 +7,7 @@ import PreparationStep from "../components/steps/PreparationStep.jsx";
 import ScriptStep from "../components/steps/ScriptStep.jsx";
 import ReferencesStep from "../components/steps/ReferencesStep.jsx";
 import ComposeStep from "../components/steps/ComposeStep.jsx";
+import DuplicateProjectDialog from "../components/DuplicateProjectDialog.jsx";
 
 export const STEPS = [
   { id: "preparation", label: "Préparation" },
@@ -22,6 +23,7 @@ export default function Wizard() {
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
   const [duplicating, setDuplicating] = useState(false);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -34,19 +36,14 @@ export default function Wizard() {
     }
   }, [name]);
 
-  async function onDuplicate() {
-    if (duplicating) return;
-    const includeReferences = window.confirm(
-      "Inclure les images de référence (personnages, décors, objets) dans la copie ?\n\n" +
-      "OK : conserver les références déjà générées (utile pour un Tome 2 — pas besoin de les régénérer).\n" +
-      "Annuler : repartir d'une copie sans images, à régénérer."
-    );
+  async function onDuplicate(options) {
     setDuplicating(true);
     try {
-      const { name: newName } = await api.duplicateProject(name, { includeReferences });
+      const { name: newName } = await api.duplicateProject(name, options);
       navigate(`/projects/${encodeURIComponent(newName)}`);
     } catch (e) {
       setError(e.message);
+      throw e;
     } finally {
       setDuplicating(false);
     }
@@ -94,9 +91,9 @@ export default function Wizard() {
             <button
               type="button"
               className="btn btn-ghost text-sm inline-flex items-center gap-2"
-              onClick={onDuplicate}
+              onClick={() => setShowDuplicateDialog(true)}
               disabled={duplicating}
-              title="Dupliquer ce projet (avec ou sans les références images)"
+              title="Dupliquer ce projet (choisir les éléments à reprendre)"
             >
               <FaCopy aria-hidden />
               {duplicating ? "Duplication…" : "Dupliquer"}
@@ -152,6 +149,18 @@ export default function Wizard() {
           <Route path="*" element={<Navigate to="preparation" replace />} />
         </Routes>
       </div>
+
+      {showDuplicateDialog && (
+        <DuplicateProjectDialog
+          sourceLabel={
+            project.config?.display_name ||
+            project.config?.metadata?.title ||
+            project.name
+          }
+          onClose={() => setShowDuplicateDialog(false)}
+          onConfirm={onDuplicate}
+        />
+      )}
     </div>
   );
 }
