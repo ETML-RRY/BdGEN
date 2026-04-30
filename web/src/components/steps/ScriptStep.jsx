@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api.js";
 import useJobStream from "../useJobStream.js";
 import ProgressPanel from "../ProgressPanel.jsx";
+import RunningBanner from "../RunningBanner.jsx";
 import ScriptBrowser from "../ScriptBrowser.jsx";
 import ConfirmDialog from "../ConfirmDialog.jsx";
 
@@ -19,6 +20,7 @@ export default function ScriptStep({ project, onChanged }) {
   const isComplete = target !== null && written >= target && (project.script?.characters?.length ?? 0) > 0;
   const isRunning = stream.matchesThisStep && stream.job?.status === "running";
   const otherStepRunning = stream.job?.status === "running" && !stream.matchesThisStep;
+  const blocked = otherStepRunning;
 
   async function start() {
     if (starting || isRunning) return;
@@ -55,12 +57,6 @@ export default function ScriptStep({ project, onChanged }) {
     }
   }, [stream.events.length, onChanged]);
 
-  if (otherStepRunning) {
-    return (
-      <BlockedByOtherStep job={stream.job} />
-    );
-  }
-
   if (isRunning) {
     const hasPartial =
       (project.script?.characters?.length ?? 0) > 0 ||
@@ -86,10 +82,11 @@ export default function ScriptStep({ project, onChanged }) {
   if (project.script?.pages?.length > 0) {
     return (
       <div className="space-y-6">
+        {blocked && <RunningBanner job={stream.job} />}
         {stream.terminal && stream.terminal.status !== "completed" && (
           <TerminalBanner terminal={stream.terminal} onClear={stream.clear} />
         )}
-        {!isComplete && target !== null && (
+        {!isComplete && target !== null && !blocked && (
           <div className="card p-4 flex items-center justify-between gap-4 bg-[var(--color-peach-100)] border-[var(--color-peach-300)]">
             <span className="text-sm">
               Scénario partiel ({written}/{target} planches). Vous pouvez
@@ -103,12 +100,13 @@ export default function ScriptStep({ project, onChanged }) {
         <ScriptBrowser
           project={project}
           onChanged={onChanged}
+          readOnly={blocked}
         />
         <div className="flex items-center justify-between">
           <button
             className="btn btn-ghost text-sm"
             onClick={() => setConfirmingRegenAll(true)}
-            disabled={starting}
+            disabled={starting || blocked}
           >
             ↻ Régénérer tout le scénario
           </button>
@@ -138,29 +136,22 @@ export default function ScriptStep({ project, onChanged }) {
 
   // No script yet → invitation to start
   return (
-    <div className="card p-8 text-center">
-      <h2 className="text-lg font-semibold mb-2">Lancer l'écriture</h2>
-      <p className="text-[var(--color-ink-soft)] max-w-2xl mx-auto mb-6">
-        Le LLM va développer le synopsis en un scénario complet&nbsp;: personnages,
-        décors, couverture, 4ᵉ de couverture, puis chaque planche une à une.
-        Vous pourrez consulter et retoucher chaque élément à la fin.
-      </p>
-      {error && (
-        <p className="text-[var(--color-rose-500)] text-sm mb-3">{error}</p>
-      )}
-      <button className="btn btn-primary" onClick={start} disabled={starting}>
-        {starting ? "Démarrage…" : "Lancer l'écriture"}
-      </button>
-    </div>
-  );
-}
-
-function BlockedByOtherStep({ job }) {
-  return (
-    <div className="card p-6 text-sm">
-      Une autre génération est en cours&nbsp;: étape «&nbsp;{job.step}&nbsp;» sur le
-      projet «&nbsp;{job.project}&nbsp;». Patientez ou interrompez-la avant de
-      lancer l'écriture.
+    <div className="space-y-4">
+      {blocked && <RunningBanner job={stream.job} />}
+      <div className="card p-8 text-center">
+        <h2 className="text-lg font-semibold mb-2">Lancer l'écriture</h2>
+        <p className="text-[var(--color-ink-soft)] max-w-2xl mx-auto mb-6">
+          Le LLM va développer le synopsis en un scénario complet&nbsp;: personnages,
+          décors, couverture, 4ᵉ de couverture, puis chaque planche une à une.
+          Vous pourrez consulter et retoucher chaque élément à la fin.
+        </p>
+        {error && (
+          <p className="text-[var(--color-rose-500)] text-sm mb-3">{error}</p>
+        )}
+        <button className="btn btn-primary" onClick={start} disabled={starting || blocked}>
+          {starting ? "Démarrage…" : "Lancer l'écriture"}
+        </button>
+      </div>
     </div>
   );
 }

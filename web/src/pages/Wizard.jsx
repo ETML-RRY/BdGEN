@@ -23,14 +23,19 @@ export default function Wizard() {
   const navigate = useNavigate();
   const location = useLocation();
   const [project, setProject] = useState(null);
+  const [runningJob, setRunningJob] = useState(undefined); // undefined = not yet fetched
   const [error, setError] = useState(null);
   const [duplicating, setDuplicating] = useState(false);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
 
   const reload = useCallback(async () => {
     try {
-      const p = await api.getProject(name);
+      const [p, { job }] = await Promise.all([
+        api.getProject(name),
+        api.currentJob(),
+      ]);
       setProject(p);
+      setRunningJob(job); // null when no job is running
       return p;
     } catch (e) {
       setError(e.message);
@@ -56,13 +61,20 @@ export default function Wizard() {
   }, [reload]);
 
   // Auto-redirect to the active step when the user lands on /projects/:name (no sub-route).
+  // If a job is currently running for this project, go to the running step directly.
   useEffect(() => {
-    if (!project) return;
+    if (!project || runningJob === undefined) return;
     const sub = location.pathname.split(`/projects/${encodeURIComponent(name)}`)[1] || "";
     if (sub === "" || sub === "/") {
-      navigate(`/projects/${encodeURIComponent(name)}/${project.state === "done" ? "compose" : project.state}`, { replace: true });
+      let targetStep;
+      if (runningJob && runningJob.status === "running" && runningJob.project === name) {
+        targetStep = runningJob.step;
+      } else {
+        targetStep = project.state === "done" ? "compose" : project.state;
+      }
+      navigate(`/projects/${encodeURIComponent(name)}/${targetStep}`, { replace: true });
     }
-  }, [project, location.pathname, name, navigate]);
+  }, [project, runningJob, location.pathname, name, navigate]);
 
   if (error) {
     return (

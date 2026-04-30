@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { api } from "../api.js";
 import useJobStream from "./useJobStream.js";
 import ProgressPanel from "./ProgressPanel.jsx";
+import RunningBanner from "./RunningBanner.jsx";
 import RefineDialog from "./RefineDialog.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 
@@ -52,6 +53,7 @@ export default function ImageStep({
 
   const isRunning = stream.matchesThisStep && stream.job?.status === "running";
   const otherStepRunning = stream.job?.status === "running" && !stream.matchesThisStep;
+  const blocked = otherStepRunning;
   const hasAnyImage = items.some((it) => it.image_url);
 
   // Items not yet at "high" quality — surfaced for the per-step "Tout améliorer".
@@ -89,16 +91,6 @@ export default function ImageStep({
     }
   }
 
-  if (otherStepRunning) {
-    return (
-      <div className="card p-6 text-sm">
-        Une autre génération est en cours&nbsp;: étape «&nbsp;{stream.job.step}&nbsp;»
-        sur le projet «&nbsp;{stream.job.project}&nbsp;». Patientez avant de
-        lancer cette étape.
-      </div>
-    );
-  }
-
   const flipper =
     items.length > 0 ? (
       <ImageFlipper
@@ -106,14 +98,14 @@ export default function ImageStep({
         idx={idx}
         setIdx={setIdx}
         layout={layout}
-        onRefine={isRunning || !allowRefine ? null : (item) => setRefining(item)}
+        onRefine={isRunning || blocked || !allowRefine ? null : (item) => setRefining(item)}
         onUpgrade={
-          isRunning || !supportsQuality
+          isRunning || blocked || !supportsQuality
             ? null
             : (item) => start({ force_ids: [item.id], quality_override: "high" })
         }
         onRefresh={
-          isRunning
+          isRunning || blocked
             ? null
             : (item) =>
                 start({
@@ -146,6 +138,7 @@ export default function ImageStep({
   if (!hasAnyImage) {
     return (
       <div className="space-y-6">
+        {blocked && <RunningBanner job={stream.job} />}
         {stream.terminal && stream.terminal.status !== "completed" && (
           <TerminalBanner terminal={stream.terminal} onClear={stream.clear} />
         )}
@@ -162,7 +155,7 @@ export default function ImageStep({
               <button
                 className="btn btn-secondary"
                 onClick={() => start({ quality_override: "low" })}
-                disabled={starting}
+                disabled={starting || blocked}
                 title="Génération basse qualité — beaucoup moins coûteuse, idéale pour valider l'ensemble avant de monter en qualité."
               >
                 Brouillon (économique)
@@ -173,7 +166,7 @@ export default function ImageStep({
               onClick={() =>
                 start(supportsQuality ? { quality_override: "high" } : {})
               }
-              disabled={starting}
+              disabled={starting || blocked}
             >
               {starting
                 ? "Démarrage…"
@@ -185,7 +178,7 @@ export default function ImageStep({
               <button
                 className="btn btn-ghost"
                 onClick={onSkip}
-                disabled={starting}
+                disabled={starting || blocked}
               >
                 Passer
               </button>
@@ -204,6 +197,7 @@ export default function ImageStep({
 
   return (
     <div className="space-y-6">
+      {blocked && <RunningBanner job={stream.job} />}
       {stream.terminal && stream.terminal.status !== "completed" && (
         <TerminalBanner terminal={stream.terminal} onClear={stream.clear} />
       )}
@@ -214,7 +208,7 @@ export default function ImageStep({
             <button
               className="btn btn-ghost text-sm"
               onClick={() => setConfirmingRegenAll(true)}
-              disabled={starting}
+              disabled={starting || blocked}
               title="Régénère toutes les images de cette étape"
             >
               ↻ Tout régénérer
@@ -227,7 +221,7 @@ export default function ImageStep({
                     force_ids: staleItems.map((it) => it.id),
                   })
                 }
-                disabled={starting}
+                disabled={starting || blocked}
                 title={`${staleItems.length} image(s) ne correspondent plus au texte modifié`}
               >
                 ↻ Rafraîchir les obsolètes ({staleItems.length})
@@ -238,7 +232,7 @@ export default function ImageStep({
                 <button
                   className="btn btn-ghost text-sm"
                   onClick={() => start({ quality_override: "low" })}
-                  disabled={starting}
+                  disabled={starting || blocked}
                   title="Génère ce qui manque encore en brouillon. Les éléments déjà en final sont conservés."
                 >
                   Compléter en brouillon
@@ -247,15 +241,13 @@ export default function ImageStep({
                   className="btn btn-secondary text-sm"
                   onClick={() =>
                     start({
-                      // Upgrade any existing draft to final AND fill in
-                      // missing items at final quality, in one pass.
                       force_ids: draftItems.length > 0
                         ? draftItems.map((it) => it.id)
                         : undefined,
                       quality_override: "high",
                     })
                   }
-                  disabled={starting}
+                  disabled={starting || blocked}
                   title={
                     draftItems.length > 0
                       ? `Régénère ${draftItems.length} brouillon(s) en final et complète les éléments manquants en final.`
@@ -271,7 +263,7 @@ export default function ImageStep({
               <button
                 className="btn btn-secondary text-sm"
                 onClick={() => start()}
-                disabled={starting}
+                disabled={starting || blocked}
               >
                 {starting ? "Démarrage…" : "Reprendre / compléter"}
               </button>
