@@ -286,31 +286,40 @@ def _collect_refs(
     refs: list[tuple[Path, str]] = []
     for cid in sorted(char_ids):
         char = script.character_by_id(cid)
-        if char and char.reference_image:
+        ref_path = _existing_reference_path(
+            script, "characters", cid, char.reference_image if char else None
+        )
+        if char and ref_path:
             label = (
                 f'Character sheet for "{char.name}" — this is the canonical '
                 f"reference for this character's face, hair, eyes, body type "
                 f"and outfit. Match it EXACTLY in every panel they appear in."
             )
-            refs.append((Path(char.reference_image), label))
+            refs.append((ref_path, label))
     for lid in sorted(loc_ids):
         loc = script.location_by_id(lid)
-        if loc and loc.reference_image:
+        ref_path = _existing_reference_path(
+            script, "locations", lid, loc.reference_image if loc else None
+        )
+        if loc and ref_path:
             label = (
                 f'Establishing shot of "{loc.name}" — match its mood, '
                 f"atmosphere and visual elements when this location appears."
             )
-            refs.append((Path(loc.reference_image), label))
+            refs.append((ref_path, label))
     for oid in sorted(obj_ids):
         obj = script.object_by_id(oid)
-        if obj and obj.reference_image:
+        ref_path = _existing_reference_path(
+            script, "objects", oid, obj.reference_image if obj else None
+        )
+        if obj and ref_path:
             label = (
                 f'Object reference for "{obj.name}" — this is the canonical '
                 f"stylized appearance of this object. Whenever it is visible "
                 f"in a panel, match its shape, key markings and silhouette "
                 f"EXACTLY so it stays recognizable across the album."
             )
-            refs.append((Path(obj.reference_image), label))
+            refs.append((ref_path, label))
 
     return refs
 
@@ -529,21 +538,39 @@ def _collect_album_refs(
     """Collect refs for the cover/back: every character + every object."""
     refs: list[tuple[Path, str]] = []
     for c in script.characters:
-        if c.reference_image:
+        ref_path = _existing_reference_path(script, "characters", c.id, c.reference_image)
+        if ref_path:
             label = (
                 f'Character sheet for "{c.name}" — match this character\'s '
                 f"face, hair, eyes, body type and outfit EXACTLY if they "
                 f"appear on the {kind}."
             )
-            refs.append((Path(c.reference_image), label))
+            refs.append((ref_path, label))
     for o in script.objects:
-        if o.reference_image:
+        ref_path = _existing_reference_path(script, "objects", o.id, o.reference_image)
+        if ref_path:
             label = (
                 f'Object reference for "{o.name}" — match its shape, key '
                 f"markings and silhouette EXACTLY if it appears on the {kind}."
             )
-            refs.append((Path(o.reference_image), label))
+            refs.append((ref_path, label))
     return refs
+
+
+def _existing_reference_path(
+    script: BdGenScript,
+    folder: str,
+    ref_id: str,
+    current: Path | str | None,
+) -> Path | None:
+    if current:
+        p = Path(current)
+        if p.exists() and p.stat().st_size > 0:
+            return p
+    fallback = script.project_dir() / "references" / folder / f"{ref_id}.png"
+    if fallback.exists() and fallback.stat().st_size > 0:
+        return fallback
+    return None
 
 
 def _call_image(

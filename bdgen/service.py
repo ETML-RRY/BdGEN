@@ -361,7 +361,10 @@ def load_script_if_present(name: str, output_root: Path | None = None) -> BdGenS
     if not p.exists():
         return None
     try:
-        return BdGenScript.load(p)
+        bd_script = BdGenScript.load(p)
+        if attach_existing_reference_images(p.parent, bd_script):
+            bd_script.save(p)
+        return bd_script
     except Exception:
         return None
 
@@ -618,6 +621,34 @@ def _references_progress(proj_dir: Path, bd_script: BdGenScript) -> tuple[int, i
         if (refs_dir / "objects" / f"{o.id}.png").exists():
             ready += 1
     return total, ready
+
+
+def attach_existing_reference_images(proj_dir: Path, bd_script: BdGenScript) -> bool:
+    """Populate script reference_image fields from canonical copied PNGs.
+
+    This matters for duplicated projects: their generated reference images may
+    already be present on disk, so the references step can be skipped by state
+    derivation. Without these fields, compose would only receive text prompts
+    and would not pass the copied reference sheets as input images.
+    """
+    changed = False
+    refs_dir = proj_dir / "references"
+    for character in bd_script.characters:
+        p = refs_dir / "characters" / f"{character.id}.png"
+        if p.exists() and p.stat().st_size > 0 and character.reference_image != p:
+            character.reference_image = p
+            changed = True
+    for location in bd_script.locations:
+        p = refs_dir / "locations" / f"{location.id}.png"
+        if p.exists() and p.stat().st_size > 0 and location.reference_image != p:
+            location.reference_image = p
+            changed = True
+    for obj in bd_script.objects:
+        p = refs_dir / "objects" / f"{obj.id}.png"
+        if p.exists() and p.stat().st_size > 0 and obj.reference_image != p:
+            obj.reference_image = p
+            changed = True
+    return changed
 
 
 def _composed_progress(proj_dir: Path, bd_script: BdGenScript) -> tuple[int, int]:
@@ -1225,6 +1256,7 @@ def run_step_script(
         interrupt=interrupt,
         stats_project_dir=get_project_dir(name, output_root),
     )
+    attach_existing_reference_images(get_project_dir(name, output_root), bd_script)
     bd_script.save(config.generation_options.script_path)
     return bd_script
 
@@ -1240,6 +1272,8 @@ def run_step_references(
     proj_dir = get_project_dir(name, output_root)
     script_path = proj_dir / "bdgen-script.json"
     bd_script = BdGenScript.load(script_path)
+    if attach_existing_reference_images(proj_dir, bd_script):
+        bd_script.save(script_path)
     opts = _resolve_options(bd_script, name, output_root)
     if force_ids:
         for fid in force_ids:
@@ -1297,6 +1331,8 @@ def run_step_compose(
     proj_dir = get_project_dir(name, output_root)
     script_path = proj_dir / "bdgen-script.json"
     bd_script = BdGenScript.load(script_path)
+    if attach_existing_reference_images(proj_dir, bd_script):
+        bd_script.save(script_path)
     opts = _resolve_options(bd_script, name, output_root)
     pages_dir = proj_dir / "pages"
     if force_ids:
@@ -1345,6 +1381,8 @@ def run_step_upscale(
     proj_dir = get_project_dir(name, output_root)
     script_path = proj_dir / "bdgen-script.json"
     bd_script = BdGenScript.load(script_path)
+    if attach_existing_reference_images(proj_dir, bd_script):
+        bd_script.save(script_path)
     opts = _resolve_options(bd_script, name, output_root)
     return upscale_module.upscale_pages(
         bd_script,
