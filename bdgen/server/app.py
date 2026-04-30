@@ -677,6 +677,43 @@ def _register_api(app: FastAPI) -> None:
             raise HTTPException(400, str(e))
         return {"ok": True}
 
+    @app.post("/api/projects/{name}/inpaint/{step}/{target_id}")
+    async def inpaint_image_endpoint(
+        name: str,
+        step: str,
+        target_id: str,
+        prompt: str = Form(...),
+        mask: UploadFile = File(...),
+    ) -> dict:
+        if step not in ("references", "compose"):
+            raise HTTPException(400, "Étape invalide (references ou compose).")
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        if app.state.jobs.is_running():
+            current = app.state.jobs.current()
+            if current and current.project == name:
+                raise HTTPException(409, "Une génération est en cours. Interrompez-la avant de lancer une retouche ciblée.")
+        mask_bytes = await mask.read()
+        try:
+            new_path = service.inpaint_image(
+                name, step, target_id, mask_bytes, prompt, _output_root()
+            )
+        except FileNotFoundError as e:
+            raise HTTPException(404, str(e))
+        except NotImplementedError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Retouche échouée : {e}")
+        proj_dir = service.get_project_dir(name, _output_root())
+        try:
+            rel = new_path.relative_to(proj_dir).as_posix()
+        except ValueError:
+            raise HTTPException(500, "Chemin de résultat invalide.")
+        return {
+            "ok": True,
+            "image_url": _file_url(name, rel, new_path),
+        }
+
     @app.post("/api/projects/{name}/feedback/image")
     def add_image_feedback(name: str, payload: ImageFeedbackPayload) -> dict:
         if payload.step not in ("references", "compose"):

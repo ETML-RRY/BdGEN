@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api.js";
 import useJobStream from "./useJobStream.js";
@@ -17,6 +17,10 @@ const QUALITY_CHIP = {
   medium: "chip chip-sky",
   high: "chip chip-mint",
 };
+
+const MIN_BRUSH = 8;
+const MAX_BRUSH = 80;
+const DEFAULT_BRUSH = 24;
 
 /**
  * Reusable shell for the image-generation steps (references, compose). Each
@@ -99,6 +103,10 @@ export default function ImageStep({
         setIdx={setIdx}
         layout={layout}
         onRefine={isRunning || blocked || !allowRefine ? null : (item) => setRefining(item)}
+        onInpaint={isRunning || blocked || !allowRefine ? null : async (item, maskBlob, prompt) => {
+          await api.inpaintImage(name, feedbackStep, item.id, maskBlob, prompt);
+          onChanged();
+        }}
         onUpgrade={
           isRunning || blocked || !supportsQuality
             ? null
@@ -288,8 +296,6 @@ export default function ImageStep({
           onClose={() => setRefining(null)}
           onSubmit={async (text) => {
             await api.imageFeedback(name, feedbackStep, refining.id, text);
-            // Force-regenerate this single asset, preserving its current
-            // quality level (a draft retouche stays in draft).
             await start({
               force_ids: [refining.id],
               quality_override: refining.quality || undefined,
@@ -315,20 +321,153 @@ export default function ImageStep({
   );
 }
 
-function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, onRefresh, emptyLabel }) {
+function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgrade, onRefresh, emptyLabel }) {
   const [confirmingRegen, setConfirmingRegen] = useState(false);
+  const [inpaintActive, setInpaintActive] = useState(false);
+  const [brushSize, setBrushSize] = useState(DEFAULT_BRUSH);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasMask, setHasMask] = useState(false);
+  const [inpaintPrompt, setInpaintPrompt] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [inpaintError, setInpaintError] = useState(null);
+  const canvasRef = useRef(null);
+  const imgRef = useRef(null);
+  const lastPos = useRef(null);
+
   const safeIdx = Math.max(0, Math.min(idx, items.length - 1));
   const item = items[safeIdx];
   const canUpgrade = onUpgrade && item.image_url && item.quality && item.quality !== "high";
   const isStale = !!item.stale && !!item.image_url;
   const canRefresh = onRefresh && item.image_url;
 
+  useEffect(() => {
+    setInpaintActive(false);
+    setHasMask(false);
+    setInpaintPrompt("");
+    setInpaintError(null);
+    lastPos.current = null;
+  }, [safeIdx]);
+
+  function syncCanvas() {
+    const img = imgRef.current;
+    const cvs = canvasRef.current;
+    if (!img || !cvs) return;
+    const rect = img.getBoundingClientRect();
+    if (cvs.width !== rect.width || cvs.height !== rect.height) {
+      const tmp = document.createElement("canvas");
+      tmp.width = cvs.width;
+      tmp.height = cvs.height;
+      tmp.getContext("2d").drawImage(cvs, 0, 0);
+      cvs.width = rect.width;
+      cvs.height = rect.height;
+      cvs.getContext("2d").drawImage(tmp, 0, 0, rect.width, rect.height);
+    }
+  }
+
+  function getPos(e) {
+    const cvs = canvasRef.current;
+    if (!cvs) return null;
+    const rect = cvs.getBoundingClientRect();
+    const client = e.touches ? e.touches[0] : e;
+    return { x: client.clientX - rect.left, y: client.clientY - rect.top };
+  }
+
+  function paint(pos) {
+    const cvs = canvasRef.current;
+    if (!cvs || !pos) return;
+    const ctx = cvs.getContext("2d");
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "rgba(220, 50, 50, 0.55)";
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    if (lastPos.current) {
+      ctx.beginPath();
+      ctx.moveTo(lastPos.current.x, lastPos.current.y);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.strokeStyle = "rgba(220, 50, 50, 0.55)";
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, brushSize / 2, 0, Math.PI * 2);
+    ctx.fill();
+    lastPos.current = pos;
+    setHasMask(true);
+  }
+
+  function onPointerDown(e) {
+    e.preventDefault();
+    syncCanvas();
+    setIsDrawing(true);
+    const pos = getPos(e);
+    lastPos.current = pos;
+    paint(pos);
+  }
+
+  function onPointerMove(e) {
+    if (!isDrawing) return;
+    e.preventDefault();
+    paint(getPos(e));
+  }
+
+  function onPointerUp() {
+    setIsDrawing(false);
+    lastPos.current = null;
+  }
+
+  function clearMask() {
+    const cvs = canvasRef.current;
+    if (!cvs) return;
+    cvs.getContext("2d").clearRect(0, 0, cvs.width, cvs.height);
+    setHasMask(false);
+  }
+
+  async function buildMaskBlob() {
+    const cvs = canvasRef.current;
+    return new Promise((resolve) => {
+      const offscreen = document.createElement("canvas");
+      offscreen.width = cvs.width;
+      offscreen.height = cvs.height;
+      const ctx = offscreen.getContext("2d");
+      const drawData = cvs.getContext("2d").getImageData(0, 0, cvs.width, cvs.height);
+      const maskData = ctx.createImageData(cvs.width, cvs.height);
+      for (let i = 0; i < drawData.data.length; i += 4) {
+        if (drawData.data[i + 3] > 10) {
+          maskData.data[i] = 0; maskData.data[i + 1] = 0;
+          maskData.data[i + 2] = 0; maskData.data[i + 3] = 0;
+        } else {
+          maskData.data[i] = 255; maskData.data[i + 1] = 255;
+          maskData.data[i + 2] = 255; maskData.data[i + 3] = 255;
+        }
+      }
+      ctx.putImageData(maskData, 0, 0);
+      offscreen.toBlob(resolve, "image/png");
+    });
+  }
+
+  async function submitInpaint() {
+    if (!hasMask) { setInpaintError("Dessinez d'abord la zone à retoucher."); return; }
+    if (!inpaintPrompt.trim()) { setInpaintError("Décrivez ce que vous souhaitez changer."); return; }
+    setInpaintError(null);
+    setSubmitting(true);
+    try {
+      const maskBlob = await buildMaskBlob();
+      await onInpaint(item, maskBlob, inpaintPrompt.trim());
+      setInpaintActive(false);
+      clearMask();
+    } catch (e) {
+      setInpaintError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-3 gap-2">
         <button
           className="btn btn-ghost text-sm"
-          disabled={safeIdx === 0}
+          disabled={safeIdx === 0 || inpaintActive}
           onClick={() => setIdx(safeIdx - 1)}
         >
           ← Précédent
@@ -359,7 +498,7 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, onRefre
         </div>
         <button
           className="btn btn-ghost text-sm"
-          disabled={safeIdx === items.length - 1}
+          disabled={safeIdx === items.length - 1 || inpaintActive}
           onClick={() => setIdx(safeIdx + 1)}
         >
           Suivant →
@@ -372,26 +511,122 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, onRefre
         }
       >
         {item.image_url ? (
-          <img
-            src={item.image_url}
-            alt={item.label}
-            className={
-              "max-h-full max-w-full object-contain " +
-              (isStale ? "opacity-60 ring-2 ring-[var(--color-peach-300)]" : "")
-            }
-          />
+          inpaintActive ? (
+            <div
+              style={{ display: "inline-block", lineHeight: 0, userSelect: "none", touchAction: "none", position: "relative" }}
+            >
+              <img
+                ref={imgRef}
+                src={item.image_url}
+                alt={item.label}
+                className="block max-h-full max-w-full"
+                draggable={false}
+              />
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 w-full h-full"
+                style={{ cursor: "crosshair" }}
+                onMouseDown={onPointerDown}
+                onMouseMove={onPointerMove}
+                onMouseUp={onPointerUp}
+                onMouseLeave={onPointerUp}
+                onTouchStart={onPointerDown}
+                onTouchMove={onPointerMove}
+                onTouchEnd={onPointerUp}
+              />
+            </div>
+          ) : (
+            <img
+              src={item.image_url}
+              alt={item.label}
+              className={
+                "max-h-full max-w-full object-contain " +
+                (isStale ? "opacity-60 ring-2 ring-[var(--color-peach-300)]" : "")
+              }
+            />
+          )
         ) : (
           <div className="text-sm text-[var(--color-mute)]">
             {emptyLabel || "Pas encore généré."}
           </div>
         )}
       </div>
-      {item.description && (
+
+      {inpaintActive && (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-[var(--color-ink-soft)]">
+            Peignez la zone à modifier, puis décrivez la retouche souhaitée.
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs text-[var(--color-ink-soft)]">Pinceau :</span>
+            <button
+              className="btn btn-ghost text-xs px-2 py-1"
+              onClick={() => setBrushSize((s) => Math.max(MIN_BRUSH, s - 8))}
+            >
+              −
+            </button>
+            <input
+              type="range"
+              min={MIN_BRUSH}
+              max={MAX_BRUSH}
+              value={brushSize}
+              onChange={(e) => setBrushSize(Number(e.target.value))}
+              className="w-28"
+            />
+            <button
+              className="btn btn-ghost text-xs px-2 py-1"
+              onClick={() => setBrushSize((s) => Math.min(MAX_BRUSH, s + 8))}
+            >
+              +
+            </button>
+            <span className="text-xs text-[var(--color-mute)]">{brushSize}px</span>
+            <button
+              className="btn btn-ghost text-xs ml-auto"
+              onClick={clearMask}
+              disabled={!hasMask}
+            >
+              Effacer le masque
+            </button>
+          </div>
+          <label className="block text-xs font-medium text-[var(--color-ink-soft)]">
+            Que souhaitez-vous changer dans cette zone ?
+          </label>
+          <textarea
+            className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-paper-soft)] px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+            rows={2}
+            placeholder="Ex. : remplacer le fond par un ciel étoilé, changer la couleur du manteau en rouge…"
+            value={inpaintPrompt}
+            onChange={(e) => setInpaintPrompt(e.target.value)}
+            disabled={submitting}
+          />
+          {inpaintError && (
+            <p className="text-xs text-[var(--color-rose-500)]">{inpaintError}</p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              className="btn btn-ghost text-sm"
+              onClick={() => { setInpaintActive(false); clearMask(); }}
+              disabled={submitting}
+            >
+              Annuler
+            </button>
+            <button
+              className="btn btn-primary text-sm"
+              onClick={submitInpaint}
+              disabled={submitting || !hasMask || !inpaintPrompt.trim()}
+            >
+              {submitting ? "Retouche en cours…" : "Lancer la retouche"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!inpaintActive && item.description && (
         <p className="text-sm text-[var(--color-ink-soft)] mt-3 whitespace-pre-wrap">
           {item.description}
         </p>
       )}
-      {(onRefine || canUpgrade || canRefresh) && (
+      {!inpaintActive && (onRefine || onInpaint || canUpgrade || canRefresh) && (
         <div className="flex justify-end gap-2 mt-3 flex-wrap">
           {canRefresh && (
             <button
@@ -409,6 +644,16 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, onRefre
               title="Régénère cet élément seul en haute qualité."
             >
               ✨ Améliorer la qualité
+            </button>
+          )}
+          {onInpaint && (
+            <button
+              className="btn btn-ghost text-sm"
+              onClick={() => setInpaintActive(true)}
+              disabled={!item.image_url}
+              title="Peindre une zone et décrire la retouche souhaitée."
+            >
+              🖌 Retouche ciblée
             </button>
           )}
           {onRefine && (

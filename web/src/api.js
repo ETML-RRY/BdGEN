@@ -205,6 +205,22 @@ export const api = {
       body: JSON.stringify({ step, target, feedback }),
     }),
 
+  inpaintImage: async (name, step, targetId, maskBlob, prompt) => {
+    const fd = new FormData();
+    fd.append("prompt", prompt);
+    fd.append("mask", maskBlob, "mask.png");
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(name)}/inpaint/${encodeURIComponent(step)}/${encodeURIComponent(targetId)}`,
+      { method: "POST", body: fd }
+    );
+    if (!res.ok) {
+      let body;
+      try { body = await res.json(); } catch { body = { detail: await res.text() }; }
+      throw new Error(body.detail || res.statusText);
+    }
+    return res.json();
+  },
+
   setStyleReference: async (name, file) => {
     const fd = new FormData();
     fd.append("file", file);
