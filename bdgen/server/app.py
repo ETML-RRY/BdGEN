@@ -695,8 +695,14 @@ def _register_api(app: FastAPI) -> None:
                 raise HTTPException(409, "Une génération est en cours. Interrompez-la avant de lancer une retouche ciblée.")
         mask_bytes = await mask.read()
         try:
-            new_path = service.inpaint_image(
-                name, step, target_id, mask_bytes, prompt, _output_root()
+            new_path = await asyncio.to_thread(
+                service.inpaint_image,
+                name,
+                step,
+                target_id,
+                mask_bytes,
+                prompt,
+                _output_root(),
             )
         except FileNotFoundError as e:
             raise HTTPException(404, str(e))

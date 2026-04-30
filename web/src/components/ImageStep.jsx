@@ -102,6 +102,8 @@ export default function ImageStep({
         idx={idx}
         setIdx={setIdx}
         layout={layout}
+        busy={starting || isRunning}
+        busyLabel={isRunning ? "Génération en cours..." : "Préparation..."}
         onRefine={isRunning || blocked || !allowRefine ? null : (item) => setRefining(item)}
         onInpaint={isRunning || blocked || !allowRefine ? null : async (item, maskBlob, prompt) => {
           await api.inpaintImage(name, feedbackStep, item.id, maskBlob, prompt);
@@ -321,7 +323,19 @@ export default function ImageStep({
   );
 }
 
-function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgrade, onRefresh, emptyLabel }) {
+function ImageFlipper({
+  items,
+  idx,
+  setIdx,
+  layout,
+  busy = false,
+  busyLabel = "Génération en cours...",
+  onRefine,
+  onInpaint,
+  onUpgrade,
+  onRefresh,
+  emptyLabel,
+}) {
   const [confirmingRegen, setConfirmingRegen] = useState(false);
   const [inpaintActive, setInpaintActive] = useState(false);
   const [brushSize, setBrushSize] = useState(DEFAULT_BRUSH);
@@ -339,6 +353,8 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgra
   const canUpgrade = onUpgrade && item.image_url && item.quality && item.quality !== "high";
   const isStale = !!item.stale && !!item.image_url;
   const canRefresh = onRefresh && item.image_url;
+  const readerBusy = busy || submitting;
+  const readerBusyLabel = submitting ? "Retouche en cours..." : busyLabel;
 
   useEffect(() => {
     setInpaintActive(false);
@@ -463,11 +479,18 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgra
   }
 
   return (
-    <div>
+    <div className="relative">
+      <div
+        className={
+          "transition duration-150 " +
+          (readerBusy ? "opacity-40 grayscale pointer-events-none select-none" : "")
+        }
+        aria-busy={readerBusy}
+      >
       <div className="flex items-center justify-between mb-3 gap-2">
         <button
           className="btn btn-ghost text-sm"
-          disabled={safeIdx === 0 || inpaintActive}
+          disabled={safeIdx === 0 || inpaintActive || readerBusy}
           onClick={() => setIdx(safeIdx - 1)}
         >
           ← Précédent
@@ -498,7 +521,7 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgra
         </div>
         <button
           className="btn btn-ghost text-sm"
-          disabled={safeIdx === items.length - 1 || inpaintActive}
+          disabled={safeIdx === items.length - 1 || inpaintActive || readerBusy}
           onClick={() => setIdx(safeIdx + 1)}
         >
           Suivant →
@@ -597,7 +620,7 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgra
             placeholder="Ex. : remplacer le fond par un ciel étoilé, changer la couleur du manteau en rouge…"
             value={inpaintPrompt}
             onChange={(e) => setInpaintPrompt(e.target.value)}
-            disabled={submitting}
+            disabled={readerBusy}
           />
           {inpaintError && (
             <p className="text-xs text-[var(--color-rose-500)]">{inpaintError}</p>
@@ -606,14 +629,14 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgra
             <button
               className="btn btn-ghost text-sm"
               onClick={() => { setInpaintActive(false); clearMask(); }}
-              disabled={submitting}
+              disabled={readerBusy}
             >
               Annuler
             </button>
             <button
               className="btn btn-primary text-sm"
               onClick={submitInpaint}
-              disabled={submitting || !hasMask || !inpaintPrompt.trim()}
+              disabled={readerBusy || !hasMask || !inpaintPrompt.trim()}
             >
               {submitting ? "Retouche en cours…" : "Lancer la retouche"}
             </button>
@@ -632,6 +655,7 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgra
             <button
               className="btn btn-secondary text-sm"
               onClick={() => setConfirmingRegen(true)}
+              disabled={readerBusy}
               title="Régénère cette image (la qualité actuelle est conservée)."
             >
               ↻ Régénérer
@@ -641,6 +665,7 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgra
             <button
               className="btn btn-primary text-sm"
               onClick={() => onUpgrade(item)}
+              disabled={readerBusy}
               title="Régénère cet élément seul en haute qualité."
             >
               ✨ Améliorer la qualité
@@ -650,7 +675,7 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgra
             <button
               className="btn btn-ghost text-sm"
               onClick={() => setInpaintActive(true)}
-              disabled={!item.image_url}
+              disabled={!item.image_url || readerBusy}
               title="Peindre une zone et décrire la retouche souhaitée."
             >
               🖌 Retouche ciblée
@@ -660,7 +685,7 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgra
             <button
               className="btn btn-ghost text-sm"
               onClick={() => onRefine(item)}
-              disabled={!item.image_url}
+              disabled={!item.image_url || readerBusy}
             >
               Retoucher cet élément
             </button>
@@ -673,9 +698,21 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onInpaint, onUpgra
           title={`Régénérer « ${item.label} » ?`}
           body="L'image actuelle sera remplacée par une nouvelle génération. Cette action consomme des crédits API."
           confirmLabel="Régénérer"
-          onConfirm={async () => { onRefresh(item); }}
+          onConfirm={async () => { await onRefresh(item); }}
           onClose={() => setConfirmingRegen(false)}
         />
+      )}
+      </div>
+
+      {readerBusy && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/60 backdrop-blur-[1px]">
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-[var(--color-line)] bg-white px-5 py-4 shadow-sm">
+            <span className="inline-block h-8 w-8 rounded-full border-4 border-[var(--color-primary-100)] border-t-[var(--color-primary-500)] animate-spin" />
+            <span className="text-sm font-medium text-[var(--color-ink-soft)]">
+              {readerBusyLabel}
+            </span>
+          </div>
+        </div>
       )}
     </div>
   );
