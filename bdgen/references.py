@@ -21,6 +21,7 @@ from .progress import (
     _coerce_flag,
     _coerce_reporter,
 )
+from .stats import normalise_usage, record_event, start_timer, stop_timer
 
 REFERENCE_SIZE = "1024x1024"
 
@@ -38,6 +39,7 @@ def generate_references(
     character_photos: dict[str, Path] | None = None,
     location_photos: dict[str, Path] | None = None,
     object_photos: dict[str, Path] | None = None,
+    stats_project_dir: Path | None = None,
 ) -> BdGenScript:
     """Generate every character, location and object reference sheet.
 
@@ -100,10 +102,26 @@ def generate_references(
                 style=script.style,
             )
             photo = (character_photos or {}).get(character.id)
-            _generate_image(
+            started_at, started = start_timer()
+            image_stats = _generate_image(
                 client, image_model, prompt, target,
                 style_ref=style_ref,
                 character_photo=photo,
+            )
+            record_event(
+                stats_project_dir,
+                step="references",
+                target_id=character.id,
+                target_kind="character",
+                operation="generate_reference",
+                provider=image_model.provider,
+                model=image_model.model,
+                timer=stop_timer(started_at, started),
+                usage=image_stats["usage"],
+                prompt=image_stats["prompt"],
+                input_images=image_stats["input_images"],
+                artifact=target,
+                extra={"quality": image_model.quality},
             )
             rep.emit(ProgressEvent(
                 step="references",
@@ -146,10 +164,26 @@ def generate_references(
                 style=script.style,
             )
             photo = (location_photos or {}).get(location.id)
-            _generate_image(
+            started_at, started = start_timer()
+            image_stats = _generate_image(
                 client, image_model, prompt, target,
                 style_ref=style_ref,
                 location_photo=photo,
+            )
+            record_event(
+                stats_project_dir,
+                step="references",
+                target_id=location.id,
+                target_kind="location",
+                operation="generate_reference",
+                provider=image_model.provider,
+                model=image_model.model,
+                timer=stop_timer(started_at, started),
+                usage=image_stats["usage"],
+                prompt=image_stats["prompt"],
+                input_images=image_stats["input_images"],
+                artifact=target,
+                extra={"quality": image_model.quality},
             )
             rep.emit(ProgressEvent(
                 step="references",
@@ -192,10 +226,26 @@ def generate_references(
                 style=script.style,
             )
             photo = (object_photos or {}).get(obj.id)
-            _generate_image(
+            started_at, started = start_timer()
+            image_stats = _generate_image(
                 client, image_model, prompt, target,
                 style_ref=style_ref,
                 object_photo=photo,
+            )
+            record_event(
+                stats_project_dir,
+                step="references",
+                target_id=obj.id,
+                target_kind="object",
+                operation="generate_reference",
+                provider=image_model.provider,
+                model=image_model.model,
+                timer=stop_timer(started_at, started),
+                usage=image_stats["usage"],
+                prompt=image_stats["prompt"],
+                input_images=image_stats["input_images"],
+                artifact=target,
+                extra={"quality": image_model.quality},
             )
             rep.emit(ProgressEvent(
                 step="references",
@@ -443,7 +493,7 @@ def _generate_image(
     character_photo: Path | None = None,
     location_photo: Path | None = None,
     object_photo: Path | None = None,
-) -> None:
+) -> dict:
     """Call images.generate() or images.edit() with optional input images.
 
     When a style-reference PNG is supplied, we switch to images.edit() so the
@@ -496,6 +546,7 @@ def _generate_image(
             quality=image_model.quality,
         )
     else:
+        full_prompt = prompt
         result = client.images.generate(
             model=image_model.model,
             prompt=prompt,
@@ -506,3 +557,8 @@ def _generate_image(
     tmp = target.with_suffix(target.suffix + ".tmp")
     tmp.write_bytes(base64.b64decode(image_b64))
     tmp.replace(target)
+    return {
+        "usage": normalise_usage(getattr(result, "usage", None)),
+        "prompt": full_prompt,
+        "input_images": len(inputs),
+    }

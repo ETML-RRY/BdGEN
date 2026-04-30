@@ -27,6 +27,8 @@ export const api = {
 
   listProjects: () => request("/api/projects"),
   getProject: (name) => request(`/api/projects/${encodeURIComponent(name)}`),
+  getProjectStatistics: (name) =>
+    request(`/api/projects/${encodeURIComponent(name)}/statistics`),
   createProject: (config) =>
     request("/api/projects", { method: "POST", body: JSON.stringify(config) }),
   updateProject: (name, config) =>

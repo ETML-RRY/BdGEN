@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from textwrap import dedent
@@ -32,11 +33,20 @@ from .progress import (
     _coerce_flag,
     _coerce_reporter,
 )
+from .stats import TimedCall, normalise_usage, record_event, start_timer, stop_timer
 
 MAX_ATTEMPTS = 3
 RETRY_BACKOFF_BASE_SECONDS = 2
 
 T = TypeVar("T", bound=BaseModel)
+
+
+@dataclass
+class _LLMCallResult:
+    value: BaseModel
+    usage: dict
+    elapsed_seconds: float
+    started_at: str
 
 
 SETUP_SYSTEM_PROMPT = dedent("""\
@@ -376,6 +386,7 @@ def generate_script(
     script_path: Path | None = None,
     reporter: ProgressReporter | None = None,
     interrupt: InterruptFlag | None = None,
+    stats_project_dir: Path | None = None,
 ) -> BdGenScript:
     """Generate the script in two phases: setup + per-page expansion.
 
@@ -409,11 +420,21 @@ def generate_script(
             message=f"Setup phase: characters, locations, cover, back cover ({label})…",
         ))
         flag.check()
-        setup = _call_llm(
+        setup_result = _call_llm(
             SETUP_SYSTEM_PROMPT,
             _build_setup_prompt(config, feedback, preview_pages, target_pages),
             model_cfg,
             _LLMSetupDraft,
+        )
+        setup = setup_result.value
+        _record_llm_stats(
+            stats_project_dir,
+            step="script",
+            target_id="setup",
+            target_kind="setup",
+            operation="generate_script_setup",
+            model_config=model_cfg,
+            result=setup_result,
         )
         bd_script = _build_skeleton(config, setup, input_path, label)
         if script_path:
@@ -440,13 +461,23 @@ def generate_script(
             current=page_n,
             total=target_pages,
         ))
-        page_draft = _call_llm(
+        page_result = _call_llm(
             PAGE_SYSTEM_PROMPT,
             _build_page_prompt(
                 config, bd_script, page_n, target_pages, feedback, preview_pages
             ),
             model_cfg,
             Page,
+        )
+        page_draft = page_result.value
+        _record_llm_stats(
+            stats_project_dir,
+            step="script",
+            target_id=f"page_{page_n}",
+            target_kind="page",
+            operation="generate_script_page",
+            model_config=model_cfg,
+            result=page_result,
         )
         # Force the page_number we asked for, in case the model deviates.
         page = Page(
@@ -718,19 +749,24 @@ def _build_page_prompt(
 
 def _call_llm(
     system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]
-) -> T:
+) -> _LLMCallResult:
     """Dispatch to the configured provider, with bounded retries on parse failure.
 
     Per-call retries (rather than per-script) mean a single page failure only
     re-runs that page, not the whole script.
     """
     last_error: RuntimeError | None = None
+    started_at, started = start_timer()
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             if model_config.provider == "openai":
-                return _call_openai(system, user, model_config, output_type)
+                value, usage = _call_openai(system, user, model_config, output_type)
+                timer = stop_timer(started_at, started)
+                return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
             if model_config.provider == "anthropic":
-                return _call_anthropic(system, user, model_config, output_type)
+                value, usage = _call_anthropic(system, user, model_config, output_type)
+                timer = stop_timer(started_at, started)
+                return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
             raise NotImplementedError(
                 f"Provider '{model_config.provider}' is not yet supported."
             )
@@ -754,7 +790,7 @@ def _call_llm(
 
 def _call_openai(
     system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]
-) -> T:
+) -> tuple[T, dict]:
     """OpenAI Chat Completions with structured Pydantic output."""
     client = OpenAI()
     kwargs = {
@@ -779,12 +815,12 @@ def _call_openai(
         raise RuntimeError(
             f"LLM returned no parsed content. Refusal: {message.refusal}"
         )
-    return message.parsed
+    return message.parsed, normalise_usage(getattr(completion, "usage", None))
 
 
 def _call_anthropic(
     system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]
-) -> T:
+) -> tuple[T, dict]:
     """Anthropic Messages API in streaming mode + manual JSON parsing.
 
     The system prompt is cached (5-minute TTL) so successive calls (setup +
@@ -863,6 +899,7 @@ def _call_anthropic(
 
         final = stream.get_final_message()
 
+    usage_payload = normalise_usage(final.usage)
     if final.usage:
         u = final.usage
         cache_read = u.cache_read_input_tokens or 0
@@ -880,15 +917,38 @@ def _call_anthropic(
         raise RuntimeError("Claude returned no text content (only thinking blocks?).")
     json_text = _strip_json_fences(raw)
     try:
-        return output_type.model_validate_json(json_text)
+        return output_type.model_validate_json(json_text), usage_payload
     except Exception as e:
         unwrapped = _try_unwrap_echoed_input(json_text, output_type)
         if unwrapped is not None:
-            return unwrapped
+            return unwrapped, usage_payload
         raise RuntimeError(
             f"Failed to parse Claude response as {output_type.__name__}: {e}\n"
             f"Raw text (first 800 chars): {raw[:800]}"
         )
+
+
+def _record_llm_stats(
+    project_dir: Path | None,
+    *,
+    step: str,
+    target_id: str,
+    target_kind: str,
+    operation: str,
+    model_config: ScriptModelConfig,
+    result: _LLMCallResult,
+) -> None:
+    record_event(
+        project_dir,
+        step=step,
+        target_id=target_id,
+        target_kind=target_kind,
+        operation=operation,
+        provider=model_config.provider,
+        model=model_config.model,
+        timer=TimedCall(result.started_at, result.elapsed_seconds),
+        usage=result.usage,
+    )
 
 
 def _strip_json_fences(text: str) -> str:
@@ -934,6 +994,7 @@ def regenerate_character(
     character_id: str,
     feedback_text: str,
     reporter: ProgressReporter | None = None,
+    stats_project_dir: Path | None = None,
 ) -> ScriptCharacter:
     """Rewrite a single character via a focused LLM call. Returns the updated record."""
     rep = _coerce_reporter(reporter)
@@ -952,11 +1013,21 @@ def regenerate_character(
         "current_character": char.model_dump(mode="json", exclude={"reference_image"}),
         "user_feedback": feedback_text,
     }, ensure_ascii=False, indent=2)
-    draft = _call_llm(
+    result = _call_llm(
         CHARACTER_REFINE_SYSTEM_PROMPT,
         user_prompt,
         bd_script.generation_options.script_model,
         _DraftCharacter,
+    )
+    draft = result.value
+    _record_llm_stats(
+        stats_project_dir,
+        step="script",
+        target_id=character_id,
+        target_kind="character",
+        operation="refine_character",
+        model_config=bd_script.generation_options.script_model,
+        result=result,
     )
     if draft.id != character_id:
         draft.id = character_id  # never let the model rename
@@ -976,6 +1047,7 @@ def regenerate_location(
     location_id: str,
     feedback_text: str,
     reporter: ProgressReporter | None = None,
+    stats_project_dir: Path | None = None,
 ) -> ScriptLocation:
     """Rewrite a single location via a focused LLM call."""
     rep = _coerce_reporter(reporter)
@@ -994,11 +1066,21 @@ def regenerate_location(
         "current_location": loc.model_dump(mode="json", exclude={"reference_image"}),
         "user_feedback": feedback_text,
     }, ensure_ascii=False, indent=2)
-    draft = _call_llm(
+    result = _call_llm(
         LOCATION_REFINE_SYSTEM_PROMPT,
         user_prompt,
         bd_script.generation_options.script_model,
         _DraftLocation,
+    )
+    draft = result.value
+    _record_llm_stats(
+        stats_project_dir,
+        step="script",
+        target_id=location_id,
+        target_kind="location",
+        operation="refine_location",
+        model_config=bd_script.generation_options.script_model,
+        result=result,
     )
     if draft.id != location_id:
         draft.id = location_id
@@ -1017,6 +1099,7 @@ def regenerate_object(
     object_id: str,
     feedback_text: str,
     reporter: ProgressReporter | None = None,
+    stats_project_dir: Path | None = None,
 ) -> ScriptObject:
     """Rewrite a single object via a focused LLM call."""
     rep = _coerce_reporter(reporter)
@@ -1035,11 +1118,21 @@ def regenerate_object(
         "current_object": obj.model_dump(mode="json", exclude={"reference_image"}),
         "user_feedback": feedback_text,
     }, ensure_ascii=False, indent=2)
-    draft = _call_llm(
+    result = _call_llm(
         OBJECT_REFINE_SYSTEM_PROMPT,
         user_prompt,
         bd_script.generation_options.script_model,
         _DraftObject,
+    )
+    draft = result.value
+    _record_llm_stats(
+        stats_project_dir,
+        step="script",
+        target_id=object_id,
+        target_kind="object",
+        operation="refine_object",
+        model_config=bd_script.generation_options.script_model,
+        result=result,
     )
     if draft.id != object_id:
         draft.id = object_id
@@ -1058,6 +1151,7 @@ def regenerate_page(
     page_number: int,
     feedback_text: str,
     reporter: ProgressReporter | None = None,
+    stats_project_dir: Path | None = None,
 ) -> Page:
     """Rewrite a single page via a focused LLM call. Surrounding pages stay untouched."""
     rep = _coerce_reporter(reporter)
@@ -1111,11 +1205,21 @@ def regenerate_page(
             f"Preserve continuity with prior_pages AND later_pages."
         ),
     }, ensure_ascii=False, indent=2)
-    draft = _call_llm(
+    result = _call_llm(
         PAGE_REFINE_SYSTEM_PROMPT,
         user_prompt,
         bd_script.generation_options.script_model,
         Page,
+    )
+    draft = result.value
+    _record_llm_stats(
+        stats_project_dir,
+        step="script",
+        target_id=f"page_{page_number}",
+        target_kind="page",
+        operation="refine_page",
+        model_config=bd_script.generation_options.script_model,
+        result=result,
     )
     new_page = Page(
         page_number=page_number,
@@ -1135,6 +1239,7 @@ def regenerate_cover(
     bd_script: BdGenScript,
     feedback_text: str,
     reporter: ProgressReporter | None = None,
+    stats_project_dir: Path | None = None,
 ) -> Cover:
     """Rewrite the front-cover record via a focused LLM call."""
     rep = _coerce_reporter(reporter)
@@ -1152,11 +1257,21 @@ def regenerate_cover(
         "current_cover": bd_script.cover.model_dump(mode="json"),
         "user_feedback": feedback_text,
     }, ensure_ascii=False, indent=2)
-    draft = _call_llm(
+    result = _call_llm(
         COVER_REFINE_SYSTEM_PROMPT,
         user_prompt,
         bd_script.generation_options.script_model,
         Cover,
+    )
+    draft = result.value
+    _record_llm_stats(
+        stats_project_dir,
+        step="script",
+        target_id="cover",
+        target_kind="cover",
+        operation="refine_cover",
+        model_config=bd_script.generation_options.script_model,
+        result=result,
     )
     bd_script.cover = draft
     rep.emit(ProgressEvent(
@@ -1170,6 +1285,7 @@ def regenerate_back_cover(
     bd_script: BdGenScript,
     feedback_text: str,
     reporter: ProgressReporter | None = None,
+    stats_project_dir: Path | None = None,
 ) -> BackCover:
     """Rewrite the back-cover record via a focused LLM call."""
     rep = _coerce_reporter(reporter)
@@ -1187,11 +1303,21 @@ def regenerate_back_cover(
         "current_back_cover": bd_script.back_cover.model_dump(mode="json"),
         "user_feedback": feedback_text,
     }, ensure_ascii=False, indent=2)
-    draft = _call_llm(
+    result = _call_llm(
         BACK_COVER_REFINE_SYSTEM_PROMPT,
         user_prompt,
         bd_script.generation_options.script_model,
         BackCover,
+    )
+    draft = result.value
+    _record_llm_stats(
+        stats_project_dir,
+        step="script",
+        target_id="back",
+        target_kind="back_cover",
+        operation="refine_back_cover",
+        model_config=bd_script.generation_options.script_model,
+        result=result,
     )
     bd_script.back_cover = draft
     rep.emit(ProgressEvent(

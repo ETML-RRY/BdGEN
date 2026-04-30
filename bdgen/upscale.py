@@ -13,6 +13,7 @@ from PIL import Image
 
 from .models import BdGenScript, UpscaleOptions
 from .progress import InterruptFlag, ProgressEvent, ProgressReporter
+from .stats import record_event, start_timer, stop_timer
 
 UPSCALED_DIRNAME = "pages_upscaled"
 REPLICATE_MODEL = "prunaai/p-image-upscale"
@@ -30,6 +31,7 @@ def upscale_pages(
     interrupt: InterruptFlag | None = None,
     force: bool = False,
     force_ids: list[str] | None = None,
+    stats_project_dir: Path | None = None,
 ) -> Path:
     """Upscale every composed page via Replicate."""
     _ensure_replicate()
@@ -94,7 +96,25 @@ def upscale_pages(
                 total=total,
             )
         )
+        started_at, started = start_timer()
         _upscale_one(src, dst, options)
+        record_event(
+            stats_project_dir or project_dir,
+            step="upscale",
+            target_id=target_id,
+            target_kind="page_asset",
+            operation="upscale_image",
+            provider="replicate",
+            model=REPLICATE_MODEL,
+            timer=stop_timer(started_at, started),
+            artifact=dst,
+            extra={
+                "mode": options.mode,
+                "target_megapixels": options.target_megapixels,
+                "scale_factor": options.scale_factor,
+                "output_format": options.output_format,
+            },
+        )
         reporter.emit(
             ProgressEvent(
                 step="upscale",

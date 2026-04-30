@@ -27,6 +27,7 @@ from .progress import (
     _coerce_flag,
     _coerce_reporter,
 )
+from .stats import normalise_usage, record_event, start_timer, stop_timer
 
 PAGE_SIZE = "1024x1536"
 
@@ -40,6 +41,7 @@ def compose_output(
     reporter: ProgressReporter | None = None,
     interrupt: InterruptFlag | None = None,
     style_ref: Path | None = None,
+    stats_project_dir: Path | None = None,
 ) -> Path:
     """Generate one image per page (full-page render with bubbles), then assemble.
 
@@ -78,9 +80,25 @@ def compose_output(
                 message="Génération de la couverture…",
                 current=done, total=total, extra={"id": "cover"},
             ))
-            _generate_cover(
+            started_at, started = start_timer()
+            image_stats = _generate_cover(
                 client, options.image_model, script, script.cover,
                 cover_image, feedback_store, style_ref=style_ref,
+            )
+            record_event(
+                stats_project_dir,
+                step="compose",
+                target_id="cover",
+                target_kind="cover",
+                operation="compose_cover",
+                provider=options.image_model.provider,
+                model=options.image_model.model,
+                timer=stop_timer(started_at, started),
+                usage=image_stats["usage"],
+                prompt=image_stats["prompt"],
+                input_images=image_stats["input_images"],
+                artifact=cover_image,
+                extra={"quality": options.image_model.quality},
             )
             rep.emit(ProgressEvent(
                 step="compose", phase="cover_done",
@@ -108,9 +126,29 @@ def compose_output(
                 current=done, total=total,
                 extra={"id": f"page_{page.page_number}"},
             ))
-            _generate_page(
+            started_at, started = start_timer()
+            image_stats = _generate_page(
                 client, options.image_model, script, page, target,
                 feedback_store, style_ref=style_ref,
+            )
+            record_event(
+                stats_project_dir,
+                step="compose",
+                target_id=f"page_{page.page_number}",
+                target_kind="page",
+                operation="compose_page",
+                provider=options.image_model.provider,
+                model=options.image_model.model,
+                timer=stop_timer(started_at, started),
+                usage=image_stats["usage"],
+                prompt=image_stats["prompt"],
+                input_images=image_stats["input_images"],
+                artifact=target,
+                extra={
+                    "quality": options.image_model.quality,
+                    "panels": len(page.panels),
+                    "dialogs": sum(len(panel.dialogs) for panel in page.panels),
+                },
             )
             rep.emit(ProgressEvent(
                 step="compose", phase=f"page_{page.page_number}_done",
@@ -138,9 +176,25 @@ def compose_output(
                 message="Génération de la 4ᵉ de couverture…",
                 current=done, total=total, extra={"id": "back"},
             ))
-            _generate_back(
+            started_at, started = start_timer()
+            image_stats = _generate_back(
                 client, options.image_model, script, script.back_cover,
                 back_image, feedback_store, style_ref=style_ref,
+            )
+            record_event(
+                stats_project_dir,
+                step="compose",
+                target_id="back",
+                target_kind="back_cover",
+                operation="compose_back_cover",
+                provider=options.image_model.provider,
+                model=options.image_model.model,
+                timer=stop_timer(started_at, started),
+                usage=image_stats["usage"],
+                prompt=image_stats["prompt"],
+                input_images=image_stats["input_images"],
+                artifact=back_image,
+                extra={"quality": options.image_model.quality},
             )
             rep.emit(ProgressEvent(
                 step="compose", phase="back_done",
@@ -197,7 +251,7 @@ def _generate_page(
     target: Path,
     feedback_store: FeedbackStore | None = None,
     style_ref: Path | None = None,
-) -> None:
+) -> dict:
     """Call gpt-image-2 with all relevant character/location refs as input images."""
     refs_with_labels = _prepend_style_ref(
         _collect_refs(script, page), style_ref
@@ -209,7 +263,7 @@ def _generate_page(
         feedbacks = feedback_store.get_for("compose", f"page_{page.page_number}")
         if feedbacks:
             prompt += feedback_block(feedbacks)
-    _call_image(client, image_model, prompt, target, refs)
+    return _call_image(client, image_model, prompt, target, refs)
 
 
 def _collect_refs(
@@ -432,7 +486,7 @@ def _generate_cover(
     target: Path,
     feedback_store: FeedbackStore | None = None,
     style_ref: Path | None = None,
-) -> None:
+) -> dict:
     refs_with_labels = _prepend_style_ref(
         _collect_album_refs(script, "cover"), style_ref
     )
@@ -443,7 +497,7 @@ def _generate_cover(
         feedbacks = feedback_store.get_for("compose", "cover")
         if feedbacks:
             prompt += feedback_block(feedbacks)
-    _call_image(client, image_model, prompt, target, refs)
+    return _call_image(client, image_model, prompt, target, refs)
 
 
 def _generate_back(
@@ -454,7 +508,7 @@ def _generate_back(
     target: Path,
     feedback_store: FeedbackStore | None = None,
     style_ref: Path | None = None,
-) -> None:
+) -> dict:
     refs_with_labels = _prepend_style_ref(
         _collect_album_refs(script, "back"), style_ref
     )
@@ -465,7 +519,7 @@ def _generate_back(
         feedbacks = feedback_store.get_for("compose", "back")
         if feedbacks:
             prompt += feedback_block(feedbacks)
-    _call_image(client, image_model, prompt, target, refs)
+    return _call_image(client, image_model, prompt, target, refs)
 
 
 def _collect_album_refs(
@@ -498,7 +552,7 @@ def _call_image(
     prompt: str,
     target: Path,
     refs: list[Path],
-) -> None:
+) -> dict:
     if refs:
         files = [(p.name, p.read_bytes(), "image/png") for p in refs]
         edit_kwargs = dict(
@@ -524,6 +578,11 @@ def _call_image(
     tmp = target.with_suffix(target.suffix + ".tmp")
     tmp.write_bytes(base64.b64decode(image_b64))
     tmp.replace(target)
+    return {
+        "usage": normalise_usage(getattr(result, "usage", None)),
+        "prompt": prompt,
+        "input_images": len(refs),
+    }
 
 
 def _build_cover_prompt(

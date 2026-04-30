@@ -280,6 +280,12 @@ def _register_api(app: FastAPI) -> None:
             "reference_images": reference_images,
         }
 
+    @app.get("/api/projects/{name}/statistics")
+    def get_project_statistics(name: str) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        return service.project_statistics(name, _output_root())
+
     @app.post("/api/projects")
     def create_project(payload: dict = Body(...)) -> dict:
         try:

@@ -101,6 +101,7 @@ def _resume_script(
         preview_pages=preview_pages,
         script_path=script_path,
         reporter=StdoutReporter(),
+        stats_project_dir=script_path.parent,
     )
 
 
@@ -128,6 +129,7 @@ def _step_references(
         bd_script, opts.references, opts.image_model,
         script_path=script_path, feedback_store=feedback_store,
         reporter=StdoutReporter(),
+        stats_project_dir=script_path.parent,
     )
     bd_script.save(script_path)
 
@@ -166,6 +168,7 @@ def _step_references(
                     bd_script, opts.references, opts.image_model,
                     script_path=script_path, feedback_store=feedback_store,
                     reporter=StdoutReporter(),
+                    stats_project_dir=script_path.parent,
                 )
                 bd_script.save(script_path)
 
@@ -182,6 +185,7 @@ def _step_compose(
     compose_module.compose_output(
         bd_script, opts, pages_dir, feedback_store=feedback_store,
         reporter=StdoutReporter(),
+        stats_project_dir=script_path.parent,
     )
 
     while True:
@@ -222,6 +226,7 @@ def _step_compose(
                 compose_module.compose_output(
                     bd_script, opts, pages_dir, feedback_store=feedback_store,
                     reporter=StdoutReporter(),
+                    stats_project_dir=script_path.parent,
                 )
 
 
@@ -237,6 +242,7 @@ def _step_upscale(
         project_dir=project_dir,
         options=opts.upscale,
         reporter=StdoutReporter(),
+        stats_project_dir=project_dir,
     )
     output_dir = opts.upscale.output_dir or (project_dir / "pages_upscaled")
     print(f"  Images upscalées : {output_dir}")

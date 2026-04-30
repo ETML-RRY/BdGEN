@@ -2,6 +2,7 @@ import { Routes, Route, Link, NavLink } from "react-router-dom";
 import Home from "./pages/Home.jsx";
 import Wizard from "./pages/Wizard.jsx";
 import NewProject from "./pages/NewProject.jsx";
+import ProjectStats from "./pages/ProjectStats.jsx";
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/new" element={<NewProject />} />
+          <Route path="/projects/:name/stats" element={<ProjectStats />} />
           <Route path="/projects/:name/*" element={<Wizard />} />
         </Routes>
       </main>

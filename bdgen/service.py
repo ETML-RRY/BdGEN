@@ -25,6 +25,7 @@ from typing import Literal
 from . import compose as compose_module
 from . import references as references_module
 from . import script as script_module
+from . import stats as stats_module
 from . import upscale as upscale_module
 from .feedback import FeedbackStore, feedback_path_for
 from .models import BdGenInput, BdGenScript, Style
@@ -35,6 +36,7 @@ Quality = Literal["low", "medium", "high"]
 PROJECT_CONFIG_NAME = "bdgen.json"
 QUALITY_INDEX_NAME = "bdgen-quality.json"
 STALE_INDEX_NAME = "bdgen-stale.json"
+STATS_NAME = stats_module.STATS_NAME
 STYLE_REF_NAME = "bdgen-style-ref.png"
 UPSCALED_DIRNAME = "pages_upscaled"
 CHARACTER_PHOTOS_DIRNAME = "character_photos"
@@ -108,6 +110,126 @@ def load_config(name: str, output_root: Path | None = None) -> BdGenInput:
     if not p.exists():
         raise FileNotFoundError(f"bdgen.json absent pour le projet « {name} »")
     return BdGenInput.load(p)
+
+
+def project_statistics(name: str, output_root: Path | None = None) -> dict:
+    proj_dir = get_project_dir(name, output_root)
+    if not proj_dir.is_dir():
+        raise FileNotFoundError(f"Projet inconnu : {name}")
+
+    script = load_script_if_present(name, output_root)
+    stats_payload = stats_module.load_stats(proj_dir)
+    events = list(stats_payload.get("events") or [])
+    aggregate = stats_module.aggregate_events(events)
+    structure = _structure_statistics(script, proj_dir)
+    return {
+        "project": name,
+        "updated_at": stats_payload.get("updated_at"),
+        "structure": structure,
+        "generation": aggregate,
+        "events": events,
+        "pricing_note": (
+            "Coûts approximatifs en USD, calculés avec une table locale de prix "
+            "par million de tokens. Les appels sans usage token exposé gardent "
+            "la durée mais pas de coût estimé."
+        ),
+    }
+
+
+def _structure_statistics(script: BdGenScript | None, proj_dir: Path) -> dict:
+    if script is None:
+        return {
+            "pages": 0,
+            "panels": 0,
+            "bubbles": 0,
+            "generated_words": 0,
+            "characters": 0,
+            "locations": 0,
+            "objects": 0,
+            "references_expected": 0,
+            "references_generated": 0,
+            "references_used_unique": 0,
+            "references_used_total": 0,
+            "composed_images": _count_files(proj_dir / "pages", "*.png"),
+            "upscaled_images": _count_files(proj_dir / UPSCALED_DIRNAME, "*.*"),
+        }
+
+    pages = len(script.pages)
+    panels = sum(len(p.panels) for p in script.pages)
+    bubbles = sum(len(panel.dialogs) for p in script.pages for panel in p.panels)
+    generated_text_parts: list[str] = [
+        script.metadata.title,
+        script.metadata.author,
+        script.style.art_style,
+    ]
+    for c in script.characters:
+        generated_text_parts.extend([c.name, c.physical_description, c.outfit or "", c.reference_prompt])
+    for l in script.locations:
+        generated_text_parts.extend([l.name, l.description, l.reference_prompt])
+    for o in script.objects:
+        generated_text_parts.extend([o.name, o.description, o.reference_prompt])
+    if script.cover is not None:
+        generated_text_parts.extend([
+            script.cover.scene_description,
+            script.cover.title_placement or "",
+            script.cover.subtitle or "",
+            script.cover.tagline or "",
+        ])
+    if script.back_cover is not None:
+        generated_text_parts.extend([
+            script.back_cover.synopsis_blurb,
+            script.back_cover.scene_description or "",
+            script.back_cover.tagline or "",
+            script.back_cover.layout_notes or "",
+        ])
+    used_refs: list[str] = []
+    for p in script.pages:
+        generated_text_parts.append(p.layout or "")
+        for panel in p.panels:
+            generated_text_parts.extend([
+                panel.location,
+                panel.shot or "",
+                panel.scene_description,
+                panel.narration or "",
+                " ".join(panel.sound_effects),
+            ])
+            used_refs.extend(panel.characters)
+            used_refs.append(panel.location)
+            used_refs.extend(panel.objects)
+            for dialog in panel.dialogs:
+                generated_text_parts.extend([dialog.speaker, dialog.type, dialog.text])
+
+    reference_paths = []
+    for c in script.characters:
+        reference_paths.append(proj_dir / "references" / "characters" / f"{c.id}.png")
+    for l in script.locations:
+        reference_paths.append(proj_dir / "references" / "locations" / f"{l.id}.png")
+    for o in script.objects:
+        reference_paths.append(proj_dir / "references" / "objects" / f"{o.id}.png")
+
+    return {
+        "pages": pages,
+        "panels": panels,
+        "bubbles": bubbles,
+        "generated_words": stats_module.word_count("\n".join(generated_text_parts)),
+        "characters": len(script.characters),
+        "locations": len(script.locations),
+        "objects": len(script.objects),
+        "cover": script.cover is not None,
+        "back_cover": script.back_cover is not None,
+        "references_expected": len(reference_paths),
+        "references_generated": sum(1 for p in reference_paths if p.exists() and p.stat().st_size > 0),
+        "references_used_unique": len(set(used_refs)),
+        "references_used_total": len(used_refs),
+        "composed_images": _count_files(proj_dir / "pages", "*.png"),
+        "upscaled_images": _count_files(proj_dir / UPSCALED_DIRNAME, "*.*"),
+    }
+
+
+def _count_files(directory: Path, pattern: str) -> int:
+    if not directory.exists():
+        return 0
+    return sum(1 for p in directory.glob(pattern) if p.is_file())
 
 
 def detect_and_mark_stale(
@@ -1101,6 +1223,7 @@ def run_step_script(
         script_path=config.generation_options.script_path,
         reporter=reporter,
         interrupt=interrupt,
+        stats_project_dir=get_project_dir(name, output_root),
     )
     bd_script.save(config.generation_options.script_path)
     return bd_script
@@ -1151,6 +1274,7 @@ def run_step_references(
             character_photos=character_photos,
             location_photos=location_photos,
             object_photos=object_photos,
+            stats_project_dir=proj_dir,
         )
     finally:
         # Even on partial completion (interruption), record what landed.
@@ -1201,6 +1325,7 @@ def run_step_compose(
             feedback_store=feedback_store,
             reporter=reporter, interrupt=interrupt,
             style_ref=style_ref,
+            stats_project_dir=proj_dir,
         )
     finally:
         _record_qualities(proj_dir, "compose", target_paths, pre_existing, quality_used)
@@ -1228,6 +1353,7 @@ def run_step_upscale(
         reporter=reporter,
         interrupt=interrupt,
         force_ids=force_ids,
+        stats_project_dir=proj_dir,
     )
 
 
@@ -1245,7 +1371,9 @@ def add_feedback_and_regenerate_character(
     fb_store = FeedbackStore.load_or_empty(fb_path)
     fb_store.add("script", character_id, feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_character(bd_script, character_id, feedback_text, reporter)
+    script_module.regenerate_character(
+        bd_script, character_id, feedback_text, reporter, stats_project_dir=proj_dir
+    )
     bd_script.save(script_path)
     # The on-disk reference PNG (if any) was generated against the previous
     # text and no longer matches; flag it so the UI can offer a one-click
@@ -1268,7 +1396,9 @@ def add_feedback_and_regenerate_location(
     fb_store = FeedbackStore.load_or_empty(fb_path)
     fb_store.add("script", location_id, feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_location(bd_script, location_id, feedback_text, reporter)
+    script_module.regenerate_location(
+        bd_script, location_id, feedback_text, reporter, stats_project_dir=proj_dir
+    )
     bd_script.save(script_path)
     ref_png = proj_dir / "references" / "locations" / f"{location_id}.png"
     if ref_png.exists():
@@ -1288,7 +1418,9 @@ def add_feedback_and_regenerate_object(
     fb_store = FeedbackStore.load_or_empty(fb_path)
     fb_store.add("script", object_id, feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_object(bd_script, object_id, feedback_text, reporter)
+    script_module.regenerate_object(
+        bd_script, object_id, feedback_text, reporter, stats_project_dir=proj_dir
+    )
     bd_script.save(script_path)
     ref_png = proj_dir / "references" / "objects" / f"{object_id}.png"
     if ref_png.exists():
@@ -1502,7 +1634,9 @@ def add_feedback_and_regenerate_cover(
     fb_store = FeedbackStore.load_or_empty(fb_path)
     fb_store.add("script", "cover", feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_cover(bd_script, feedback_text, reporter)
+    script_module.regenerate_cover(
+        bd_script, feedback_text, reporter, stats_project_dir=proj_dir
+    )
     bd_script.save(script_path)
     if (proj_dir / "pages" / "cover.png").exists():
         mark_stale(proj_dir, "compose", "cover")
@@ -1521,7 +1655,9 @@ def add_feedback_and_regenerate_back_cover(
     fb_store = FeedbackStore.load_or_empty(fb_path)
     fb_store.add("script", "back", feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_back_cover(bd_script, feedback_text, reporter)
+    script_module.regenerate_back_cover(
+        bd_script, feedback_text, reporter, stats_project_dir=proj_dir
+    )
     bd_script.save(script_path)
     if (proj_dir / "pages" / "back.png").exists():
         mark_stale(proj_dir, "compose", "back")
@@ -1545,7 +1681,9 @@ def add_feedback_and_regenerate_page(
     target = f"page_{page_number}"
     fb_store.add("script", target, feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_page(bd_script, page_number, feedback_text, reporter)
+    script_module.regenerate_page(
+        bd_script, page_number, feedback_text, reporter, stats_project_dir=proj_dir
+    )
     if cascade:
         script_module.truncate_pages_from(bd_script, page_number + 1)
     bd_script.save(script_path)

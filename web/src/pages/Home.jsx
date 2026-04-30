@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaPlus, FaUpload, FaCopy, FaTrash, FaDownload } from "react-icons/fa6";
+import { FaPlus, FaUpload, FaCopy, FaTrash, FaDownload, FaChartSimple } from "react-icons/fa6";
 import { api } from "../api.js";
 import StateChip from "../components/StateChip.jsx";
 import RunningBanner from "../components/RunningBanner.jsx";
@@ -188,6 +188,15 @@ export default function Home() {
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            <Link
+                              to={`/projects/${encodeURIComponent(p.name)}/stats`}
+                              className="p-1.5 rounded-md text-[var(--color-ink-soft)] hover:bg-[var(--color-paper-soft)] hover:text-[var(--color-primary-600)] transition-colors"
+                              title="Voir les statistiques"
+                              aria-label="Voir les statistiques"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <FaChartSimple aria-hidden />
+                            </Link>
                             {p.pdf_ready && (
                               <a
                                 href={`/api/projects/${encodeURIComponent(p.name)}/files/${encodeURIComponent(p.name)}.pdf`}

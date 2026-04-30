@@ -42,6 +42,7 @@ def cmd_script(args: argparse.Namespace) -> None:
         preview_pages=args.preview,
         script_path=out,
         reporter=StdoutReporter(),
+        stats_project_dir=out.parent,
     )
     bd_script.save(out)
     print(f"Script written to {out}")
@@ -57,6 +58,7 @@ def cmd_references(args: argparse.Namespace) -> None:
         feedback_store=feedback_store,
         force=args.force,
         reporter=StdoutReporter(),
+        stats_project_dir=_project_dir(bd_script, args.script),
     )
     bd_script.save(args.script)
     print(f"References written under {opts.references.output_dir}")
@@ -76,6 +78,7 @@ def cmd_compose(args: argparse.Namespace) -> None:
         feedback_store=feedback_store,
         force=args.force,
         reporter=StdoutReporter(),
+        stats_project_dir=_project_dir(bd_script, args.script),
     )
     print(f"Done: {out}")
 
@@ -95,6 +98,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         preview_pages=args.preview,
         script_path=opts.script_path,
         reporter=reporter,
+        stats_project_dir=opts.script_path.parent,
     )
     bd_script.save(opts.script_path)
     references_module.generate_references(
@@ -102,6 +106,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         script_path=opts.script_path,
         feedback_store=feedback_store,
         reporter=reporter,
+        stats_project_dir=opts.script_path.parent,
     )
     bd_script.save(opts.script_path)
     project_dir = opts.script_path.parent
@@ -109,6 +114,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         bd_script, opts, project_dir / "pages",
         feedback_store=feedback_store,
         reporter=reporter,
+        stats_project_dir=project_dir,
     )
     if opts.upscale.enabled:
         upscale_module.upscale_pages(
@@ -116,6 +122,7 @@ def cmd_run(args: argparse.Namespace) -> None:
             project_dir,
             opts.upscale,
             reporter=reporter,
+            stats_project_dir=project_dir,
         )
     print(f"Done: {out}")
 
@@ -130,6 +137,7 @@ def cmd_upscale(args: argparse.Namespace) -> None:
         opts.upscale,
         reporter=StdoutReporter(),
         force=args.force,
+        stats_project_dir=project_dir,
     )
     print(f"Upscaled pages written under {out}")
 
