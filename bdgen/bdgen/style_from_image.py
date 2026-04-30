@@ -22,6 +22,7 @@ from textwrap import dedent
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
+from . import secret_store
 from .models import CharacterInput, LocationInput, ObjectInput, Style
 
 
@@ -366,7 +367,7 @@ def extract(
 
     b64 = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime_type};base64,{b64}"
-    client = OpenAI()
+    client = secret_store.openai_client()
 
     user_text = (
         f"Analyse cette image. Renvoie en {language} :\n"
@@ -531,7 +532,7 @@ def extract_character(
 
     b64 = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime_type};base64,{b64}"
-    client = OpenAI()
+    client = secret_store.openai_client()
 
     user_text = (
         f"Analyse cette photo et renvoie en {language} une description "
@@ -633,7 +634,7 @@ def extract_object(
 
     b64 = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime_type};base64,{b64}"
-    client = OpenAI()
+    client = secret_store.openai_client()
 
     user_text = (
         f"Analyse cette photo et renvoie en {language} une description "
@@ -731,7 +732,7 @@ def extract_location(
 
     b64 = base64.b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime_type};base64,{b64}"
-    client = OpenAI()
+    client = secret_store.openai_client()
 
     user_text = (
         f"Analyse cette photo et renvoie en {language} une description "

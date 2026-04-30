@@ -6,6 +6,7 @@ from pathlib import Path
 
 from openai import OpenAI
 
+from . import secret_store
 from .feedback import FeedbackStore, feedback_block
 from .image_rules import IMAGE_CONSTRAINTS
 from .models import (
@@ -346,7 +347,7 @@ def _client(image_model: ImageModelConfig) -> OpenAI:
         raise NotImplementedError(
             f"Provider '{image_model.provider}' is not yet supported."
         )
-    return OpenAI()
+    return secret_store.openai_client()
 
 
 STYLE_REF_LABEL = (

@@ -16,9 +16,11 @@ wheels/
 .claude
 
 # Web frontend
-web/node_modules/
-web/dist/
+bdgen/web/node_modules/
+bdgen/web/dist/
 bdgen/server/static/
+
+bdgen/desktop/node_modules/
 
 # Generated outputs
 output/

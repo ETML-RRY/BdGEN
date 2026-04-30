@@ -28,6 +28,7 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from .. import secret_store
 from .. import service
 from .. import style_from_image as style_module
 from .. import upscale as upscale_module
@@ -116,11 +117,85 @@ class StartStepPayload(BaseModel):
     force_all: bool = False
 
 
+class SecretCreatePayload(BaseModel):
+    password: str
+    secrets: dict[str, str] = {}
+    overwrite: bool = False
+
+
+class SecretUnlockPayload(BaseModel):
+    password: str
+
+
+class SecretUpdatePayload(BaseModel):
+    value: str | None = None
+    password: str | None = None
+
+
 def _register_api(app: FastAPI) -> None:
 
     @app.get("/api/health")
     def health() -> dict:
         return {"ok": True}
+
+    # --- Local encrypted API-key vault ---
+
+    @app.get("/api/secrets/status")
+    def secrets_status() -> dict:
+        return secret_store.status()
+
+    @app.post("/api/secrets/create")
+    def secrets_create(payload: SecretCreatePayload) -> dict:
+        try:
+            return secret_store.create_vault(
+                payload.password,
+                payload.secrets,
+                overwrite=payload.overwrite,
+            )
+        except secret_store.VaultError as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/secrets/unlock")
+    def secrets_unlock(payload: SecretUnlockPayload) -> dict:
+        try:
+            return secret_store.unlock_vault(payload.password)
+        except secret_store.VaultError as e:
+            raise HTTPException(401, str(e))
+
+    @app.post("/api/secrets/lock")
+    def secrets_lock() -> dict:
+        secret_store.lock_vault()
+        return secret_store.status()
+
+    @app.put("/api/secrets/providers/{provider}")
+    def secrets_update(provider: str, payload: SecretUpdatePayload) -> dict:
+        secret_name = secret_store.PROVIDERS.get(provider)
+        if secret_name is None:
+            raise HTTPException(404, "Provider inconnu.")
+        try:
+            secret_store.update_secret(secret_name, payload.value)
+            if payload.password:
+                return secret_store.save_unlocked(payload.password)
+            return secret_store.status()
+        except secret_store.VaultLocked as e:
+            raise HTTPException(423, str(e))
+        except secret_store.VaultError as e:
+            raise HTTPException(400, str(e))
+
+    @app.delete("/api/secrets/providers/{provider}")
+    def secrets_delete(provider: str, payload: SecretUpdatePayload = Body(default=SecretUpdatePayload())) -> dict:
+        secret_name = secret_store.PROVIDERS.get(provider)
+        if secret_name is None:
+            raise HTTPException(404, "Provider inconnu.")
+        try:
+            secret_store.update_secret(secret_name, None)
+            if payload.password:
+                return secret_store.save_unlocked(payload.password)
+            return secret_store.status()
+        except secret_store.VaultLocked as e:
+            raise HTTPException(423, str(e))
+        except secret_store.VaultError as e:
+            raise HTTPException(400, str(e))
 
     # --- Projects ---
 

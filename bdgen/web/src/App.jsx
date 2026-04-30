@@ -1,10 +1,41 @@
 import { Routes, Route, Link, NavLink } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { api } from "./api.js";
 import Home from "./pages/Home.jsx";
 import Wizard from "./pages/Wizard.jsx";
 import NewProject from "./pages/NewProject.jsx";
 import ProjectStats from "./pages/ProjectStats.jsx";
+import SecretsPage from "./pages/SecretsPage.jsx";
 
 export default function App() {
+  const [secretsStatus, setSecretsStatus] = useState(null);
+
+  useEffect(() => {
+    api.secretsStatus()
+      .then(setSecretsStatus)
+      .catch(() => setSecretsStatus({ error: true }));
+  }, []);
+
+  const providers = secretsStatus?.providers || {};
+  const hasConfiguredProvider = Object.values(providers).some((p) => p.configured);
+  const shouldGate =
+    secretsStatus &&
+    !secretsStatus.error &&
+    ((secretsStatus.vault_exists && !secretsStatus.unlocked) ||
+      (!secretsStatus.vault_exists && !hasConfiguredProvider));
+
+  if (!secretsStatus) {
+    return (
+      <div className="min-h-full flex items-center justify-center text-sm text-[var(--color-mute)]">
+        Chargement...
+      </div>
+    );
+  }
+
+  if (shouldGate) {
+    return <SecretsPage mode="gate" onReady={setSecretsStatus} />;
+  }
+
   return (
     <div className="min-h-full flex flex-col">
       <header className="border-b border-[var(--color-line)] bg-white/80 backdrop-blur sticky top-0 z-10">
@@ -24,6 +55,9 @@ export default function App() {
             <NavLink to="/" end className="px-3 py-1.5 hover:text-[var(--color-ink)]">
               Accueil
             </NavLink>
+            <NavLink to="/settings/secrets" className="px-3 py-1.5 hover:text-[var(--color-ink)]">
+              Cles API
+            </NavLink>
           </nav>
         </div>
       </header>
@@ -32,6 +66,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/new" element={<NewProject />} />
+          <Route path="/settings/secrets" element={<SecretsPage onReady={setSecretsStatus} />} />
           <Route path="/projects/:name/stats" element={<ProjectStats />} />
           <Route path="/projects/:name/*" element={<Wizard />} />
         </Routes>

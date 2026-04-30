@@ -24,6 +24,24 @@ async function request(path, options = {}) {
 
 export const api = {
   health: () => request("/api/health"),
+  secretsStatus: () => request("/api/secrets/status"),
+  createSecretsVault: (password, secrets, overwrite = false) =>
+    request("/api/secrets/create", {
+      method: "POST",
+      body: JSON.stringify({ password, secrets, overwrite }),
+    }),
+  unlockSecretsVault: (password) =>
+    request("/api/secrets/unlock", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+  lockSecretsVault: () =>
+    request("/api/secrets/lock", { method: "POST" }),
+  updateSecretProvider: (provider, value, password = null) =>
+    request(`/api/secrets/providers/${encodeURIComponent(provider)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value, password }),
+    }),
 
   listProjects: () => request("/api/projects"),
   getProject: (name) => request(`/api/projects/${encodeURIComponent(name)}`),

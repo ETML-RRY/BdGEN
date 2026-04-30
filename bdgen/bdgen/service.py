@@ -24,6 +24,7 @@ from typing import Literal
 
 from . import compose as compose_module
 from . import references as references_module
+from . import secret_store
 from . import script as script_module
 from . import stats as stats_module
 from . import upscale as upscale_module
@@ -1770,7 +1771,6 @@ def inpaint_image(
     import base64
     import io as _io
 
-    from openai import OpenAI
     from PIL import Image as _Image
 
     proj_dir = get_project_dir(name, output_root)
@@ -1819,7 +1819,7 @@ def inpaint_image(
         raise NotImplementedError(
             f"L'inpainting n'est pas supporté pour le provider « {opts.image_model.provider} »."
         )
-    client = OpenAI()
+    client = secret_store.openai_client()
 
     # gpt-image-2 inpainting is prompt-based: explicitly instruct the model to
     # preserve the rest of the image so it doesn't regenerate everything.

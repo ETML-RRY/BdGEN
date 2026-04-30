@@ -26,6 +26,7 @@ from .models import (
     ScriptObject,
     ScriptSource,
 )
+from . import secret_store
 from .progress import (
     InterruptFlag,
     ProgressEvent,
@@ -792,7 +793,7 @@ def _call_openai(
     system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]
 ) -> tuple[T, dict]:
     """OpenAI Chat Completions with structured Pydantic output."""
-    client = OpenAI()
+    client = secret_store.openai_client()
     kwargs = {
         "model": model_config.model,
         "messages": [
@@ -826,9 +827,7 @@ def _call_anthropic(
     The system prompt is cached (5-minute TTL) so successive calls (setup +
     pages, or retries) pay only ~0.1x for the system block on cache hits.
     """
-    import anthropic
-
-    client = anthropic.Anthropic()
+    client = secret_store.anthropic_client()
     text_parts: list[str] = []
     state = {"phase": None, "phase_start": 0.0, "chars": 0, "last_render": 0.0}
 

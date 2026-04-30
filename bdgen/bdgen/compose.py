@@ -8,6 +8,7 @@ from textwrap import dedent
 from openai import OpenAI
 from PIL import Image
 
+from . import secret_store
 from .feedback import FeedbackStore, feedback_block
 from .image_rules import IMAGE_CONSTRAINTS
 from .references import STYLE_REF_LABEL as _STYLE_REF_LABEL
@@ -776,7 +777,7 @@ def _client(image_model: ImageModelConfig) -> OpenAI:
         raise NotImplementedError(
             f"Provider '{image_model.provider}' is not yet supported."
         )
-    return OpenAI()
+    return secret_store.openai_client()
 
 
 def _is_complete(path: Path) -> bool:

@@ -1,16 +1,16 @@
 """Image upscaling via Pruna P-Image-Upscale on Replicate.
 
 Calls the ``prunaai/p-image-upscale`` model through the Replicate API.
-Requires a ``REPLICATE_API_TOKEN`` environment variable.
+Requires a ``REPLICATE_API_TOKEN`` from the BdGEN vault or environment.
 """
 from __future__ import annotations
 
 import base64
-import os
 from pathlib import Path
 
 from PIL import Image
 
+from . import secret_store
 from .models import BdGenScript, UpscaleOptions
 from .progress import InterruptFlag, ProgressEvent, ProgressReporter
 from .stats import record_event, start_timer, stop_timer
@@ -20,7 +20,7 @@ REPLICATE_MODEL = "prunaai/p-image-upscale"
 
 
 def is_available() -> bool:
-    return bool(os.environ.get("REPLICATE_API_TOKEN"))
+    return bool(secret_store.get_secret("REPLICATE_API_TOKEN"))
 
 
 def upscale_pages(
@@ -207,11 +207,12 @@ def _assemble_pdf(page_images: list[Path], output_path: Path) -> None:
 
 
 def _ensure_replicate() -> None:
-    if not os.environ.get("REPLICATE_API_TOKEN"):
+    if not secret_store.get_secret("REPLICATE_API_TOKEN"):
         raise RuntimeError(
             "REPLICATE_API_TOKEN non défini. "
             "Ajoutez votre clé API Replicate dans le fichier .env."
         )
+    secret_store.ensure_replicate_env()
     try:
         import replicate  # noqa: F401
     except ImportError as exc:
