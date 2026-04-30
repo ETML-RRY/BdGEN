@@ -46,6 +46,9 @@ CHARACTER_PHOTO_MAX_SIDE = 1024
 LOCATION_PHOTO_MAX_SIDE = 1024
 OBJECT_PHOTO_MAX_SIDE = 1024
 STALE_STEPS = ("references", "compose")
+THUMBNAIL_NAME = "thumbnail.jpg"
+_THUMB_MAX_W = 256
+_THUMB_MAX_H = 384
 
 
 @dataclass
@@ -715,21 +718,40 @@ def _summary(proj_dir: Path) -> ProjectSummary:
         pages_composed=pages_composed,
         pdf_ready=pdf.exists(),
         updated_at=datetime.fromtimestamp(updated, tz=timezone.utc).isoformat(),
-        thumbnail_rel=_pick_thumbnail_rel(proj_dir),
+        thumbnail_rel=_ensure_thumbnail(proj_dir),
     )
 
 
-def _pick_thumbnail_rel(proj_dir: Path) -> str | None:
+def _ensure_thumbnail(proj_dir: Path) -> str | None:
+    """Generate thumbnail.jpg from the cover/first page when needed.
+
+    Returns the relative path "thumbnail.jpg" if a thumbnail exists (or was
+    just created), None if no source image is available yet.
+    """
+    from PIL import Image  # lazy import — Pillow is a project dependency
+
     pages_dir = proj_dir / "pages"
     if not pages_dir.is_dir():
         return None
     cover = pages_dir / "cover.png"
     if cover.exists():
-        return "pages/cover.png"
-    candidates = sorted(pages_dir.glob("page_*.png"))
-    if candidates:
-        return f"pages/{candidates[0].name}"
-    return None
+        source = cover
+    else:
+        candidates = sorted(pages_dir.glob("page_*.png"))
+        if not candidates:
+            return None
+        source = candidates[0]
+
+    thumb_path = proj_dir / THUMBNAIL_NAME
+    if not thumb_path.exists() or source.stat().st_mtime > thumb_path.stat().st_mtime:
+        try:
+            img = Image.open(source)
+            img.thumbnail((_THUMB_MAX_W, _THUMB_MAX_H), Image.LANCZOS)
+            img.convert("RGB").save(thumb_path, "JPEG", quality=85)
+        except Exception:
+            return None
+
+    return THUMBNAIL_NAME
 
 
 def get_upscale_output_dir(
