@@ -4,6 +4,7 @@ import { api } from "../../api.js";
 import useJobStream from "../useJobStream.js";
 import ProgressPanel from "../ProgressPanel.jsx";
 import ScriptBrowser from "../ScriptBrowser.jsx";
+import ConfirmDialog from "../ConfirmDialog.jsx";
 
 export default function ScriptStep({ project, onChanged }) {
   const { name } = useParams();
@@ -11,6 +12,7 @@ export default function ScriptStep({ project, onChanged }) {
   const stream = useJobStream({ project: name, step: "script" });
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState(null);
+  const [confirmingRegenAll, setConfirmingRegenAll] = useState(false);
 
   const target = project.config?.structure?.page_count ?? null;
   const written = project.script?.pages?.length ?? 0;
@@ -102,7 +104,14 @@ export default function ScriptStep({ project, onChanged }) {
           project={project}
           onChanged={onChanged}
         />
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between">
+          <button
+            className="btn btn-ghost text-sm"
+            onClick={() => setConfirmingRegenAll(true)}
+            disabled={starting}
+          >
+            ↻ Régénérer tout le scénario
+          </button>
           <button
             className="btn btn-primary"
             onClick={() => navigate(`/projects/${encodeURIComponent(name)}/references`)}
@@ -110,6 +119,19 @@ export default function ScriptStep({ project, onChanged }) {
             Continuer vers les références →
           </button>
         </div>
+        {confirmingRegenAll && (
+          <ConfirmDialog
+            title="Régénérer tout le scénario ?"
+            body="Le scénario entier (personnages, décors, objets, couvertures et toutes les planches) sera supprimé et réécrit de zéro par le LLM. Les images existantes (références, planches composées) seront marquées comme obsolètes. Cette action est longue et consomme des crédits API."
+            confirmLabel="Régénérer tout"
+            variant="danger"
+            onConfirm={async () => {
+              await api.regenerateAll(name, "script");
+              await stream.refresh();
+            }}
+            onClose={() => setConfirmingRegenAll(false)}
+          />
+        )}
       </div>
     );
   }

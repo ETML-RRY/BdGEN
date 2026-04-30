@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
 import RefineDialog from "./RefineDialog.jsx";
 import ConfirmDeleteDialog from "./ConfirmDeleteDialog.jsx";
+import ConfirmDialog from "./ConfirmDialog.jsx";
 
 const TABS = [
   { id: "characters", label: "Personnages" },
@@ -71,6 +72,7 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
   const navigate = useNavigate();
   const [refining, setRefining] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [regenerating, setRegenerating] = useState(null);
   if (characters.length === 0)
     return <p className="text-sm text-[var(--color-mute)]">Aucun personnage.</p>;
   return (
@@ -84,6 +86,12 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
             </div>
             {!readOnly && (
               <div className="flex gap-1">
+                <button
+                  className="btn btn-ghost text-xs"
+                  onClick={() => setRegenerating(c)}
+                >
+                  ↻ Régénérer
+                </button>
                 <button
                   className="btn btn-ghost text-xs"
                   onClick={() => setRefining(c)}
@@ -121,6 +129,18 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
           }}
         />
       )}
+      {regenerating && (
+        <ConfirmDialog
+          title={`Régénérer « ${regenerating.name} » ?`}
+          body="La description de ce personnage sera réécrite par le LLM. Cette action consomme des crédits API."
+          confirmLabel="Régénérer"
+          onConfirm={async () => {
+            await api.refineCharacter(name, regenerating.id, "Propose une version alternative complète de ce personnage, avec une nouvelle description physique et une nouvelle tenue.");
+            await onChanged();
+          }}
+          onClose={() => setRegenerating(null)}
+        />
+      )}
       {deleting && (
         <ConfirmDeleteDialog
           title={`Supprimer « ${deleting.name} » ?`}
@@ -131,8 +151,6 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
           onConfirm={async () => {
             const info = await api.deleteCharacter(name, deleting.id, true);
             await onChanged();
-            // If the backend auto-launched a regen job, take the user to the
-            // script step so they see progress.
             if (info?.job) {
               navigate(`/projects/${encodeURIComponent(name)}/script`);
             }
@@ -148,6 +166,7 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
   const navigate = useNavigate();
   const [refining, setRefining] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [regenerating, setRegenerating] = useState(null);
   if (locations.length === 0)
     return <p className="text-sm text-[var(--color-mute)]">Aucun décor.</p>;
   return (
@@ -161,6 +180,12 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
             </div>
             {!readOnly && (
               <div className="flex gap-1">
+                <button
+                  className="btn btn-ghost text-xs"
+                  onClick={() => setRegenerating(l)}
+                >
+                  ↻ Régénérer
+                </button>
                 <button
                   className="btn btn-ghost text-xs"
                   onClick={() => setRefining(l)}
@@ -190,6 +215,18 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
           }}
         />
       )}
+      {regenerating && (
+        <ConfirmDialog
+          title={`Régénérer « ${regenerating.name} » ?`}
+          body="La description de ce décor sera réécrite par le LLM. Cette action consomme des crédits API."
+          confirmLabel="Régénérer"
+          onConfirm={async () => {
+            await api.refineLocation(name, regenerating.id, "Propose une version alternative complète de ce décor, avec une nouvelle description.");
+            await onChanged();
+          }}
+          onClose={() => setRegenerating(null)}
+        />
+      )}
       {deleting && (
         <ConfirmDeleteDialog
           title={`Supprimer « ${deleting.name} » ?`}
@@ -215,6 +252,7 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
   const navigate = useNavigate();
   const [refining, setRefining] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [regenerating, setRegenerating] = useState(null);
   if (objects.length === 0)
     return (
       <p className="text-sm text-[var(--color-mute)]">
@@ -232,6 +270,12 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
             </div>
             {!readOnly && (
               <div className="flex gap-1">
+                <button
+                  className="btn btn-ghost text-xs"
+                  onClick={() => setRegenerating(o)}
+                >
+                  ↻ Régénérer
+                </button>
                 <button
                   className="btn btn-ghost text-xs"
                   onClick={() => setRefining(o)}
@@ -261,6 +305,18 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
           }}
         />
       )}
+      {regenerating && (
+        <ConfirmDialog
+          title={`Régénérer « ${regenerating.name} » ?`}
+          body="La description de cet objet sera réécrite par le LLM. Cette action consomme des crédits API."
+          confirmLabel="Régénérer"
+          onConfirm={async () => {
+            await api.refineObject(name, regenerating.id, "Propose une version alternative complète de cet objet, avec une nouvelle description.");
+            await onChanged();
+          }}
+          onClose={() => setRegenerating(null)}
+        />
+      )}
       {deleting && (
         <ConfirmDeleteDialog
           title={`Supprimer « ${deleting.name} » ?`}
@@ -286,6 +342,7 @@ function PagesBrowser({ script, onChanged, readOnly = false }) {
   const { name } = useParams();
   const [idx, setIdx] = useState(0);
   const [refining, setRefining] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const pages = script.pages;
   if (pages.length === 0)
     return <p className="text-sm text-[var(--color-mute)]">Aucune planche.</p>;
@@ -318,12 +375,20 @@ function PagesBrowser({ script, onChanged, readOnly = false }) {
             Layout&nbsp;: {page.layout || "—"}
           </p>
           {!readOnly && (
-            <button
-              className="btn btn-ghost text-xs"
-              onClick={() => setRefining(true)}
-            >
-              Retoucher la planche
-            </button>
+            <div className="flex gap-1">
+              <button
+                className="btn btn-ghost text-xs"
+                onClick={() => setRegenerating(true)}
+              >
+                ↻ Régénérer
+              </button>
+              <button
+                className="btn btn-ghost text-xs"
+                onClick={() => setRefining(true)}
+              >
+                Retoucher la planche
+              </button>
+            </div>
           )}
         </div>
         <ol className="space-y-3">
@@ -390,13 +455,26 @@ function PagesBrowser({ script, onChanged, readOnly = false }) {
           }}
         />
       )}
+      {regenerating && (
+        <ConfirmDialog
+          title={`Régénérer la planche ${page.page_number} ?`}
+          body="Le scénario de cette planche sera réécrit par le LLM avec de nouvelles idées. Cette action consomme des crédits API."
+          confirmLabel="Régénérer"
+          onConfirm={async () => {
+            await api.refinePage(name, page.page_number, "Réécris cette planche avec de nouvelles idées pour les cases, les dialogues et la mise en scène.");
+            await onChanged();
+          }}
+          onClose={() => setRegenerating(false)}
+        />
+      )}
     </div>
   );
 }
 
 function CoversView({ script, onChanged, readOnly = false }) {
   const { name } = useParams();
-  const [refining, setRefining] = useState(null); // "cover" | "back_cover" | null
+  const [refining, setRefining] = useState(null);
+  const [regenerating, setRegenerating] = useState(null);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -405,12 +483,20 @@ function CoversView({ script, onChanged, readOnly = false }) {
           <div className="flex items-start justify-between gap-3 mb-1">
             <h3 className="font-semibold">Couverture</h3>
             {!readOnly && (
-              <button
-                className="btn btn-ghost text-xs"
-                onClick={() => setRefining("cover")}
-              >
-                Retoucher
-              </button>
+              <div className="flex gap-1">
+                <button
+                  className="btn btn-ghost text-xs"
+                  onClick={() => setRegenerating("cover")}
+                >
+                  ↻ Régénérer
+                </button>
+                <button
+                  className="btn btn-ghost text-xs"
+                  onClick={() => setRefining("cover")}
+                >
+                  Retoucher
+                </button>
+              </div>
             )}
           </div>
           <p className="text-sm whitespace-pre-wrap">
@@ -439,12 +525,20 @@ function CoversView({ script, onChanged, readOnly = false }) {
           <div className="flex items-start justify-between gap-3 mb-1">
             <h3 className="font-semibold">4ᵉ de couverture</h3>
             {!readOnly && (
-              <button
-                className="btn btn-ghost text-xs"
-                onClick={() => setRefining("back_cover")}
-              >
-                Retoucher
-              </button>
+              <div className="flex gap-1">
+                <button
+                  className="btn btn-ghost text-xs"
+                  onClick={() => setRegenerating("back_cover")}
+                >
+                  ↻ Régénérer
+                </button>
+                <button
+                  className="btn btn-ghost text-xs"
+                  onClick={() => setRefining("back_cover")}
+                >
+                  Retoucher
+                </button>
+              </div>
             )}
           </div>
           <p className="text-sm whitespace-pre-wrap">
@@ -496,6 +590,30 @@ function CoversView({ script, onChanged, readOnly = false }) {
             await api.refineBackCover(name, text);
             await onChanged();
           }}
+        />
+      )}
+      {regenerating === "cover" && (
+        <ConfirmDialog
+          title="Régénérer la couverture ?"
+          body="La description de la couverture sera réécrite par le LLM. Cette action consomme des crédits API."
+          confirmLabel="Régénérer"
+          onConfirm={async () => {
+            await api.refineCover(name, "Propose une version alternative complète de la couverture, avec une nouvelle mise en scène et un nouveau placement du titre.");
+            await onChanged();
+          }}
+          onClose={() => setRegenerating(null)}
+        />
+      )}
+      {regenerating === "back_cover" && (
+        <ConfirmDialog
+          title="Régénérer la 4ᵉ de couverture ?"
+          body="Le synopsis et la mise en page de la 4ᵉ de couverture seront réécrits par le LLM. Cette action consomme des crédits API."
+          confirmLabel="Régénérer"
+          onConfirm={async () => {
+            await api.refineBackCover(name, "Propose une version alternative complète de la 4ᵉ de couverture, avec un nouveau synopsis et une nouvelle tagline.");
+            await onChanged();
+          }}
+          onClose={() => setRegenerating(null)}
         />
       )}
     </div>

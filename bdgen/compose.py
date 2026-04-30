@@ -332,6 +332,13 @@ def _build_page_prompt(
         - Panel borders: {style.panel_borders or "crisp, consistent thickness, fully closed black ink rectangles (or shapes per the layout)"}
         - Speech bubbles: {style.speech_bubbles or "clean white bubbles with a thin black outline, matching the line-work weight"}
         - Character rendering: {style.character_rendering or "consistent with the art style above"}
+        - HANDS & ARMS (NON-NEGOTIABLE): every character in every panel MUST
+          have anatomically correct hands (exactly 5 fingers per hand: 4 fingers
+          + 1 opposable thumb) and arms (one elbow per arm, bending naturally).
+          Before finalizing each panel, COUNT the fingers on every visible hand.
+          If any hand has fewer or more than 5 fingers, redraw it. Prefer poses
+          where hands are clearly visible (at sides, holding props, gesturing)
+          over complex foreshortening that risks errors.
         {f"- NEGATIVE CONSTRAINTS: {style.negative_constraints}" if style.negative_constraints else ""}
 
         PAGE LAYOUT:
@@ -536,6 +543,10 @@ def _build_cover_prompt(
         - Stylization level: {style.stylization_level or "moderately stylized"}
         - Character rendering: {style.character_rendering or "consistent with the art style above"}
         {f"- NEGATIVE CONSTRAINTS: {style.negative_constraints}" if style.negative_constraints else ""}
+
+        - HANDS & ARMS (NON-NEGOTIABLE): every character MUST have anatomically
+          correct hands (exactly 5 fingers: 4 + 1 thumb) and arms (one natural
+          elbow joint per arm). Count fingers before finalizing.
 
         COVER ILLUSTRATION:
         {cover.scene_description}

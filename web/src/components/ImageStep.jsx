@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import useJobStream from "./useJobStream.js";
 import ProgressPanel from "./ProgressPanel.jsx";
 import RefineDialog from "./RefineDialog.jsx";
+import ConfirmDialog from "./ConfirmDialog.jsx";
 
 const QUALITY_LABEL = {
   low: "Brouillon",
@@ -47,6 +48,7 @@ export default function ImageStep({
   const [error, setError] = useState(null);
   const [refining, setRefining] = useState(null);
   const [idx, setIdx] = useState(0);
+  const [confirmingRegenAll, setConfirmingRegenAll] = useState(false);
 
   const isRunning = stream.matchesThisStep && stream.job?.status === "running";
   const otherStepRunning = stream.job?.status === "running" && !stream.matchesThisStep;
@@ -209,6 +211,14 @@ export default function ImageStep({
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h2 className="text-lg font-semibold">{title}</h2>
           <div className="flex gap-2 flex-wrap">
+            <button
+              className="btn btn-ghost text-sm"
+              onClick={() => setConfirmingRegenAll(true)}
+              disabled={starting}
+              title="Régénère toutes les images de cette étape"
+            >
+              ↻ Tout régénérer
+            </button>
             {staleItems.length > 0 && (
               <button
                 className="btn btn-primary text-sm"
@@ -295,16 +305,31 @@ export default function ImageStep({
           }}
         />
       )}
+
+      {confirmingRegenAll && (
+        <ConfirmDialog
+          title="Tout régénérer ?"
+          body={`Les ${items.length} images de cette étape seront régénérées. Les images existantes seront remplacées. Cette action consomme des crédits API.`}
+          confirmLabel="Tout régénérer"
+          onConfirm={async () => {
+            await start({
+              force_ids: items.map((it) => it.id),
+            });
+          }}
+          onClose={() => setConfirmingRegenAll(false)}
+        />
+      )}
     </div>
   );
 }
 
 function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, onRefresh, emptyLabel }) {
+  const [confirmingRegen, setConfirmingRegen] = useState(false);
   const safeIdx = Math.max(0, Math.min(idx, items.length - 1));
   const item = items[safeIdx];
   const canUpgrade = onUpgrade && item.image_url && item.quality && item.quality !== "high";
   const isStale = !!item.stale && !!item.image_url;
-  const canRefresh = onRefresh && isStale;
+  const canRefresh = onRefresh && item.image_url;
 
   return (
     <div>
@@ -378,16 +403,16 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, onRefre
         <div className="flex justify-end gap-2 mt-3 flex-wrap">
           {canRefresh && (
             <button
-              className="btn btn-primary text-sm"
-              onClick={() => onRefresh(item)}
-              title="Régénère cette image avec la dernière version du texte (qualité actuelle conservée)."
+              className="btn btn-secondary text-sm"
+              onClick={() => setConfirmingRegen(true)}
+              title="Régénère cette image (la qualité actuelle est conservée)."
             >
-              ↻ Régénérer l'image
+              ↻ Régénérer
             </button>
           )}
           {canUpgrade && (
             <button
-              className={(canRefresh ? "btn btn-secondary" : "btn btn-primary") + " text-sm"}
+              className="btn btn-primary text-sm"
               onClick={() => onUpgrade(item)}
               title="Régénère cet élément seul en haute qualité."
             >
@@ -396,7 +421,7 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, onRefre
           )}
           {onRefine && (
             <button
-              className="btn btn-secondary text-sm"
+              className="btn btn-ghost text-sm"
               onClick={() => onRefine(item)}
               disabled={!item.image_url}
             >
@@ -404,6 +429,16 @@ function ImageFlipper({ items, idx, setIdx, layout, onRefine, onUpgrade, onRefre
             </button>
           )}
         </div>
+      )}
+
+      {confirmingRegen && (
+        <ConfirmDialog
+          title={`Régénérer « ${item.label} » ?`}
+          body="L'image actuelle sera remplacée par une nouvelle génération. Cette action consomme des crédits API."
+          confirmLabel="Régénérer"
+          onConfirm={async () => { onRefresh(item); }}
+          onClose={() => setConfirmingRegen(false)}
+        />
       )}
     </div>
   );

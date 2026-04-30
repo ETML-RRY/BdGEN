@@ -61,7 +61,15 @@ SETUP_SYSTEM_PROMPT = dedent("""\
        generator HOW FAR from realism to push (e.g. "extremely abstract — characters
        are amorphous ink blobs"). If `style.negative_constraints` is set, include
        it as a "DO NOT …" instruction. It must also describe the character's full
-       appearance and outfit, and MUST end with "No text. No speech bubbles." Whether
+       appearance and outfit.
+       HANDS AND ARMS — MANDATORY in every `reference_prompt`: the full-body
+       front view MUST explicitly show both hands with clearly separated fingers
+       (5 fingers per hand: 4 fingers + 1 thumb). Include the instruction:
+       "Both hands fully visible at the character's sides with all five fingers
+       on each hand clearly defined and anatomically correct — four fingers plus
+       one shorter opposable thumb per hand. Arms with correct proportions:
+       shoulder to elbow to wrist, single elbow joint per arm."
+       The prompt MUST end with "No text. No speech bubbles." Whether
        you may invent ADDITIONAL characters is decided by the AUTHORING RULES at the
        end of the user message.
 
@@ -229,6 +237,9 @@ CHARACTER_REFINE_SYSTEM_PROMPT = dedent("""\
     - Keep `id` unchanged.
     - Write narrative content in the language specified by `metadata.language`.
     - Keep `reference_prompt` in English; it must end with "No text. No speech bubbles."
+    - The `reference_prompt` MUST include an explicit instruction for anatomically
+      correct hands (5 fingers per hand: 4 fingers + 1 opposable thumb) and arms
+      (one elbow joint per arm, correct proportions shoulder→elbow→wrist).
     - Never name a real-world artist, studio, franchise or copyrighted character.
     - Output ONLY the JSON object. No markdown fences, no commentary.
     """)

@@ -113,6 +113,17 @@ export const api = {
       `/api/projects/${encodeURIComponent(name)}/steps/${step}/start`,
       { method: "POST", body: JSON.stringify(payload) }
     ),
+  regenerateAll: (name, step, qualityOverride) =>
+    request(
+      `/api/projects/${encodeURIComponent(name)}/steps/${step}/start`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          force_all: true,
+          quality_override: qualityOverride || undefined,
+        }),
+      }
+    ),
   // Convenience helper: launches a force-regeneration of a single target at
   // high quality, used by the per-item "Améliorer la qualité" buttons.
   upgradeQuality: (name, step, targetIds) =>

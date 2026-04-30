@@ -113,6 +113,7 @@ class StartStepPayload(BaseModel):
     # for this single run. Records the quality used per generated target so
     # the UI can flag drafts and offer a per-item upgrade.
     quality_override: str | None = None
+    force_all: bool = False
 
 
 def _register_api(app: FastAPI) -> None:
@@ -513,6 +514,30 @@ def _register_api(app: FastAPI) -> None:
     def start_script(name: str, payload: StartStepPayload = Body(default=StartStepPayload())) -> dict:
         if not service.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
+
+        if payload.force_all:
+            proj_dir = service.get_project_dir(name, _output_root())
+            script_path = proj_dir / "bdgen-script.json"
+            if script_path.exists():
+                bd_script = service.load_script_if_present(name, _output_root())
+                if bd_script:
+                    ref_ids = (
+                        [c.id for c in bd_script.characters]
+                        + [l.id for l in bd_script.locations]
+                        + [o.id for o in bd_script.objects]
+                    )
+                    compose_ids = []
+                    if bd_script.cover is not None:
+                        compose_ids.append("cover")
+                    for p in bd_script.pages:
+                        compose_ids.append(f"page_{p.page_number}")
+                    if bd_script.back_cover is not None:
+                        compose_ids.append("back")
+                    if ref_ids:
+                        service.mark_stale(proj_dir, "references", ref_ids)
+                    if compose_ids:
+                        service.mark_stale(proj_dir, "compose", compose_ids)
+                script_path.unlink()
 
         def runner(reporter, interrupt):
             service.run_step_script(
