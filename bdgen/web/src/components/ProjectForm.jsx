@@ -48,7 +48,7 @@ export const DEFAULT_CONFIG = {
   generation_options: {
     script_model: {
       provider: "anthropic",
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-4-20250514",
       temperature: 0.8,
     },
     image_model: {
@@ -74,6 +74,41 @@ export const DEFAULT_CONFIG = {
     render_dialogs_separately: true,
     output_format: "pdf",
   },
+};
+
+const SCRIPT_MODEL_OPTIONS = {
+  anthropic: [
+    { value: "claude-opus-4-1-20250805", label: "Claude Opus 4.1" },
+    { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
+    { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
+    { value: "claude-3-7-sonnet-20250219", label: "Claude Sonnet 3.7" },
+    { value: "claude-3-5-haiku-20241022", label: "Claude Haiku 3.5" },
+  ],
+  openai: [
+    { value: "gpt-5.2", label: "GPT-5.2" },
+    { value: "gpt-5.2-pro", label: "GPT-5.2 pro" },
+    { value: "gpt-5.1", label: "GPT-5.1" },
+    { value: "gpt-5-mini", label: "GPT-5 mini" },
+    { value: "gpt-5-nano", label: "GPT-5 nano" },
+    { value: "gpt-4.1", label: "GPT-4.1" },
+  ],
+  xai: [
+    { value: "grok-4.3", label: "Grok 4.3" },
+    { value: "grok-4.20-reasoning", label: "Grok 4.20 reasoning" },
+    { value: "grok-4-fast-reasoning", label: "Grok 4 Fast reasoning" },
+    { value: "grok-4-fast-non-reasoning", label: "Grok 4 Fast non-reasoning" },
+    { value: "grok-3", label: "Grok 3" },
+    { value: "grok-3-mini", label: "Grok 3 mini" },
+  ],
+};
+
+const IMAGE_MODEL_OPTIONS = {
+  openai: [
+    { value: "gpt-image-2", label: "GPT Image 2" },
+    { value: "gpt-image-1", label: "GPT Image 1" },
+    { value: "gpt-image-1-mini", label: "GPT Image 1 mini" },
+    { value: "chatgpt-image-latest", label: "ChatGPT image latest" },
+  ],
 };
 
 function blankCharacter(i) {
@@ -274,6 +309,16 @@ export default function ProjectForm({
       let cur = next;
       for (let i = 0; i < keys.length - 1; i++) cur = cur[keys[i]];
       cur[keys[keys.length - 1]] = value;
+      return next;
+    });
+  }
+
+  function setModelProvider(kind, provider, optionsByProvider) {
+    setConfig((c) => {
+      const next = structuredClone(c);
+      const modelConfig = next.generation_options[kind];
+      modelConfig.provider = provider;
+      modelConfig.model = optionsByProvider[provider]?.[0]?.value || "";
       return next;
     });
   }
@@ -1323,33 +1368,36 @@ export default function ProjectForm({
             <select
               className="select"
               value={config.generation_options.script_model.provider}
-              onChange={(e) => set("generation_options.script_model.provider", e.target.value)}
+              onChange={(e) => setModelProvider("script_model", e.target.value, SCRIPT_MODEL_OPTIONS)}
             >
               <option value="anthropic">Anthropic</option>
               <option value="openai">OpenAI</option>
+              <option value="xai">xAI</option>
             </select>
           </Field>
           <Field label="LLM scénario — modèle">
-            <input
-              className="input"
-              value={config.generation_options.script_model.model}
-              onChange={(e) => set("generation_options.script_model.model", e.target.value)}
+            <ModelSelector
+              provider={config.generation_options.script_model.provider}
+              model={config.generation_options.script_model.model}
+              optionsByProvider={SCRIPT_MODEL_OPTIONS}
+              onChange={(value) => set("generation_options.script_model.model", value)}
             />
           </Field>
           <Field label="Image — fournisseur">
             <select
               className="select"
               value={config.generation_options.image_model.provider}
-              onChange={(e) => set("generation_options.image_model.provider", e.target.value)}
+              onChange={(e) => setModelProvider("image_model", e.target.value, IMAGE_MODEL_OPTIONS)}
             >
               <option value="openai">OpenAI</option>
             </select>
           </Field>
           <Field label="Image — modèle">
-            <input
-              className="input"
-              value={config.generation_options.image_model.model}
-              onChange={(e) => set("generation_options.image_model.model", e.target.value)}
+            <ModelSelector
+              provider={config.generation_options.image_model.provider}
+              model={config.generation_options.image_model.model}
+              optionsByProvider={IMAGE_MODEL_OPTIONS}
+              onChange={(value) => set("generation_options.image_model.model", value)}
             />
           </Field>
           <Field label="Qualité image">
@@ -1591,6 +1639,43 @@ function Field({ label, hint, children }) {
       <label className="label">{label}</label>
       {children}
       {hint && <p className="text-xs text-[var(--color-mute)] mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function ModelSelector({ provider, model, optionsByProvider, onChange }) {
+  const options = optionsByProvider[provider] || [];
+  const known = options.some((option) => option.value === model);
+  const selectValue = known ? model : "__custom__";
+
+  return (
+    <div className="space-y-2">
+      <select
+        className="select"
+        value={selectValue}
+        onChange={(e) => {
+          if (e.target.value === "__custom__") {
+            onChange("");
+            return;
+          }
+          onChange(e.target.value);
+        }}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+        <option value="__custom__">Modele personnalise...</option>
+      </select>
+      {selectValue === "__custom__" && (
+        <input
+          className="input"
+          value={model}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Nom exact du modele"
+        />
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { api } from "../api.js";
 const PROVIDERS = [
   { id: "openai", label: "OpenAI", secret: "OPENAI_API_KEY", required: true },
   { id: "anthropic", label: "Anthropic", secret: "ANTHROPIC_API_KEY" },
+  { id: "xai", label: "xAI", secret: "XAI_API_KEY" },
   { id: "replicate", label: "Replicate", secret: "REPLICATE_API_TOKEN" },
 ];
 

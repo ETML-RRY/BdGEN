@@ -764,6 +764,10 @@ def _call_llm(
                 value, usage = _call_openai(system, user, model_config, output_type)
                 timer = stop_timer(started_at, started)
                 return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
+            if model_config.provider == "xai":
+                value, usage = _call_xai(system, user, model_config, output_type)
+                timer = stop_timer(started_at, started)
+                return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
             if model_config.provider == "anthropic":
                 value, usage = _call_anthropic(system, user, model_config, output_type)
                 timer = stop_timer(started_at, started)
@@ -815,6 +819,36 @@ def _call_openai(
     if message.parsed is None:
         raise RuntimeError(
             f"LLM returned no parsed content. Refusal: {message.refusal}"
+        )
+    return message.parsed, normalise_usage(getattr(completion, "usage", None))
+
+
+def _call_xai(
+    system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]
+) -> tuple[T, dict]:
+    """xAI Grok through its OpenAI-compatible Chat Completions endpoint."""
+    client = secret_store.xai_client()
+    kwargs = {
+        "model": model_config.model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "response_format": output_type,
+    }
+    try:
+        completion = client.chat.completions.parse(
+            temperature=model_config.temperature, **kwargs
+        )
+    except Exception as e:
+        if "temperature" not in str(e).lower():
+            raise
+        completion = client.chat.completions.parse(**kwargs)
+
+    message = completion.choices[0].message
+    if message.parsed is None:
+        raise RuntimeError(
+            f"Grok returned no parsed content. Refusal: {message.refusal}"
         )
     return message.parsed, normalise_usage(getattr(completion, "usage", None))
 

@@ -33,10 +33,16 @@ Editez ensuite `bdgen/.env` si vous voulez fournir les cles API par fichier d'en
 ```env
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
+XAI_API_KEY=xai-...
 REPLICATE_API_TOKEN=...
 ```
 
 L'application web permet aussi de configurer les cles via son coffre local chiffre au lancement.
+
+Pour la creation du scenario, les fournisseurs OpenAI, Anthropic et xAI sont
+disponibles. Le formulaire propose une liste de modeles recents par fournisseur
+et conserve un champ de saisie libre pour entrer manuellement un autre nom de
+modele.
 
 ### Lancer l'application web
 

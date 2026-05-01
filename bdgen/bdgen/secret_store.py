@@ -18,10 +18,13 @@ KDF_NAME = "pbkdf2-sha256"
 KDF_ITERATIONS = 600_000
 KEY_BYTES = 32
 
-SecretName = Literal["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "REPLICATE_API_TOKEN"]
+SecretName = Literal[
+    "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "XAI_API_KEY", "REPLICATE_API_TOKEN"
+]
 PROVIDERS: dict[str, SecretName] = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
+    "xai": "XAI_API_KEY",
     "replicate": "REPLICATE_API_TOKEN",
 }
 
@@ -194,6 +197,12 @@ def anthropic_client():
     import anthropic
 
     return anthropic.Anthropic(api_key=require_secret("ANTHROPIC_API_KEY"))
+
+
+def xai_client():
+    from openai import OpenAI
+
+    return OpenAI(api_key=require_secret("XAI_API_KEY"), base_url="https://api.x.ai/v1")
 
 
 def ensure_replicate_env() -> str:

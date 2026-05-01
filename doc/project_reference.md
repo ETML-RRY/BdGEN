@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-01 (8)
+Last updated: 2026-05-01 (9)
 
 ## Update Rule
 
@@ -166,6 +166,14 @@ Lint/format tooling:
 - Avoid changing `.env` unless the user explicitly asks.
 
 ## Change Log
+
+### 2026-05-01 (9)
+
+- Added xAI/Grok as a script-generation provider.
+- Backend: `secret_store.py` now supports `XAI_API_KEY` and an OpenAI-compatible xAI client; `script.py` dispatches `script_model.provider = "xai"` through the Grok chat-completions structured-output path.
+- Frontend: `ProjectForm.jsx` now offers provider-specific model dropdowns with a custom manual model entry, and includes recent OpenAI, Anthropic, and xAI script models; `SecretsPage.jsx` exposes the xAI key in the local vault UI.
+- Docs/config samples: added `XAI_API_KEY` to `.env.sample` and README, refreshed sample script model IDs, and rebuilt frontend static assets.
+- Verification: `make lint` passed; `npm run build` passed outside the sandbox after the known Windows/esbuild `spawn EPERM` sandbox failure.
 
 ### 2026-05-01 (8)
 
