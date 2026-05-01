@@ -17,7 +17,7 @@ export default function SecretsPage({ mode = "page", onReady }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const providers = status?.providers || {};
+  const providers = useMemo(() => status?.providers || {}, [status?.providers]);
   const hasConfiguredProvider = useMemo(
     () => Object.values(providers).some((p) => p.configured),
     [providers]
@@ -225,7 +225,7 @@ function ProviderInputs({ keys, setKeys, providers }) {
 
 function Shell({ isGate, children }) {
   return (
-    <div className={isGate ? "min-h-screen flex items-center justify-center p-6" : "max-w-4xl mx-auto px-6 py-8"}>
+    <div className={isGate ? "h-full min-h-0 flex items-center justify-center overflow-auto p-6" : "max-w-4xl mx-auto px-6 py-8"}>
       {children}
     </div>
   );

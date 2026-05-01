@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-04-30 (18)
+Last updated: 2026-05-01 (8)
 
 ## Update Rule
 
@@ -87,6 +87,9 @@ make portable
 make frontend
 make backend
 make desktop
+make lint
+make format
+make format-check
 make test
 make dev-desktop
 make clean
@@ -117,6 +120,18 @@ cd bdgen/web
 npm install
 npm run build
 npm run dev
+npm run lint
+npm run format
+npm run format:check
+```
+
+Desktop:
+
+```bash
+cd bdgen/desktop
+npm run lint
+npm run format
+npm run format:check
 ```
 
 ## Configuration And Dependencies
@@ -130,6 +145,12 @@ npm run dev
 Python dependencies currently include Pydantic, OpenAI, Anthropic, Pillow, Replicate, python-dotenv, FastAPI, Uvicorn, and python-multipart.
 
 Frontend dependencies currently include React, React Router, React Icons, Tailwind/Vite tooling.
+
+Lint/format tooling:
+
+- Backend: Ruff via `uv run ruff check .` and `uv run ruff format .`; initial lint profile is intentionally limited to critical checks while existing style debt remains.
+- Frontend: ESLint flat config and Prettier via `bdgen/web/package.json` scripts.
+- Desktop: ESLint flat config and Prettier via `bdgen/desktop/package.json` scripts.
 
 ## Tests
 
@@ -146,7 +167,70 @@ Frontend dependencies currently include React, React Router, React Icons, Tailwi
 
 ## Change Log
 
+### 2026-05-01 (8)
+
+- Cleaned up the lint warnings reported by `make lint`.
+- Frontend: added `eslint-plugin-react` so JSX component usage is recognized, removed unused props/imports, fixed hook dependency warnings, and disabled the React Fast Refresh export warning for the current file structure.
+- Verification: `make lint` now passes with no warnings across backend, frontend, and desktop.
+
+### 2026-05-01 (7)
+
+- Added lint/format tooling for all app parts.
+- Backend: `bdgen/pyproject.toml` now defines Ruff as a dev dependency plus Ruff lint/format configuration; `bdgen/uv.lock` was refreshed.
+- Frontend: added ESLint flat config, Prettier config/ignore, npm scripts, and refreshed `bdgen/web/package-lock.json`.
+- Desktop: added ESLint flat config, Prettier config/ignore, npm scripts, and refreshed `bdgen/desktop/package-lock.json`.
+- Root `Makefile`: added aggregate and per-part `lint`, `format`, and `format-check` targets.
+- `README.md`: documented the new quality commands; `doc/next_steps.md` no longer lists the completed linter/formatter task.
+- Verification: backend Ruff check passed, desktop ESLint/Prettier checks passed, and frontend ESLint passed with existing warnings only.
+
+### 2026-05-01 (6)
+
+- `README.md`: rewrote the usage documentation around two distinct workflows: web mode and portable exe mode.
+- The README now explains installation, launch commands, data locations, build output, and when to use each mode.
+- `doc/next_steps.md`: removed the completed README task from the remaining next steps.
+
+### 2026-05-01 (5)
+
+- Removed the baked white background from `bd_gen_logo.svg`, `bdgen/web/public/bd_gen_logo.svg`, and the built server copy so the in-app/header logo can render transparently.
+- Regenerated transparent PNG/ICO icon assets from the transparent root `bd_gen_logo.png`: web public logo/favicon, server static logo/favicon, `bdgen/desktop/assets/icon.png`, `bdgen/desktop/assets/icon.ico`, and root `bd_gen_logo.ico`.
+- `bdgen/desktop/main.js`: `BrowserWindow` now prefers `assets/icon.ico` on Windows, falling back to `icon.png` for other platforms or missing ICO files.
+- Verified icon alpha with Pillow, ran `node --check bdgen/desktop/main.js`, rebuilt the frontend with `npm run build`, and rebuilt the portable desktop executable at `build/portable/BdGEN 0.1.0.exe`.
+- Frontend esbuild and Electron Builder still require running outside the sandbox after `spawn EPERM`.
+
+### 2026-05-01 (4)
+
+- `bdgen/web/src/App.jsx` and `bdgen/web/src/pages/SecretsPage.jsx`: fixed the locked startup screen showing a vertical scrollbar after adding the custom Electron title bar.
+- The locked app wrapper now uses the available remaining height below the title bar, and the secrets gate shell uses `h-full` instead of `min-h-screen`.
+- Rebuilt the frontend with `npm run build`; esbuild still requires running outside the sandbox after `spawn EPERM`.
+
+### 2026-05-01 (3)
+
+- `bdgen/desktop/main.js`: fixed the erroneous "Le serveur local s'est arrete (code null)" dialog shown when closing the app normally.
+- The Electron process now tracks normal shutdown with `isQuitting` and suppresses backend exit alerts when the backend was intentionally killed during app quit.
+- Verified with `node --check bdgen/desktop/main.js`.
+
+### 2026-05-01 (2)
+
+- `bdgen/web/src/App.jsx`: when the app is locked by the secrets gate in Electron, the custom title bar now remains visible but hides app navigation.
+- Rebuilt the frontend with `npm run build`; as before, esbuild hit `spawn EPERM` in the sandbox and the build passed outside the sandbox.
+
+### 2026-05-01 (1)
+
+- Modernized the Electron shell by removing the native menu/frame and replacing it with an in-app custom title bar.
+- `bdgen/desktop/main.js`: added `Menu.setApplicationMenu(null)`, frameless `BrowserWindow` options, hidden title bar, custom background color, and IPC handlers for minimize/maximize/close/window state.
+- `bdgen/desktop/preload.js`: exposes safe `bdgenDesktop` window-control methods to the React app.
+- `bdgen/web/src/App.jsx`: uses the custom desktop title bar only when running under Electron, while preserving the standard web header for browser mode.
+- `bdgen/web/src/index.css`: added draggable/no-drag title bar regions and modern hover states for window controls.
+- Ran `node --check` for Electron files and `npm run build`; the build required running outside the sandbox after esbuild hit `spawn EPERM`.
+
 ### 2026-04-30 (18)
+
+- Updated the web and Electron app icons to use the root `bd_gen_logo.svg` as the visual source of truth.
+- `bdgen/web/public/bd_gen_logo.svg`: replaced the previous simplified icon with a square, centered SVG derived from the root logo so the favicon and in-app header match the official artwork.
+- `bdgen/web/public/favicon.png`, `bdgen/web/public/bd_gen_logo.png`, `bdgen/desktop/assets/icon.png`, and `bdgen/desktop/assets/icon.ico` are generated from that SVG for browser fallback and Windows desktop packaging.
+- `bdgen/desktop/package.json`: Electron Builder now embeds `assets/icon.ico`, and `files` includes `assets/**/*` so the packaged app keeps the same branding.
+- `bdgen/desktop/main.js`: `BrowserWindow` now uses `assets/icon.png` at runtime so the development window and packaged app show the BdGEN icon consistently.
+- Verification target: rebuild the frontend and run an Electron pack/build to confirm the previous "no app icon configured" warning is gone.
 
 - Fixed the packaged desktop app showing a blank page / `{"detail":"Not Found"}`.
 - Root cause: in the PyInstaller one-file backend, `bdgen/bdgen/server/__main__.py` is executed as a top-level script, so `Path(__file__).parent / "static"` does not point to the bundled frontend assets.

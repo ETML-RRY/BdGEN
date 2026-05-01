@@ -44,6 +44,39 @@ body {
   color: var(--color-ink);
 }
 
+.desktop-titlebar {
+  user-select: none;
+}
+
+.desktop-drag-region {
+  -webkit-app-region: drag;
+}
+
+.desktop-no-drag,
+.window-control {
+  -webkit-app-region: no-drag;
+}
+
+.window-control {
+  width: 46px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-soft);
+  transition: background 0.15s, color 0.15s;
+}
+
+.window-control:hover {
+  background: var(--color-paper-soft);
+  color: var(--color-ink);
+}
+
+.window-control-close:hover {
+  background: #d93d3d;
+  color: white;
+}
+
 /* Utility shorthand for the pastel "card" surface used everywhere. */
 .card {
   background-color: white;

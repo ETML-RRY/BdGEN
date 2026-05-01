@@ -4,7 +4,7 @@ const MIN_BRUSH = 8;
 const MAX_BRUSH = 80;
 const DEFAULT_BRUSH = 24;
 
-export default function InpaintModal({ item, step, onClose, onSubmit }) {
+export default function InpaintModal({ item, onClose, onSubmit }) {
   const imageRef = useRef(null);
   const canvasRef = useRef(null);
   const [brushSize, setBrushSize] = useState(DEFAULT_BRUSH);

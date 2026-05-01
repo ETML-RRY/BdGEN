@@ -11,7 +11,7 @@ PORTABLE_DIST := $(BUILD_DIR)/portable
 # the IDE has the root .venv active.
 export UV_PROJECT_ENVIRONMENT := ../.venv
 
-.PHONY: help build portable sync frontend backend desktop test dev-desktop clean
+.PHONY: help build portable sync frontend backend desktop lint lint-backend lint-frontend lint-desktop format format-backend format-frontend format-desktop format-check format-check-backend format-check-frontend format-check-desktop test dev-desktop clean
 
 help:
 	@echo "BdGEN build targets"
@@ -20,6 +20,9 @@ help:
 	@echo "  make frontend     Build the React frontend into FastAPI static assets"
 	@echo "  make backend      Build the local FastAPI server executable with PyInstaller"
 	@echo "  make desktop      Build the portable Electron executable"
+	@echo "  make lint         Run backend, frontend, and desktop linters"
+	@echo "  make format       Format backend, frontend, and desktop code"
+	@echo "  make format-check Check backend, frontend, and desktop formatting"
 	@echo "  make test         Run Python tests"
 	@echo "  make dev-desktop  Start Electron in development mode"
 	@echo "  make clean        Remove build outputs"
@@ -41,6 +44,39 @@ backend: frontend
 
 desktop: backend
 	cd $(DESKTOP_DIR) && npm install && npm run build:portable
+
+lint: lint-backend lint-frontend lint-desktop
+
+lint-backend:
+	cd $(APP_DIR) && uv run ruff check .
+
+lint-frontend:
+	cd $(WEB_DIR) && npm run lint
+
+lint-desktop:
+	cd $(DESKTOP_DIR) && npm run lint
+
+format: format-backend format-frontend format-desktop
+
+format-backend:
+	cd $(APP_DIR) && uv run ruff format .
+
+format-frontend:
+	cd $(WEB_DIR) && npm run format
+
+format-desktop:
+	cd $(DESKTOP_DIR) && npm run format
+
+format-check: format-check-backend format-check-frontend format-check-desktop
+
+format-check-backend:
+	cd $(APP_DIR) && uv run ruff format --check .
+
+format-check-frontend:
+	cd $(WEB_DIR) && npm run format:check
+
+format-check-desktop:
+	cd $(DESKTOP_DIR) && npm run format:check
 
 test:
 	cd $(APP_DIR) && uv run python -m unittest discover -s tests

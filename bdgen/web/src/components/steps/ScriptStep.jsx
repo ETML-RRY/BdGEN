@@ -55,7 +55,7 @@ export default function ScriptStep({ project, onChanged }) {
     if (last?.phase?.endsWith("_done") || last?.phase === "done") {
       onChanged();
     }
-  }, [stream.events.length, onChanged]);
+  }, [stream.events, onChanged]);
 
   if (isRunning) {
     const hasPartial =

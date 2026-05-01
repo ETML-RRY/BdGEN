@@ -31,7 +31,6 @@ const DEFAULT_BRUSH = 24;
  *   - supportsQuality: true to enable draft/final mode + per-item upgrade
  */
 export default function ImageStep({
-  project,
   onChanged,
   stepId,
   title,
@@ -76,7 +75,7 @@ export default function ImageStep({
     if (!stream.events.length) return;
     const last = stream.events[stream.events.length - 1];
     if (last?.artifact) onChanged();
-  }, [stream.events.length, onChanged]);
+  }, [stream.events, onChanged]);
 
   async function start({ force_ids, quality_override } = {}) {
     if (starting || isRunning) return;

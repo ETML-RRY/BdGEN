@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import {
   FaPlus,
   FaTrash,
-  FaImage,
   FaUpload,
   FaPalette,
   FaChevronDown,
@@ -961,7 +960,6 @@ export default function ProjectForm({
         <StyleReferenceCard
           url={styleRefLocalPreview || styleRefUrl}
           onPickImage={() => setStyleFromImageOpen(true)}
-          artStyle={config.style.art_style}
           config={config}
           set={set}
         />
@@ -1818,7 +1816,7 @@ function ObjectPhotoField({ slot, onPick, onClear }) {
 }
 
 
-function StyleReferenceCard({ url, onPickImage, artStyle, config, set }) {
+function StyleReferenceCard({ url, onPickImage, config, set }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="flex items-start gap-4">

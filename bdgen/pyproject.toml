@@ -17,3 +17,24 @@ dependencies = [
     "cryptography>=42.0",
     "pyinstaller>=6.0",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [
+    "bdgen/server/static",
+]
+
+[tool.ruff.lint]
+# Start with critical checks so linting is usable immediately on the existing codebase.
+# Broaden this list once the current style debt has been cleaned up.
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

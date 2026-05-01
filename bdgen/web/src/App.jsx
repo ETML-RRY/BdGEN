@@ -1,5 +1,6 @@
 import { Routes, Route, Link, NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { FiMinus, FiSquare, FiX } from "react-icons/fi";
 import { api } from "./api.js";
 import Home from "./pages/Home.jsx";
 import Wizard from "./pages/Wizard.jsx";
@@ -9,6 +10,7 @@ import SecretsPage from "./pages/SecretsPage.jsx";
 
 export default function App() {
   const [secretsStatus, setSecretsStatus] = useState(null);
+  const isDesktop = Boolean(window.bdgenDesktop);
 
   useEffect(() => {
     api.secretsStatus()
@@ -33,34 +35,19 @@ export default function App() {
   }
 
   if (shouldGate) {
-    return <SecretsPage mode="gate" onReady={setSecretsStatus} />;
+    return (
+      <div className="h-full flex flex-col overflow-hidden">
+        {isDesktop && <DesktopTitleBar hideNav />}
+        <main className="flex-1 min-h-0">
+          <SecretsPage mode="gate" onReady={setSecretsStatus} />
+        </main>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-full flex flex-col">
-      <header className="border-b border-[var(--color-line)] bg-white/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 font-semibold text-lg">
-            <img
-              src="/bd_gen_logo.svg"
-              alt="Logo BdGEN"
-              className="w-10 h-10 object-contain"
-            />
-            <span>BdGEN</span>
-            <span className="text-sm font-normal text-[var(--color-mute)]">
-              · générateur de bandes dessinées
-            </span>
-          </Link>
-          <nav className="text-sm text-[var(--color-ink-soft)]">
-            <NavLink to="/" end className="px-3 py-1.5 hover:text-[var(--color-ink)]">
-              Accueil
-            </NavLink>
-            <NavLink to="/settings/secrets" className="px-3 py-1.5 hover:text-[var(--color-ink)]">
-              Cles API
-            </NavLink>
-          </nav>
-        </div>
-      </header>
+      {isDesktop ? <DesktopTitleBar /> : <WebHeader />}
 
       <main className="flex-1">
         <Routes>
@@ -76,5 +63,97 @@ export default function App() {
         BdGEN · usage local
       </footer>
     </div>
+  );
+}
+
+function WebHeader() {
+  return (
+    <header className="border-b border-[var(--color-line)] bg-white/80 backdrop-blur sticky top-0 z-10">
+      <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between">
+        <BrandLink />
+        <AppNav />
+      </div>
+    </header>
+  );
+}
+
+function DesktopTitleBar({ hideNav = false }) {
+  const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    window.bdgenDesktop.isMaximized().then(setMaximized);
+    return window.bdgenDesktop.onMaximizedChange(setMaximized);
+  }, []);
+
+  return (
+    <header className="desktop-titlebar sticky top-0 z-20 border-b border-[var(--color-line)] bg-white/90 backdrop-blur">
+      <div className="desktop-drag-region flex h-12 items-center justify-between pl-4">
+        <BrandLink compact />
+        <div className="desktop-no-drag flex h-full items-center gap-4">
+          {!hideNav && <AppNav compact />}
+          <div className="flex h-full">
+            <button
+              type="button"
+              className="window-control"
+              title="Minimiser"
+              onClick={() => window.bdgenDesktop.minimize()}
+            >
+              <FiMinus aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="window-control"
+              title={maximized ? "Restaurer" : "Agrandir"}
+              onClick={() => window.bdgenDesktop.toggleMaximize().then(setMaximized)}
+            >
+              <FiSquare aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="window-control window-control-close"
+              title="Fermer"
+              onClick={() => window.bdgenDesktop.close()}
+            >
+              <FiX aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function BrandLink({ compact = false }) {
+  return (
+    <Link to="/" className="desktop-no-drag flex items-center gap-2 font-semibold text-lg">
+      <img
+        src="/bd_gen_logo.svg"
+        alt="Logo BdGEN"
+        className={compact ? "w-8 h-8 object-contain" : "w-10 h-10 object-contain"}
+      />
+      <span>BdGEN</span>
+      {!compact && (
+        <span className="text-sm font-normal text-[var(--color-mute)]">
+          générateur de bandes dessinées
+        </span>
+      )}
+    </Link>
+  );
+}
+
+function AppNav({ compact = false }) {
+  const linkClass = compact
+    ? "px-2.5 py-1.5 rounded-md hover:bg-[var(--color-paper-soft)] hover:text-[var(--color-ink)]"
+    : "px-3 py-1.5 hover:text-[var(--color-ink)]";
+
+  return (
+    <nav className="text-sm text-[var(--color-ink-soft)]">
+      <NavLink to="/" end className={linkClass}>
+        Accueil
+      </NavLink>
+      <NavLink to="/settings/secrets" className={linkClass}>
+        Cles API
+      </NavLink>
+    </nav>
   );
 }

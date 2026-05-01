@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const net = require("net");
@@ -6,11 +6,13 @@ const path = require("path");
 
 let backend = null;
 let mainWindow = null;
+let isQuitting = false;
 
 async function createWindow() {
   const port = await findFreePort();
   const appData = app.getPath("userData");
   const outputRoot = path.join(app.getPath("documents"), "BdGEN");
+  const icon = resolveWindowIcon();
 
   await startBackend({ port, appData, outputRoot });
   await waitForHealth(port);
@@ -20,12 +22,20 @@ async function createWindow() {
     height: 900,
     minWidth: 1000,
     minHeight: 700,
+    frame: false,
+    titleBarStyle: "hidden",
+    autoHideMenuBar: true,
+    backgroundColor: "#fbf8f3",
+    icon,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+
+  mainWindow.on("maximize", () => mainWindow.webContents.send("window:maximized", true));
+  mainWindow.on("unmaximize", () => mainWindow.webContents.send("window:maximized", false));
 
   await mainWindow.loadURL(`http://127.0.0.1:${port}/`);
 }
@@ -49,8 +59,9 @@ async function startBackend({ port, appData, outputRoot }) {
 
   backend.stdout.on("data", (data) => console.log(`[backend] ${data}`));
   backend.stderr.on("data", (data) => console.error(`[backend] ${data}`));
-  backend.on("exit", (code) => {
-    if (code !== 0 && mainWindow) {
+  backend.on("exit", (code, signal) => {
+    const expectedStop = isQuitting || backend?.killed || signal === "SIGTERM";
+    if (!expectedStop && code !== 0 && mainWindow && !mainWindow.isDestroyed()) {
       dialog.showErrorBox("BdGEN", `Le serveur local s'est arrete (code ${code}).`);
     }
   });
@@ -75,6 +86,18 @@ function resolveBackendExecutable() {
     args: ["-m", "bdgen.server"],
     cwd: path.resolve(__dirname, ".."),
   };
+}
+
+function resolveWindowIcon() {
+  const iconFile = process.platform === "win32" ? "icon.ico" : "icon.png";
+  const candidates = [
+    path.join(__dirname, "assets", iconFile),
+    path.join(process.resourcesPath || path.join(__dirname, ".."), "assets", iconFile),
+    path.join(__dirname, "assets", "icon.png"),
+    path.join(process.resourcesPath || path.join(__dirname, ".."), "assets", "icon.png"),
+  ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate));
 }
 
 function findFreePort() {
@@ -103,13 +126,42 @@ async function waitForHealth(port) {
 }
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+  registerWindowControls();
+
   createWindow().catch((err) => {
     dialog.showErrorBox("BdGEN", err.message || String(err));
     app.quit();
   });
 });
 
+function registerWindowControls() {
+  ipcMain.handle("window:minimize", () => {
+    BrowserWindow.getFocusedWindow()?.minimize();
+  });
+
+  ipcMain.handle("window:toggleMaximize", () => {
+    const window = BrowserWindow.getFocusedWindow();
+    if (!window) return false;
+    if (window.isMaximized()) {
+      window.unmaximize();
+      return false;
+    }
+    window.maximize();
+    return true;
+  });
+
+  ipcMain.handle("window:close", () => {
+    BrowserWindow.getFocusedWindow()?.close();
+  });
+
+  ipcMain.handle("window:isMaximized", () => {
+    return BrowserWindow.getFocusedWindow()?.isMaximized() || false;
+  });
+}
+
 app.on("before-quit", () => {
+  isQuitting = true;
   if (backend && !backend.killed) {
     backend.kill();
   }

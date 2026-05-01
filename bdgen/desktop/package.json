@@ -7,18 +7,26 @@
     "dev": "electron .",
     "build": "npm run build:portable",
     "build:portable": "electron-builder --win portable --config.directories.output=../../build/portable",
+    "lint": "eslint .",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
     "pack": "electron-builder --dir"
   },
   "devDependencies": {
+    "@eslint/js": "^9.17.0",
     "electron": "^31.0.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "eslint": "^9.17.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2"
   },
   "build": {
     "appId": "ch.bdgen.desktop",
     "productName": "BdGEN",
     "files": [
       "main.js",
-      "preload.js"
+      "preload.js",
+      "assets/**/*"
     ],
     "extraResources": [
       {
@@ -27,6 +35,7 @@
       }
     ],
     "win": {
+      "icon": "assets/icon.ico",
       "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false,
       "target": [

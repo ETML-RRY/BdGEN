@@ -1,152 +1,225 @@
 # BdGEN
 
-Génération de bandes dessinées (BD) à partir d'un fichier JSON de description, en utilisant les modèles génératifs d'OpenAI (LLM pour le scénario, `gpt-image-2` pour les planches).
+BdGEN est une application de generation de bandes dessinees a partir d'une description de projet. Elle combine un backend Python/FastAPI, une interface React et une application Electron portable pour Windows.
 
-## Installation
+Le projet peut etre utilise de deux facons principales :
 
-Requiert Python 3.12+ et [uv](https://docs.astral.sh/uv/).
+- **Mode web** : le serveur local est lance manuellement, puis l'interface est ouverte dans un navigateur.
+- **Mode exe portable** : un executable Windows autonome lance l'application Electron et son serveur local embarque.
+
+## Prerequis
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
+- Node.js et npm
+- Windows pour la construction et l'utilisation de l'exe portable
+
+## Mode Web
+
+Le mode web est le plus pratique pour le developpement, le debug et les tests rapides. Il lance le backend FastAPI localement, puis sert l'interface web dans le navigateur.
+
+### Installation
+
+Depuis la racine du depot :
 
 ```bash
+cd bdgen
 uv sync
-cp .env.sample .env
-# éditer .env et y mettre votre OPENAI_API_KEY
+copy .env.sample .env
 ```
 
-## Démarrage rapide
+Editez ensuite `bdgen/.env` si vous voulez fournir les cles API par fichier d'environnement :
 
-1. **Décrire votre BD** : copiez `bdgen.sample.json` vers `mon-projet.json` et adaptez (titre, synopsis, personnages, style, nombre de pages).
+```env
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+REPLICATE_API_TOKEN=...
+```
 
-2. **Lancer le wizard interactif** :
+L'application web permet aussi de configurer les cles via son coffre local chiffre au lancement.
 
-   ```bash
-   uv run main.py wizard mon-projet.json
-   ```
+### Lancer l'application web
 
-   Le wizard vous guide à travers les 3 étapes principales du pipeline, puis peut proposer une 4ᵉ étape optionnelle d'upscale local CPU si elle est activée dans la configuration. À chaque étape vous pouvez accepter, visualiser le résultat, ou saisir un feedback qui sera intégré à la régénération.
-
-Tout est généré dans `./output/<project>/`.
-
-## Pipeline
-
-| Étape | Commande | Sortie |
-|---|---|---|
-| 1. Scénario | `script` | `bdgen-script.json` (LLM développe le synopsis en script détaillé : pages, cases, dialogues) |
-| 2. Références visuelles | `references` | `references/characters/*.png`, `references/locations/*.png` (planches modèle pour cohérence) |
-| 3. Composition | `compose` | `pages/page_XX.png` + couverture `cover.png` + 4ème de couv `back.png` + assemblage `<project>.pdf` (page-level avec bulles intégrées) |
-| 4. Upscale local (optionnel) | `upscale` | `pages_upscaled/page_XX.*` + couverture / dos en version agrandie sur CPU local |
-
-### Pas-à-pas (alternative au wizard)
+Construisez d'abord le frontend React dans les assets statiques du serveur :
 
 ```bash
+cd bdgen/web
+npm install
+npm run build
+```
+
+Lancez ensuite le serveur FastAPI :
+
+```bash
+cd ..
+uv run python -m bdgen.server
+```
+
+Ouvrez l'application dans le navigateur :
+
+```text
+http://127.0.0.1:8000
+```
+
+### Developpement frontend
+
+Pour travailler avec le rechargement a chaud de Vite, utilisez deux terminaux.
+
+Terminal 1, API :
+
+```bash
+cd bdgen
+uv run python -m bdgen.server
+```
+
+Terminal 2, frontend :
+
+```bash
+cd bdgen/web
+npm run dev
+```
+
+Ouvrez ensuite :
+
+```text
+http://127.0.0.1:5173
+```
+
+Dans ce mode, Vite sert l'interface et proxy les appels API vers le serveur local.
+
+### Donnees en mode web
+
+Par defaut, les projets generes sont stockes sous :
+
+```text
+bdgen/output/<nom-du-projet>/
+```
+
+Le serveur peut utiliser un autre dossier si la variable `BDGEN_OUTPUT_ROOT` est definie.
+
+## Mode Exe Portable
+
+Le mode exe portable est le mode utilisateur final. Il produit un executable Windows sous `build/portable/`, sans installateur. L'utilisateur lance directement `BdGEN 0.1.0.exe`.
+
+Dans ce mode :
+
+- Electron affiche la fenetre de l'application.
+- Le serveur FastAPI est lance automatiquement en arriere-plan.
+- Le backend PyInstaller est embarque dans les ressources de l'application.
+- Il n'est pas necessaire d'ouvrir un navigateur ni de lancer `uv run python -m bdgen.server`.
+
+### Construire l'exe portable
+
+Depuis la racine du depot :
+
+```bash
+make portable
+```
+
+La commande enchaine :
+
+1. `uv sync`
+2. build du frontend React
+3. build du serveur local avec PyInstaller
+4. build de l'application Electron portable
+
+Le resultat attendu est :
+
+```text
+build/portable/BdGEN 0.1.0.exe
+```
+
+`make build` et `make desktop` produisent aussi l'executable portable. Il n'y a plus de cible installateur.
+
+### Lancer l'exe portable
+
+Double-cliquez sur :
+
+```text
+build/portable/BdGEN 0.1.0.exe
+```
+
+Au lancement, l'application affiche sa fenetre Electron personnalisee. Si le coffre de secrets n'est pas encore configure ou deverrouille, la page de verrouillage apparait avant l'acces au reste de l'application.
+
+### Donnees en mode exe portable
+
+En mode Electron, les projets sont ecrits dans le dossier Documents de l'utilisateur :
+
+```text
+Documents/BdGEN/
+```
+
+Les donnees de configuration de l'application Electron utilisent le dossier utilisateur de l'application gere par Electron.
+
+## Pipeline de generation
+
+BdGEN suit quatre etapes principales :
+
+| Etape | Role | Sortie |
+| --- | --- | --- |
+| Script | Developpe la description du projet en script detaille | `bdgen-script.json` |
+| References | Genere les planches modele des personnages, decors et objets | `references/` |
+| Planches | Compose les pages finales, la couverture et la quatrieme de couverture | `pages/`, PDF final |
+| Upscale | Optionnel, agrandit les images finales | `pages_upscaled/` |
+
+## Commandes utiles
+
+Depuis la racine du depot :
+
+```bash
+make frontend     # build React vers les assets FastAPI
+make backend      # build du serveur local PyInstaller
+make portable     # build complet de l'exe portable
+make dev-desktop  # lance Electron en mode developpement
+make lint         # lance les linters backend, frontend et desktop
+make format       # formate backend, frontend et desktop
+make format-check # verifie le format backend, frontend et desktop
+make test         # tests Python
+make clean        # nettoie les sorties de build
+```
+
+Depuis `bdgen/`, les commandes CLI restent disponibles :
+
+```bash
+uv run main.py wizard mon-projet.json
+uv run main.py run mon-projet.json
 uv run main.py script mon-projet.json
 uv run main.py references ./output/mon-projet/bdgen-script.json
 uv run main.py compose ./output/mon-projet/bdgen-script.json
 uv run main.py upscale ./output/mon-projet/bdgen-script.json
 ```
 
-### Pipeline complet non-interactif
+Commandes qualite par partie :
 
 ```bash
-uv run main.py run mon-projet.json
+# Backend Python
+cd bdgen
+uv run ruff check .
+uv run ruff format .
+
+# Frontend React
+cd bdgen/web
+npm run lint
+npm run format
+npm run format:check
+
+# Desktop Electron
+cd bdgen/desktop
+npm run lint
+npm run format
+npm run format:check
 ```
 
-Si `generation_options.upscale.enabled` vaut `true`, la commande `run` enchaîne aussi l'étape d'upscale local après `compose`.
+## Structure d'un projet genere
 
-## Itérer avec feedback
-
-Toute saisie via le wizard est consignée dans `./output/<project>/bdgen-feedback.json` et automatiquement réinjectée dans les prompts lors des régénérations. L'historique est cumulatif : chaque feedback enrichit le contexte au lieu d'écraser le précédent.
-
-Le fichier `bdgen-feedback.json` est éditable à la main pour ajuster ou nettoyer les feedbacks.
-
-Pour forcer une régénération complète d'une étape (hors wizard) :
-
-```bash
-uv run main.py references ./output/mon-projet/bdgen-script.json --force
-```
-
-Pour ne régénérer qu'un seul élément, supprimez son fichier puis relancez la commande — les autres seront skippés.
-
-## Interface web
-
-Une interface web React expose le même pipeline avec un wizard interactif et
-des retouches granulaires (un personnage, un lieu, une planche, une
-référence).
-
-```bash
-# 1. Construire le frontend (une fois)
-cd web && npm install && npm run build && cd ..
-
-# 2. Lancer le serveur
-uv run python -m bdgen.server
-# → http://127.0.0.1:8000
-```
-
-Pour le développement frontend, lancer en parallèle :
-
-```bash
-# terminal 1 (API)
-uv run python -m bdgen.server
-
-# terminal 2 (Vite dev avec HMR, proxy /api → 8000)
-cd web && npm run dev
-# → http://127.0.0.1:5173
-```
-
-L'interface permet de sauvegarder un projet sous forme de fichier `.bdgen`
-(une archive zip du dossier projet) et d'en réimporter un. Une seule
-génération est autorisée à la fois ; un bandeau s'affiche pour signaler
-qu'une autre génération est en cours.
-
-## Upscale local CPU
-
-Une étape optionnelle `Upscale` est disponible après `Planches`.
-
-- Elle fonctionne **entièrement en local** et **sur CPU uniquement**.
-- Elle charge un vrai modèle local via `from pruna import SmashedModel`.
-- Le dossier du modèle doit être disponible on-prem, par exemple `./models/p-image-upscale-v1`.
-
-Configuration possible dans `bdgen.json` :
-
-```json
-{
-   "generation_options": {
-      "upscale": {
-         "enabled": true,
-         "mode": "target",
-         "target_megapixels": 4,
-         "scale_factor": 2.0,
-         "output_format": "png",
-         "output_quality": 90
-      }
-   }
-}
-```
-
-Le provider, le runtime et le chemin du modèle Pruna sont fixés dans la configuration de base de l'outil ; ils ne sont plus exposés dans l'interface.
-
-Le chargement local suit ce schéma :
-
-```python
-from pruna import SmashedModel
-
-model = SmashedModel.load("./models/p-image-upscale-v1", device="cpu")
-output_image = model.predict(image)
-```
-
-## Coût indicatif (gpt-image-2 high quality)
-
-- BD courte (~6 pages) : **~$2** (compose page-level) + ~$0.70 (références) ≈ **$3**
-- Album (~48 pages) : **~$15** + ~$2 ≈ **$17**
-
-## Structure d'un projet généré
-
-```
+```text
 output/mon-projet/
-├── bdgen-script.json       script détaillé (généré par le LLM)
-├── bdgen-feedback.json     historique des feedbacks utilisateur
-├── references/
-│   ├── characters/         planches-modèle des personnages
-│   └── locations/          planches-modèle des décors
-├── pages/                  pages finales en PNG (+ cover.png et back.png)
-└── mon-projet.pdf          assemblage final (cover + pages + back)
+  bdgen.json
+  bdgen-script.json
+  bdgen-feedback.json
+  bdgen-stats.json
+  references/
+  pages/
+  pages_upscaled/
+  mon-projet.pdf
 ```
