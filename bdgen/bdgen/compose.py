@@ -8,7 +8,7 @@ from textwrap import dedent
 from openai import OpenAI
 from PIL import Image
 
-from . import secret_store
+from . import secret_store, xai_images
 from .feedback import FeedbackStore, feedback_block
 from .image_rules import IMAGE_CONSTRAINTS
 from .references import STYLE_REF_LABEL as _STYLE_REF_LABEL
@@ -581,6 +581,32 @@ def _call_image(
     target: Path,
     refs: list[Path],
 ) -> dict:
+    if image_model.provider == "xai":
+        inputs = [(p.name, p.read_bytes(), "image/png") for p in refs]
+        if inputs:
+            image_bytes, usage = xai_images.edit_image(
+                model=image_model.model,
+                prompt=prompt,
+                size=PAGE_SIZE,
+                quality=image_model.quality,
+                inputs=inputs,
+            )
+        else:
+            image_bytes, usage = xai_images.generate_image(
+                model=image_model.model,
+                prompt=prompt,
+                size=PAGE_SIZE,
+                quality=image_model.quality,
+            )
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_bytes(image_bytes)
+        tmp.replace(target)
+        return {
+            "usage": normalise_usage(usage),
+            "prompt": prompt,
+            "input_images": len(refs),
+        }
+
     if refs:
         files = [(p.name, p.read_bytes(), "image/png") for p in refs]
         edit_kwargs = dict(
@@ -773,11 +799,13 @@ def _build_back_prompt(
 
 
 def _client(image_model: ImageModelConfig) -> OpenAI:
-    if image_model.provider != "openai":
-        raise NotImplementedError(
-            f"Provider '{image_model.provider}' is not yet supported."
-        )
-    return secret_store.openai_client()
+    if image_model.provider == "openai":
+        return secret_store.openai_client()
+    if image_model.provider == "xai":
+        return secret_store.xai_client()
+    raise NotImplementedError(
+        f"Provider '{image_model.provider}' is not yet supported."
+    )
 
 
 def _is_complete(path: Path) -> bool:

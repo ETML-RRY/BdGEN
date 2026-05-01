@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-01 (9)
+Last updated: 2026-05-01 (10)
 
 ## Update Rule
 
@@ -166,6 +166,14 @@ Lint/format tooling:
 - Avoid changing `.env` unless the user explicitly asks.
 
 ## Change Log
+
+### 2026-05-01 (10)
+
+- Added optional xAI image generation while keeping OpenAI as the default image path.
+- Backend: new `xai_images.py` adapter calls xAI Imagine JSON endpoints with base64 output; `references.py` and `compose.py` now route `image_model.provider = "xai"` through `grok-imagine-image` for image generation/editing with reference inputs.
+- Frontend: `ProjectForm.jsx` now offers xAI as an image provider with `grok-imagine-image` in the model dropdown and still allows manual model entry.
+- Scope note: masked inpainting remains OpenAI-only because xAI image edits use JSON image inputs, not OpenAI's multipart mask workflow.
+- Verification: `make lint` passed; `npm run build` passed outside the sandbox after the known Windows/esbuild `spawn EPERM`; `uv run python -m unittest discover -s tests` passed outside the sandbox after the known uv cache permission issue.
 
 ### 2026-05-01 (9)
 

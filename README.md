@@ -40,9 +40,10 @@ REPLICATE_API_TOKEN=...
 L'application web permet aussi de configurer les cles via son coffre local chiffre au lancement.
 
 Pour la creation du scenario, les fournisseurs OpenAI, Anthropic et xAI sont
-disponibles. Le formulaire propose une liste de modeles recents par fournisseur
-et conserve un champ de saisie libre pour entrer manuellement un autre nom de
-modele.
+disponibles. Pour les images, OpenAI reste le choix par defaut et xAI peut etre
+selectionne avec `grok-imagine-image`. Le formulaire propose une liste de
+modeles recents par fournisseur et conserve un champ de saisie libre pour
+entrer manuellement un autre nom de modele.
 
 ### Lancer l'application web
 
