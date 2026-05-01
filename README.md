@@ -217,6 +217,34 @@ npm run format
 npm run format:check
 ```
 
+## CI/CD et versions
+
+Le workflow GitHub Actions `.github/workflows/release-portable.yml` se lance a
+chaque push sur `main`.
+
+Il execute d'abord les controles qualite :
+
+- lint backend, frontend et desktop ;
+- `npm audit --audit-level=critical` sur le frontend ;
+- `npm audit --audit-level=critical` sur l'application desktop.
+
+Si ces controles passent, le workflow calcule automatiquement la prochaine
+version SemVer, construit l'executable Windows portable, publie l'artefact du
+workflow, cree le tag Git `vX.Y.Z`, puis cree ou met a jour la release GitHub
+avec l'executable portable.
+
+Le numero de version est deduit des messages de commit depuis le dernier tag
+`vX.Y.Z` :
+
+| Type de version | Message de commit | Exemple |
+| --- | --- | --- |
+| Majeure | `BREAKING CHANGE:` dans le corps du commit, ou `!` apres le type | `feat!: changer le format des projets` |
+| Mineure | type `feat` | `feat: ajouter un fournisseur image` |
+| Patch | tout autre message | `fix: corriger la fermeture desktop` |
+
+Par defaut, si aucun commit ne demande une version majeure ou mineure, la
+version suivante est un patch.
+
 ## Structure d'un projet genere
 
 ```text

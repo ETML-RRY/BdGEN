@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-01 (10)
+Last updated: 2026-05-01 (11)
 
 ## Update Rule
 
@@ -166,6 +166,14 @@ Lint/format tooling:
 - Avoid changing `.env` unless the user explicitly asks.
 
 ## Change Log
+
+### 2026-05-01 (11)
+
+- Added GitHub Actions CI/CD workflow `.github/workflows/release-portable.yml`.
+- Workflow runs on every push to `main`: installs backend/frontend/desktop dependencies, runs all linters, runs `npm audit --audit-level=critical` for frontend and desktop, then builds the Windows portable executable only if quality gates pass.
+- Release job computes the next SemVer tag from commit messages since the latest `vX.Y.Z` tag, or from the desktop package version when no release tag exists yet: `BREAKING CHANGE` or `type!` => major, `feat` => minor, otherwise patch; it updates the desktop package version for packaging, uploads a workflow artifact, creates the git tag, and publishes/updates the GitHub Release with the portable `.exe`.
+- `README.md` now documents the CI/CD flow and the commit message conventions for major/minor/patch releases.
+- Verification: `make lint` passed locally; `npm audit --audit-level=critical` passed locally for frontend and desktop (frontend still reports moderate Vite/esbuild advisories, desktop still reports high Electron/electron-builder transitive advisories, but no critical advisories); full workflow execution requires GitHub Actions because it depends on hosted Windows runners and GitHub release permissions.
 
 ### 2026-05-01 (10)
 
