@@ -7,7 +7,7 @@
 [![Electron](https://img.shields.io/badge/desktop-Electron-47848f)](https://www.electronjs.org/)
 ![Windows](https://img.shields.io/badge/Windows-portable.exe-0078d4)
 ![macOS](https://img.shields.io/badge/macOS-DMG_unsigned-000000)
-![Linux](https://img.shields.io/badge/Linux-planned-fcc624)
+![Linux](https://img.shields.io/badge/Linux-AppImage-fcc624)
 
 BdGEN is an application for generating comic books from a project description. It combines a Python/FastAPI backend, a React interface, and an Electron desktop application.
 
@@ -21,7 +21,7 @@ The project can be used in two main ways:
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
 - Node.js and npm
-- The target OS for building a native desktop package: Windows for `.exe`, macOS for `.dmg`, Linux for future Linux artifacts
+- The target OS for building a native desktop package: Windows for `.exe`, macOS for `.dmg`, Linux for `.AppImage`
 
 ## Web Mode
 
@@ -127,7 +127,7 @@ From the repository root:
 ```bash
 make portable  # Windows: build/portable/*.exe
 make macos     # macOS: build/mac/*.dmg unsigned
-make linux     # Linux: build/linux/*, target prepared for later
+make linux     # Linux: build/linux/*.AppImage
 ```
 
 These commands run:
@@ -188,7 +188,7 @@ make frontend     # build React into the FastAPI assets
 make backend      # build the local PyInstaller server
 make portable     # full build of the Windows portable exe
 make macos        # build the unsigned macOS DMG
-make linux        # Linux build prepared for AppImage
+make linux        # build the Linux AppImage
 make dev-desktop  # start Electron in development mode
 make lint         # run backend, frontend, and desktop linters
 make format       # format backend, frontend, and desktop code
@@ -239,7 +239,7 @@ It first runs quality checks:
 - `npm audit --audit-level=critical` on the frontend;
 - `npm audit --audit-level=critical` on the desktop application.
 
-If these checks pass, the workflow automatically computes the next SemVer version, creates the `vX.Y.Z` Git tag, then starts a desktop build matrix. The matrix builds the Windows portable executable on a Windows runner and the unsigned macOS DMG on a macOS runner. Once the artifacts are generated, the workflow creates or updates the GitHub release with the available assets. The packaging structure keeps a Linux target ready, but Linux publishing will be added after the distribution format is validated.
+If these checks pass, the workflow automatically computes the next SemVer version, creates the `vX.Y.Z` Git tag, then starts a desktop build matrix. The matrix builds the Windows portable executable on a Windows runner, the unsigned macOS DMG on a macOS runner, and the Linux AppImage on an Ubuntu runner. Once the artifacts are generated, the workflow creates or updates the GitHub release with the available assets.
 
 The version number is inferred from commit messages since the latest `vX.Y.Z` tag:
 

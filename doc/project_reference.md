@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-04 (3)
+Last updated: 2026-05-04 (4)
 
 ## Update Rule
 
@@ -100,7 +100,7 @@ make clean
 Desktop builds are platform-specific. `make build`, `make portable`, and
 `make desktop` still produce the portable Windows executable under
 `build/portable/`. `make macos` produces an unsigned DMG under `build/mac/`.
-`make linux` is prepared for the future Linux AppImage path under `build/linux/`.
+`make linux` produces a Linux AppImage under `build/linux/`.
 macOS and Linux backend binaries are named `bdgen-server` without the Windows
 `.exe` extension.
 
@@ -171,6 +171,12 @@ Lint/format tooling:
 - Avoid changing `.env` unless the user explicitly asks.
 
 ## Change Log
+
+### 2026-05-04 (4)
+
+- `.github/workflows/release-portable.yml`: added Linux to the desktop build matrix on `ubuntu-latest`, uploading and publishing `build/linux/*.AppImage` release assets.
+- `README.md`: documented Linux AppImage support as an active build/release target instead of a planned target.
+- `doc/project_reference.md`: updated the desktop build notes and recorded the Linux release addition.
 
 ### 2026-05-04 (3)
 

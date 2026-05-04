@@ -164,6 +164,13 @@ jobs:
             backend_binary: ../build/backend/bdgen-server
             artifact_name: macos-dmg-unsigned
             artifact_path: build/mac/*.dmg
+          - platform: linux
+            label: Linux AppImage
+            os: ubuntu-latest
+            build_script: build:linux
+            backend_binary: ../build/backend/bdgen-server
+            artifact_name: linux-appimage
+            artifact_path: build/linux/*.AppImage
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -260,7 +267,7 @@ jobs:
           version="${{ needs.version.outputs.version }}"
 
           shopt -s nullglob
-          assets=(release-artifacts/*.exe release-artifacts/*.dmg)
+          assets=(release-artifacts/*.exe release-artifacts/*.dmg release-artifacts/*.AppImage)
           if [ ${#assets[@]} -eq 0 ]; then
             echo "No release assets found." >&2
             exit 1
@@ -276,6 +283,7 @@ jobs:
           Artifacts:
           - Windows portable executable.
           - Unsigned macOS DMG.
+          - Linux AppImage.
 
           Note: the macOS DMG is not signed or notarized yet, so Gatekeeper may warn on first launch.
           EOF
