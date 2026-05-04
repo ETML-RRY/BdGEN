@@ -9,27 +9,27 @@
 ![macOS](https://img.shields.io/badge/macOS-DMG_unsigned-000000)
 ![Linux](https://img.shields.io/badge/Linux-planned-fcc624)
 
-BdGEN est une application de generation de bandes dessinees a partir d'une description de projet. Elle combine un backend Python/FastAPI, une interface React et une application Electron desktop.
+BdGEN is an application for generating comic books from a project description. It combines a Python/FastAPI backend, a React interface, and an Electron desktop application.
 
-Le projet peut etre utilise de deux facons principales :
+The project can be used in two main ways:
 
-- **Mode web** : le serveur local est lance manuellement, puis l'interface est ouverte dans un navigateur.
-- **Mode desktop package** : un paquet Electron autonome lance l'application et son serveur local embarque.
+- **Web mode**: the local server is started manually, then the interface is opened in a browser.
+- **Desktop package mode**: a standalone Electron package starts the application and its embedded local server.
 
-## Prerequis
+## Requirements
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
-- Node.js et npm
-- L'OS cible pour construire un paquet desktop natif : Windows pour `.exe`, macOS pour `.dmg`, Linux pour les futurs artefacts Linux
+- Node.js and npm
+- The target OS for building a native desktop package: Windows for `.exe`, macOS for `.dmg`, Linux for future Linux artifacts
 
-## Mode Web
+## Web Mode
 
-Le mode web est le plus pratique pour le developpement, le debug et les tests rapides. Il lance le backend FastAPI localement, puis sert l'interface web dans le navigateur.
+Web mode is the most convenient option for development, debugging, and quick tests. It starts the FastAPI backend locally, then serves the web interface in the browser.
 
 ### Installation
 
-Depuis la racine du depot :
+From the repository root:
 
 ```bash
 cd bdgen
@@ -37,7 +37,7 @@ uv sync
 copy .env.sample .env
 ```
 
-Editez ensuite `bdgen/.env` si vous voulez fournir les cles API par fichier d'environnement :
+Then edit `bdgen/.env` if you want to provide API keys through an environment file:
 
 ```env
 OPENAI_API_KEY=sk-...
@@ -46,16 +46,13 @@ XAI_API_KEY=xai-...
 REPLICATE_API_TOKEN=...
 ```
 
-L'application web permet aussi de configurer les cles via son coffre local chiffre au lancement.
+The web application can also configure keys through its local encrypted vault at startup.
 
-Pour la creation du scenario, les fournisseurs OpenAI, Anthropic et xAI sont
-disponibles. Pour les images, seul OpenAI est disponible. Le formulaire propose
-une liste de modeles recents et conserve un champ de saisie libre pour entrer
-manuellement un autre nom de modele.
+OpenAI, Anthropic, and xAI are available for script generation. For images, only OpenAI is available. The form provides a list of recent models and keeps a free text field for manually entering another model name.
 
-### Lancer l'application web
+### Run the Web Application
 
-Construisez d'abord le frontend React dans les assets statiques du serveur :
+First build the React frontend into the server static assets:
 
 ```bash
 cd bdgen/web
@@ -63,84 +60,84 @@ npm install
 npm run build
 ```
 
-Lancez ensuite le serveur FastAPI :
+Then start the FastAPI server:
 
 ```bash
 cd ..
 uv run python -m bdgen.server
 ```
 
-Ouvrez l'application dans le navigateur :
+Open the application in your browser:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-### Developpement frontend
+### Frontend Development
 
-Pour travailler avec le rechargement a chaud de Vite, utilisez deux terminaux.
+To work with Vite hot reload, use two terminals.
 
-Terminal 1, API :
+Terminal 1, API:
 
 ```bash
 cd bdgen
 uv run python -m bdgen.server
 ```
 
-Terminal 2, frontend :
+Terminal 2, frontend:
 
 ```bash
 cd bdgen/web
 npm run dev
 ```
 
-Ouvrez ensuite :
+Then open:
 
 ```text
 http://127.0.0.1:5173
 ```
 
-Dans ce mode, Vite sert l'interface et proxy les appels API vers le serveur local.
+In this mode, Vite serves the interface and proxies API calls to the local server.
 
-### Donnees en mode web
+### Data in Web Mode
 
-Par defaut, les projets generes sont stockes sous :
+By default, generated projects are stored under:
 
 ```text
-bdgen/output/<nom-du-projet>/
+bdgen/output/<project-name>/
 ```
 
-Le serveur peut utiliser un autre dossier si la variable `BDGEN_OUTPUT_ROOT` est definie.
+The server can use another folder if the `BDGEN_OUTPUT_ROOT` variable is set.
 
-## Mode Desktop Package
+## Desktop Package Mode
 
-Le mode desktop package est le mode utilisateur final. Il produit un paquet Electron autonome adapte a la plateforme cible.
+Desktop package mode is the end-user mode. It produces a standalone Electron package adapted to the target platform.
 
-Dans ce mode :
+In this mode:
 
-- Electron affiche la fenetre de l'application.
-- Le serveur FastAPI est lance automatiquement en arriere-plan.
-- Le backend PyInstaller est embarque dans les ressources de l'application.
-- Il n'est pas necessaire d'ouvrir un navigateur ni de lancer `uv run python -m bdgen.server`.
+- Electron displays the application window.
+- The FastAPI server starts automatically in the background.
+- The PyInstaller backend is embedded in the application resources.
+- There is no need to open a browser or run `uv run python -m bdgen.server`.
 
-### Construire les paquets desktop
+### Build Desktop Packages
 
-Depuis la racine du depot :
+From the repository root:
 
 ```bash
 make portable  # Windows: build/portable/*.exe
-make macos     # macOS: build/mac/*.dmg non signe
-make linux     # Linux: build/linux/*, cible preparee pour la suite
+make macos     # macOS: build/mac/*.dmg unsigned
+make linux     # Linux: build/linux/*, target prepared for later
 ```
 
-Ces commandes enchainent :
+These commands run:
 
 1. `uv sync`
-2. build du frontend React
-3. build du serveur local avec PyInstaller
-4. build de l'application Electron pour la plateforme cible
+2. React frontend build
+3. local server build with PyInstaller
+4. Electron application build for the target platform
 
-Les resultats attendus sont :
+The expected outputs are:
 
 ```text
 build/portable/BdGEN 0.1.0.exe
@@ -148,125 +145,116 @@ build/mac/BdGEN 0.1.0.dmg
 build/linux/BdGEN 0.1.0.AppImage
 ```
 
-`make build` et `make desktop` restent des alias Windows et produisent l'executable portable. Le `.dmg` macOS actuel est volontairement non signe/non notarise pour la premiere etape ; Gatekeeper peut donc afficher un avertissement au premier lancement.
+`make build` and `make desktop` remain Windows aliases and produce the portable executable. The current macOS `.dmg` is intentionally unsigned and not notarized for the first step, so Gatekeeper may show a warning on first launch.
 
-### Lancer le paquet desktop
+### Run the Desktop Package
 
-Double-cliquez sur :
+Double-click:
 
 ```text
 build/portable/BdGEN 0.1.0.exe
 build/mac/BdGEN 0.1.0.dmg
 ```
 
-Au lancement, l'application affiche sa fenetre Electron personnalisee. Si le coffre de secrets n'est pas encore configure ou deverrouille, la page de verrouillage apparait avant l'acces au reste de l'application.
+On startup, the application displays its custom Electron window. If the secrets vault is not configured or unlocked yet, the lock screen appears before the rest of the application is accessible.
 
-### Donnees en mode desktop
+### Data in Desktop Mode
 
-En mode Electron, les projets sont ecrits dans le dossier Documents de l'utilisateur :
+In Electron mode, projects are written to the user's Documents folder:
 
 ```text
 Documents/BdGEN/
 ```
 
-Les donnees de configuration de l'application Electron utilisent le dossier utilisateur de l'application gere par Electron.
+Electron application configuration data uses the application user data folder managed by Electron.
 
-## Pipeline de generation
+## Generation Pipeline
 
-BdGEN suit quatre etapes principales :
+BdGEN follows four main steps:
 
-| Etape | Role | Sortie |
+| Step | Role | Output |
 | --- | --- | --- |
-| Script | Developpe la description du projet en script detaille | `bdgen-script.json` |
-| References | Genere les planches modele des personnages, decors et objets | `references/` |
-| Planches | Compose les pages finales, la couverture et la quatrieme de couverture | `pages/`, PDF final |
-| Upscale | Optionnel, agrandit les images finales | `pages_upscaled/` |
+| Script | Expands the project description into a detailed script | `bdgen-script.json` |
+| References | Generates model sheets for characters, environments, and objects | `references/` |
+| Pages | Composes final pages, the cover, and the back cover | `pages/`, final PDF |
+| Upscale | Optional, enlarges the final images | `pages_upscaled/` |
 
-## Commandes utiles
+## Useful Commands
 
-Depuis la racine du depot :
+From the repository root:
 
 ```bash
-make frontend     # build React vers les assets FastAPI
-make backend      # build du serveur local PyInstaller
-make portable     # build complet de l'exe portable Windows
-make macos        # build du DMG macOS non signe
-make linux        # build Linux prepare pour AppImage
-make dev-desktop  # lance Electron en mode developpement
-make lint         # lance les linters backend, frontend et desktop
-make format       # formate backend, frontend et desktop
-make format-check # verifie le format backend, frontend et desktop
-make test         # tests Python
-make clean        # nettoie les sorties de build
+make frontend     # build React into the FastAPI assets
+make backend      # build the local PyInstaller server
+make portable     # full build of the Windows portable exe
+make macos        # build the unsigned macOS DMG
+make linux        # Linux build prepared for AppImage
+make dev-desktop  # start Electron in development mode
+make lint         # run backend, frontend, and desktop linters
+make format       # format backend, frontend, and desktop code
+make format-check # check backend, frontend, and desktop formatting
+make test         # Python tests
+make clean        # clean build outputs
 ```
 
-Depuis `bdgen/`, les commandes CLI restent disponibles :
+From `bdgen/`, the CLI commands remain available:
 
 ```bash
-uv run main.py wizard mon-projet.json
-uv run main.py run mon-projet.json
-uv run main.py script mon-projet.json
-uv run main.py references ./output/mon-projet/bdgen-script.json
-uv run main.py compose ./output/mon-projet/bdgen-script.json
-uv run main.py upscale ./output/mon-projet/bdgen-script.json
+uv run main.py wizard my-project.json
+uv run main.py run my-project.json
+uv run main.py script my-project.json
+uv run main.py references ./output/my-project/bdgen-script.json
+uv run main.py compose ./output/my-project/bdgen-script.json
+uv run main.py upscale ./output/my-project/bdgen-script.json
 ```
 
-Commandes qualite par partie :
+Quality commands by area:
 
 ```bash
-# Backend Python
+# Python backend
 cd bdgen
 uv run ruff check .
 uv run ruff format .
 
-# Frontend React
+# React frontend
 cd bdgen/web
 npm run lint
 npm run format
 npm run format:check
 
-# Desktop Electron
+# Electron desktop
 cd bdgen/desktop
 npm run lint
 npm run format
 npm run format:check
 ```
 
-## CI/CD et versions
+## CI/CD and Versions
 
-Le workflow GitHub Actions `.github/workflows/release-portable.yml` se lance a
-chaque push sur `main`.
+The `.github/workflows/release-portable.yml` GitHub Actions workflow runs on every push to `main`.
 
-Il execute d'abord les controles qualite :
+It first runs quality checks:
 
-- lint backend, frontend et desktop ;
-- `npm audit --audit-level=critical` sur le frontend ;
-- `npm audit --audit-level=critical` sur l'application desktop.
+- backend, frontend, and desktop linting;
+- `npm audit --audit-level=critical` on the frontend;
+- `npm audit --audit-level=critical` on the desktop application.
 
-Si ces controles passent, le workflow calcule automatiquement la prochaine
-version SemVer, cree le tag Git `vX.Y.Z`, puis lance une matrice de builds
-desktop. La matrice construit l'executable Windows portable sur runner Windows
-et le DMG macOS non signe sur runner macOS. Une fois les artefacts generes, le
-workflow cree ou met a jour la release GitHub avec les assets disponibles. La
-structure du packaging garde une cible Linux preparee, mais la publication
-Linux sera ajoutee apres validation du format de distribution.
+If these checks pass, the workflow automatically computes the next SemVer version, creates the `vX.Y.Z` Git tag, then starts a desktop build matrix. The matrix builds the Windows portable executable on a Windows runner and the unsigned macOS DMG on a macOS runner. Once the artifacts are generated, the workflow creates or updates the GitHub release with the available assets. The packaging structure keeps a Linux target ready, but Linux publishing will be added after the distribution format is validated.
 
-Le numero de version est deduit des messages de commit depuis le dernier tag
-`vX.Y.Z` :
+The version number is inferred from commit messages since the latest `vX.Y.Z` tag:
 
-| Type de version | Message de commit | Exemple |
+| Version type | Commit message | Example |
 | --- | --- | --- |
-| Majeure | `BREAKING CHANGE:` dans le corps du commit, ou `!` apres le type | `feat!: changer le format des projets` |
-| Mineure | type `feat` | `feat: ajouter un fournisseur image` |
-| Patch | tout autre message | `fix: corriger la fermeture desktop` |
+| Major | `BREAKING CHANGE:` in the commit body, or `!` after the type | `feat!: change the project format` |
+| Minor | `feat` type | `feat: add an image provider` |
+| Patch | any other message | `fix: correct desktop shutdown` |
 
-Par defaut, si aucun commit ne demande une version majeure ou mineure, la
-version suivante est un patch.
+By default, if no commit requests a major or minor version, the next version is a patch.
 
-## Structure d'un projet genere
+## Generated Project Structure
 
 ```text
-output/mon-projet/
+output/my-project/
   bdgen.json
   bdgen-script.json
   bdgen-feedback.json
@@ -274,5 +262,5 @@ output/mon-projet/
   references/
   pages/
   pages_upscaled/
-  mon-projet.pdf
+  my-project.pdf
 ```

@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-04 (2)
+Last updated: 2026-05-04 (3)
 
 ## Update Rule
 
@@ -171,6 +171,11 @@ Lint/format tooling:
 - Avoid changing `.env` unless the user explicitly asks.
 
 ## Change Log
+
+### 2026-05-04 (3)
+
+- `README.md`: translated the full user-facing documentation from French to English while preserving commands, package outputs, and CI/CD behavior.
+- `doc/project_reference.md`: recorded the README translation.
 
 ### 2026-05-04 (2)
 
