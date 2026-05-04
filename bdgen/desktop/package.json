@@ -5,8 +5,11 @@
   "main": "main.js",
   "scripts": {
     "dev": "electron .",
-    "build": "npm run build:portable",
-    "build:portable": "electron-builder --win portable --config.directories.output=../../build/portable",
+    "build": "npm run build:windows",
+    "build:portable": "npm run build:windows",
+    "build:windows": "electron-builder --win portable --config.directories.output=../../build/portable",
+    "build:mac": "electron-builder --mac dmg --config.directories.output=../../build/mac",
+    "build:linux": "electron-builder --linux AppImage --config.directories.output=../../build/linux",
     "lint": "eslint .",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
@@ -28,18 +31,44 @@
       "preload.js",
       "assets/**/*"
     ],
-    "extraResources": [
-      {
-        "from": "../../build/backend/bdgen-server.exe",
-        "to": "backend/bdgen-server.exe"
-      }
-    ],
     "win": {
       "icon": "assets/icon.ico",
       "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false,
+      "extraResources": [
+        {
+          "from": "../../build/backend/bdgen-server.exe",
+          "to": "backend/bdgen-server.exe"
+        }
+      ],
       "target": [
         "portable"
+      ]
+    },
+    "mac": {
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "extraResources": [
+        {
+          "from": "../../build/backend/bdgen-server",
+          "to": "backend/bdgen-server"
+        }
+      ],
+      "target": [
+        "dmg"
+      ]
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "extraResources": [
+        {
+          "from": "../../build/backend/bdgen-server",
+          "to": "backend/bdgen-server"
+        }
+      ],
+      "target": [
+        "AppImage"
       ]
     }
   }

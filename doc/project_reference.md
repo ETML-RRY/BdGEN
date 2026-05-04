@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-01 (11)
+Last updated: 2026-05-04 (1)
 
 ## Update Rule
 
@@ -84,6 +84,8 @@ From the workspace root:
 ```bash
 make build
 make portable
+make macos
+make linux
 make frontend
 make backend
 make desktop
@@ -95,9 +97,12 @@ make dev-desktop
 make clean
 ```
 
-Desktop builds are portable-only. `make build`, `make portable`, and `make desktop`
-all produce the portable Electron executable under `build/portable/`; no installer
-target is maintained.
+Desktop builds are platform-specific. `make build`, `make portable`, and
+`make desktop` still produce the portable Windows executable under
+`build/portable/`. `make macos` produces an unsigned DMG under `build/mac/`.
+`make linux` is prepared for the future Linux AppImage path under `build/linux/`.
+macOS and Linux backend binaries are named `bdgen-server` without the Windows
+`.exe` extension.
 
 From `bdgen/`:
 
@@ -167,6 +172,22 @@ Lint/format tooling:
 
 ## Change Log
 
+### 2026-05-04 (1)
+
+- Added the first unsigned macOS DMG packaging path while keeping the structure ready for Linux.
+- Root `Makefile`: added `make macos`, `make linux`, Unix backend verification for `build/backend/bdgen-server`, and platform-specific desktop targets.
+- `bdgen/desktop/package.json`: split Electron Builder scripts into Windows, macOS, and Linux targets; Windows embeds `bdgen-server.exe`, macOS/Linux embed `bdgen-server`; macOS builds an unsigned DMG with signing disabled.
+- `.github/workflows/release-portable.yml`: refactored release flow into quality, version, early tag creation, a desktop build matrix, and publish jobs. Releases now attach both the Windows portable `.exe` and the unsigned macOS `.dmg`.
+- `README.md`: documented desktop package outputs, the unsigned macOS DMG caveat, and the future Linux packaging direction.
+
+### 2026-05-01 (12)
+
+- Fixed image provider changes made after script generation not being honored by references/compose.
+- Backend: `service._resolve_options()` now prefers the current `bdgen.json` generation options when available instead of the stale copy embedded in `bdgen-script.json`.
+- Backend: `detect_and_mark_stale()` now syncs `bdgen-script.json` generation options from the saved project config and marks generated references/pages stale when the image model/provider changes; page stale detection now uses the zero-padded page filenames.
+- Tests: added `bdgen/tests/test_generation_options_sync.py` to cover switching OpenAI image models after the script already exists.
+- Verification: `make lint` passed; `uv run python -m unittest tests.test_generation_options_sync` passed; `uv run python -m unittest discover -s tests` passed.
+
 ### 2026-05-01 (11)
 
 - Added GitHub Actions CI/CD workflow `.github/workflows/release-portable.yml`.
@@ -177,11 +198,10 @@ Lint/format tooling:
 
 ### 2026-05-01 (10)
 
-- Added optional xAI image generation while keeping OpenAI as the default image path.
-- Backend: new `xai_images.py` adapter calls xAI Imagine JSON endpoints with base64 output; `references.py` and `compose.py` now route `image_model.provider = "xai"` through `grok-imagine-image` for image generation/editing with reference inputs.
-- Frontend: `ProjectForm.jsx` now offers xAI as an image provider with `grok-imagine-image` in the model dropdown and still allows manual model entry.
-- Scope note: masked inpainting remains OpenAI-only because xAI image edits use JSON image inputs, not OpenAI's multipart mask workflow.
-- Verification: `make lint` passed; `npm run build` passed outside the sandbox after the known Windows/esbuild `spawn EPERM`; `uv run python -m unittest discover -s tests` passed outside the sandbox after the known uv cache permission issue.
+- Removed the optional xAI image-generation path; image generation is OpenAI-only again.
+- Backend: removed the xAI image adapter and the `references.py` / `compose.py` branches for `image_model.provider = "xai"`. xAI remains available for script/text generation.
+- Frontend: `ProjectForm.jsx` no longer offers xAI as an image provider; legacy xAI image configs are coerced back to OpenAI.
+- Verification: `uv run python -m unittest discover -s tests` passed; `uv run ruff check bdgen tests` passed.
 
 ### 2026-05-01 (9)
 

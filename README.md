@@ -1,18 +1,18 @@
 # BdGEN
 
-BdGEN est une application de generation de bandes dessinees a partir d'une description de projet. Elle combine un backend Python/FastAPI, une interface React et une application Electron portable pour Windows.
+BdGEN est une application de generation de bandes dessinees a partir d'une description de projet. Elle combine un backend Python/FastAPI, une interface React et une application Electron desktop.
 
 Le projet peut etre utilise de deux facons principales :
 
 - **Mode web** : le serveur local est lance manuellement, puis l'interface est ouverte dans un navigateur.
-- **Mode exe portable** : un executable Windows autonome lance l'application Electron et son serveur local embarque.
+- **Mode desktop package** : un paquet Electron autonome lance l'application et son serveur local embarque.
 
 ## Prerequis
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
 - Node.js et npm
-- Windows pour la construction et l'utilisation de l'exe portable
+- L'OS cible pour construire un paquet desktop natif : Windows pour `.exe`, macOS pour `.dmg`, Linux pour les futurs artefacts Linux
 
 ## Mode Web
 
@@ -40,10 +40,9 @@ REPLICATE_API_TOKEN=...
 L'application web permet aussi de configurer les cles via son coffre local chiffre au lancement.
 
 Pour la creation du scenario, les fournisseurs OpenAI, Anthropic et xAI sont
-disponibles. Pour les images, OpenAI reste le choix par defaut et xAI peut etre
-selectionne avec `grok-imagine-image`. Le formulaire propose une liste de
-modeles recents par fournisseur et conserve un champ de saisie libre pour
-entrer manuellement un autre nom de modele.
+disponibles. Pour les images, seul OpenAI est disponible. Le formulaire propose
+une liste de modeles recents et conserve un champ de saisie libre pour entrer
+manuellement un autre nom de modele.
 
 ### Lancer l'application web
 
@@ -104,9 +103,9 @@ bdgen/output/<nom-du-projet>/
 
 Le serveur peut utiliser un autre dossier si la variable `BDGEN_OUTPUT_ROOT` est definie.
 
-## Mode Exe Portable
+## Mode Desktop Package
 
-Le mode exe portable est le mode utilisateur final. Il produit un executable Windows sous `build/portable/`, sans installateur. L'utilisateur lance directement `BdGEN 0.1.0.exe`.
+Le mode desktop package est le mode utilisateur final. Il produit un paquet Electron autonome adapte a la plateforme cible.
 
 Dans ce mode :
 
@@ -115,40 +114,45 @@ Dans ce mode :
 - Le backend PyInstaller est embarque dans les ressources de l'application.
 - Il n'est pas necessaire d'ouvrir un navigateur ni de lancer `uv run python -m bdgen.server`.
 
-### Construire l'exe portable
+### Construire les paquets desktop
 
 Depuis la racine du depot :
 
 ```bash
-make portable
+make portable  # Windows: build/portable/*.exe
+make macos     # macOS: build/mac/*.dmg non signe
+make linux     # Linux: build/linux/*, cible preparee pour la suite
 ```
 
-La commande enchaine :
+Ces commandes enchainent :
 
 1. `uv sync`
 2. build du frontend React
 3. build du serveur local avec PyInstaller
-4. build de l'application Electron portable
+4. build de l'application Electron pour la plateforme cible
 
-Le resultat attendu est :
+Les resultats attendus sont :
 
 ```text
 build/portable/BdGEN 0.1.0.exe
+build/mac/BdGEN 0.1.0.dmg
+build/linux/BdGEN 0.1.0.AppImage
 ```
 
-`make build` et `make desktop` produisent aussi l'executable portable. Il n'y a plus de cible installateur.
+`make build` et `make desktop` restent des alias Windows et produisent l'executable portable. Le `.dmg` macOS actuel est volontairement non signe/non notarise pour la premiere etape ; Gatekeeper peut donc afficher un avertissement au premier lancement.
 
-### Lancer l'exe portable
+### Lancer le paquet desktop
 
 Double-cliquez sur :
 
 ```text
 build/portable/BdGEN 0.1.0.exe
+build/mac/BdGEN 0.1.0.dmg
 ```
 
 Au lancement, l'application affiche sa fenetre Electron personnalisee. Si le coffre de secrets n'est pas encore configure ou deverrouille, la page de verrouillage apparait avant l'acces au reste de l'application.
 
-### Donnees en mode exe portable
+### Donnees en mode desktop
 
 En mode Electron, les projets sont ecrits dans le dossier Documents de l'utilisateur :
 
@@ -176,7 +180,9 @@ Depuis la racine du depot :
 ```bash
 make frontend     # build React vers les assets FastAPI
 make backend      # build du serveur local PyInstaller
-make portable     # build complet de l'exe portable
+make portable     # build complet de l'exe portable Windows
+make macos        # build du DMG macOS non signe
+make linux        # build Linux prepare pour AppImage
 make dev-desktop  # lance Electron en mode developpement
 make lint         # lance les linters backend, frontend et desktop
 make format       # formate backend, frontend et desktop
@@ -229,9 +235,12 @@ Il execute d'abord les controles qualite :
 - `npm audit --audit-level=critical` sur l'application desktop.
 
 Si ces controles passent, le workflow calcule automatiquement la prochaine
-version SemVer, construit l'executable Windows portable, publie l'artefact du
-workflow, cree le tag Git `vX.Y.Z`, puis cree ou met a jour la release GitHub
-avec l'executable portable.
+version SemVer, cree le tag Git `vX.Y.Z`, puis lance une matrice de builds
+desktop. La matrice construit l'executable Windows portable sur runner Windows
+et le DMG macOS non signe sur runner macOS. Une fois les artefacts generes, le
+workflow cree ou met a jour la release GitHub avec les assets disponibles. La
+structure du packaging garde une cible Linux preparee, mais la publication
+Linux sera ajoutee apres validation du format de distribution.
 
 Le numero de version est deduit des messages de commit depuis le dernier tag
 `vX.Y.Z` :
