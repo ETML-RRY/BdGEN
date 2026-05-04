@@ -109,7 +109,6 @@ const IMAGE_MODEL_OPTIONS = {
     { value: "gpt-image-1-mini", label: "GPT Image 1 mini" },
     { value: "chatgpt-image-latest", label: "ChatGPT image latest" },
   ],
-  xai: [{ value: "grok-imagine-image", label: "Grok Imagine Image" }],
 };
 
 function blankCharacter(i) {
@@ -159,6 +158,10 @@ function normalize(cfg) {
   }
   if (!out.generation_options.image_model) {
     out.generation_options.image_model = structuredClone(DEFAULT_CONFIG.generation_options.image_model);
+  }
+  if (out.generation_options.image_model.provider !== "openai") {
+    out.generation_options.image_model.provider = "openai";
+    out.generation_options.image_model.model = DEFAULT_CONFIG.generation_options.image_model.model;
   }
   if (!out.generation_options.references) {
     out.generation_options.references = structuredClone(DEFAULT_CONFIG.generation_options.references);
@@ -1391,7 +1394,6 @@ export default function ProjectForm({
               onChange={(e) => setModelProvider("image_model", e.target.value, IMAGE_MODEL_OPTIONS)}
             >
               <option value="openai">OpenAI</option>
-              <option value="xai">xAI</option>
             </select>
           </Field>
           <Field label="Image — modèle">

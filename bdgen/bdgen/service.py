@@ -50,6 +50,8 @@ STALE_STEPS = ("references", "compose")
 THUMBNAIL_NAME = "thumbnail.jpg"
 _THUMB_MAX_W = 256
 _THUMB_MAX_H = 384
+DEFAULT_IMAGE_PROVIDER = "openai"
+DEFAULT_IMAGE_MODEL = "gpt-image-2"
 
 
 @dataclass
@@ -113,7 +115,9 @@ def load_config(name: str, output_root: Path | None = None) -> BdGenInput:
     p = get_project_dir(name, output_root) / PROJECT_CONFIG_NAME
     if not p.exists():
         raise FileNotFoundError(f"bdgen.json absent pour le projet « {name} »")
-    return BdGenInput.load(p)
+    config = BdGenInput.load(p)
+    _coerce_openai_image_model(config.generation_options.image_model)
+    return config
 
 
 def project_statistics(name: str, output_root: Path | None = None) -> dict:
@@ -247,6 +251,7 @@ def detect_and_mark_stale(
 
     Must be called BEFORE ``save_config`` so we can diff old vs. new.
     """
+    _coerce_openai_image_model(new_config.generation_options.image_model)
     proj_dir = get_project_dir(name, output_root)
     old_path = proj_dir / PROJECT_CONFIG_NAME
     if not old_path.exists():
@@ -264,9 +269,13 @@ def detect_and_mark_stale(
     except Exception:
         return
 
+    script_changed = False
     old_style = old_cfg.style.model_dump()
     new_style = new_config.style.model_dump()
     style_changed = old_style != new_style
+    old_image_model = old_cfg.generation_options.image_model.model_dump()
+    new_image_model = new_config.generation_options.image_model.model_dump()
+    image_model_changed = old_image_model != new_image_model
 
     if style_changed:
         ref_ids: list[str] = []
@@ -291,7 +300,7 @@ def detect_and_mark_stale(
             if cover_png.exists():
                 compose_ids.append("cover")
         for p in bd_script.pages:
-            page_png = proj_dir / "pages" / f"page_{p.page_number}.png"
+            page_png = proj_dir / "pages" / f"page_{p.page_number:02d}.png"
             if page_png.exists():
                 compose_ids.append(f"page_{p.page_number}")
         if bd_script.back_cover is not None:
@@ -302,8 +311,42 @@ def detect_and_mark_stale(
             mark_stale(proj_dir, "compose", compose_ids)
 
         bd_script.style = new_config.style
+        bd_script.generation_options = new_config.generation_options
         bd_script.save(script_path)
         return
+
+    if image_model_changed:
+        ref_ids: list[str] = []
+        for c in bd_script.characters:
+            ref_png = proj_dir / "references" / "characters" / f"{c.id}.png"
+            if ref_png.exists():
+                ref_ids.append(c.id)
+        for l in bd_script.locations:
+            ref_png = proj_dir / "references" / "locations" / f"{l.id}.png"
+            if ref_png.exists():
+                ref_ids.append(l.id)
+        for o in bd_script.objects:
+            ref_png = proj_dir / "references" / "objects" / f"{o.id}.png"
+            if ref_png.exists():
+                ref_ids.append(o.id)
+        if ref_ids:
+            mark_stale(proj_dir, "references", ref_ids)
+
+        compose_ids: list[str] = []
+        if bd_script.cover is not None:
+            cover_png = proj_dir / "pages" / "cover.png"
+            if cover_png.exists():
+                compose_ids.append("cover")
+        for p in bd_script.pages:
+            page_png = proj_dir / "pages" / f"page_{p.page_number:02d}.png"
+            if page_png.exists():
+                compose_ids.append(f"page_{p.page_number}")
+        if bd_script.back_cover is not None:
+            back_png = proj_dir / "pages" / "back.png"
+            if back_png.exists():
+                compose_ids.append("back")
+        if compose_ids:
+            mark_stale(proj_dir, "compose", compose_ids)
 
     old_chars = {c.id: c for c in old_cfg.characters}
     for nc in new_config.characters:
@@ -340,6 +383,12 @@ def detect_and_mark_stale(
             if ref_png.exists():
                 mark_stale(proj_dir, "references", no.id)
 
+    if bd_script.generation_options != new_config.generation_options:
+        bd_script.generation_options = new_config.generation_options
+        script_changed = True
+    if script_changed:
+        bd_script.save(script_path)
+
 
 def save_config(config: BdGenInput, output_root: Path | None = None) -> Path:
     """Write bdgen.json into the project directory and ensure the dir exists.
@@ -349,6 +398,7 @@ def save_config(config: BdGenInput, output_root: Path | None = None) -> Path:
     """
     if not config.project:
         raise ValueError("config.project doit être défini.")
+    _coerce_openai_image_model(config.generation_options.image_model)
     config.output_root = (output_root or config.output_root or Path("./output"))
     proj_dir = config.output_root / config.project
     proj_dir.mkdir(parents=True, exist_ok=True)
@@ -2196,10 +2246,23 @@ def import_references_bundle(
 # --- Helpers ---
 
 def _resolve_options(bd_script: BdGenScript, name: str, output_root: Path | None):
-    if bd_script.generation_options is not None:
-        return bd_script.generation_options
-    cfg = load_config(name, output_root)
-    return cfg.generation_options
+    try:
+        opts = load_config(name, output_root).generation_options
+    except FileNotFoundError:
+        if bd_script.generation_options is not None:
+            opts = bd_script.generation_options
+        else:
+            raise
+    _coerce_openai_image_model(opts.image_model)
+    return opts
+
+
+def _coerce_openai_image_model(image_model) -> None:
+    """Images are OpenAI-only; xAI remains available for script generation."""
+    if image_model.provider == DEFAULT_IMAGE_PROVIDER:
+        return
+    image_model.provider = DEFAULT_IMAGE_PROVIDER
+    image_model.model = DEFAULT_IMAGE_MODEL
 
 
 def _composed_path(pages_dir: Path, target: str) -> Path | None:
