@@ -1,5 +1,14 @@
 # BdGEN
 
+[![CI/CD Desktop Releases](https://github.com/ETML-RRY/bdgen/actions/workflows/release-portable.yml/badge.svg)](https://github.com/ETML-RRY/bdgen/actions/workflows/release-portable.yml)
+[![Latest release](https://img.shields.io/github/v/release/ETML-RRY/bdgen?label=release)](https://github.com/ETML-RRY/bdgen/releases/latest)
+[![License](https://img.shields.io/github/license/ETML-RRY/bdgen)](https://github.com/ETML-RRY/bdgen/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
+[![Electron](https://img.shields.io/badge/desktop-Electron-47848f)](https://www.electronjs.org/)
+![Windows](https://img.shields.io/badge/Windows-portable.exe-0078d4)
+![macOS](https://img.shields.io/badge/macOS-DMG_unsigned-000000)
+![Linux](https://img.shields.io/badge/Linux-planned-fcc624)
+
 BdGEN est une application de generation de bandes dessinees a partir d'une description de projet. Elle combine un backend Python/FastAPI, une interface React et une application Electron desktop.
 
 Le projet peut etre utilise de deux facons principales :

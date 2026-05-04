@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-04 (1)
+Last updated: 2026-05-04 (2)
 
 ## Update Rule
 
@@ -171,6 +171,11 @@ Lint/format tooling:
 - Avoid changing `.env` unless the user explicitly asks.
 
 ## Change Log
+
+### 2026-05-04 (2)
+
+- `README.md`: added GitHub badges for the desktop CI workflow, latest release, license, Python, Electron, and current platform packaging status.
+- `doc/project_reference.md`: recorded the README badge update.
 
 ### 2026-05-04 (1)
 
