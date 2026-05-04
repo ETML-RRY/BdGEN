@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-04 (4)
+Last updated: 2026-05-04 (7)
 
 ## Update Rule
 
@@ -171,6 +171,26 @@ Lint/format tooling:
 - Avoid changing `.env` unless the user explicitly asks.
 
 ## Change Log
+
+### 2026-05-04 (7)
+
+- `bdgen/desktop/assets/icon.icns`: added a macOS application icon generated from the vector `bd_gen_logo.svg` asset so packaged `.app`/DMG builds do not fall back to Electron's default icon.
+- `bdgen/desktop/package.json`: configured the macOS Electron Builder target to use `assets/icon.icns` explicitly.
+- `bdgen/desktop/main.js`: updated runtime icon resolution to prefer `icon.icns` on macOS, while keeping `icon.ico` on Windows and `icon.png` on Linux/fallback paths.
+
+### 2026-05-04 (6)
+
+- `bdgen/web/src/App.jsx`: made the custom desktop title bar platform-aware; on macOS it reserves space for the native traffic-light controls and hides the duplicate right-side custom window buttons.
+- `bdgen/web/src/index.css`: added reusable title bar layout classes, including a macOS left inset so the native controls no longer overlap the BdGEN logo.
+- `bdgen/bdgen/server/static/`: refreshed the built frontend assets with `npm run build` so the packaged desktop app picks up the title bar fix.
+
+### 2026-05-04 (5)
+
+- `bdgen/desktop/package.json`: registered an Electron Builder `afterPack` hook for packaged backend resources.
+- `bdgen/desktop/scripts/prepare-backend-resource.js`: added packaging-time preparation for the embedded backend executable; Unix builds get `chmod 755`, and macOS builds also receive an ad-hoc `codesign --sign -` signature.
+- `bdgen/desktop/main.js`: surfaced backend `spawn` failures directly so macOS permission/missing-binary errors are shown instead of only timing out while waiting for `/api/health`.
+- `Makefile` and `.github/workflows/release-portable.yml`: ad-hoc sign the PyInstaller `bdgen-server` executable on macOS immediately after build, before Electron packaging.
+- Verification: `python3 -m json.tool bdgen/desktop/package.json` passed. A full `make macos` test could not run on this machine yet because `uv`, `node`, and `npm` are not installed in the available shell environment.
 
 ### 2026-05-04 (4)
 

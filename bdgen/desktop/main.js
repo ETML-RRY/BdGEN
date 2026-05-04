@@ -5,6 +5,8 @@ const net = require("net");
 const path = require("path");
 
 let backend = null;
+let backendLaunchError = null;
+let backendExecutable = null;
 let mainWindow = null;
 let isQuitting = false;
 
@@ -42,6 +44,8 @@ async function createWindow() {
 
 async function startBackend({ port, appData, outputRoot }) {
   const exe = resolveBackendExecutable();
+  backendExecutable = exe;
+  backendLaunchError = null;
   const env = {
     ...process.env,
     BDGEN_HOST: "127.0.0.1",
@@ -59,6 +63,10 @@ async function startBackend({ port, appData, outputRoot }) {
 
   backend.stdout.on("data", (data) => console.log(`[backend] ${data}`));
   backend.stderr.on("data", (data) => console.error(`[backend] ${data}`));
+  backend.on("error", (err) => {
+    backendLaunchError = err;
+    console.error(`[backend] failed to start ${exe.command}: ${err.message}`);
+  });
   backend.on("exit", (code, signal) => {
     const expectedStop = isQuitting || backend?.killed || signal === "SIGTERM";
     if (!expectedStop && code !== 0 && mainWindow && !mainWindow.isDestroyed()) {
@@ -89,7 +97,12 @@ function resolveBackendExecutable() {
 }
 
 function resolveWindowIcon() {
-  const iconFile = process.platform === "win32" ? "icon.ico" : "icon.png";
+  let iconFile = "icon.png";
+  if (process.platform === "win32") {
+    iconFile = "icon.ico";
+  } else if (process.platform === "darwin") {
+    iconFile = "icon.icns";
+  }
   const candidates = [
     path.join(__dirname, "assets", iconFile),
     path.join(process.resourcesPath || path.join(__dirname, ".."), "assets", iconFile),
@@ -114,6 +127,9 @@ function findFreePort() {
 async function waitForHealth(port) {
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
+    if (backendLaunchError) {
+      throw new Error(formatBackendLaunchError(backendLaunchError, backendExecutable));
+    }
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/health`);
       if (res.ok) return;
@@ -123,6 +139,17 @@ async function waitForHealth(port) {
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
   throw new Error("Le serveur BdGEN n'a pas demarre a temps.");
+}
+
+function formatBackendLaunchError(err, exe) {
+  const command = exe?.command || "bdgen-server";
+  if (err.code === "EACCES") {
+    return `Le serveur local n'est pas executable: ${command}`;
+  }
+  if (err.code === "ENOENT") {
+    return `Le serveur local est introuvable: ${command}`;
+  }
+  return `Le serveur local n'a pas pu demarrer (${err.code || "erreur inconnue"}): ${err.message}`;
 }
 
 app.whenReady().then(() => {

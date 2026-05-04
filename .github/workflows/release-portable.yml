@@ -221,6 +221,9 @@ jobs:
           if ("${{ matrix.platform }}" -ne "windows") {
             chmod +x "${{ matrix.backend_binary }}"
           }
+          if ("${{ matrix.platform }}" -eq "macos") {
+            codesign --force --sign - "${{ matrix.backend_binary }}"
+          }
         working-directory: bdgen
         env:
           UV_PROJECT_ENVIRONMENT: ../.venv

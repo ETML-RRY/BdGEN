@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
-    "pack": "electron-builder --dir"
+    "pack": "electron-builder --dir",
+    "postpack:backend": "node scripts/prepare-backend-resource.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -26,6 +27,7 @@
   "build": {
     "appId": "ch.bdgen.desktop",
     "productName": "BdGEN",
+    "afterPack": "scripts/prepare-backend-resource.js",
     "files": [
       "main.js",
       "preload.js",
@@ -46,6 +48,7 @@
       ]
     },
     "mac": {
+      "icon": "assets/icon.icns",
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false,

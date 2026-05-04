@@ -59,6 +59,7 @@ backend-unix: frontend
 	cd $(APP_DIR) && uv run pyinstaller --distpath ../$(BACKEND_DIST) --workpath ../$(BUILD_DIR)/pyinstaller-work bdgen-server.spec
 	test -f $(BACKEND_BIN)
 	chmod +x $(BACKEND_BIN)
+	if [ "$$(uname -s)" = "Darwin" ]; then codesign --force --sign - $(BACKEND_BIN); fi
 
 desktop: desktop-windows
 

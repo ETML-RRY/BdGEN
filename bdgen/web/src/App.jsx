@@ -79,6 +79,7 @@ function WebHeader() {
 
 function DesktopTitleBar({ hideNav = false }) {
   const [maximized, setMaximized] = useState(false);
+  const isMac = window.bdgenDesktop?.platform === "darwin";
 
   useEffect(() => {
     window.bdgenDesktop.isMaximized().then(setMaximized);
@@ -87,36 +88,42 @@ function DesktopTitleBar({ hideNav = false }) {
 
   return (
     <header className="desktop-titlebar sticky top-0 z-20 border-b border-[var(--color-line)] bg-white/90 backdrop-blur">
-      <div className="desktop-drag-region flex h-12 items-center justify-between pl-4">
+      <div
+        className={`desktop-drag-region desktop-titlebar-content ${
+          isMac ? "desktop-titlebar-content-mac" : ""
+        }`}
+      >
         <BrandLink compact />
         <div className="desktop-no-drag flex h-full items-center gap-4">
           {!hideNav && <AppNav compact />}
-          <div className="flex h-full">
-            <button
-              type="button"
-              className="window-control"
-              title="Minimiser"
-              onClick={() => window.bdgenDesktop.minimize()}
-            >
-              <FiMinus aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="window-control"
-              title={maximized ? "Restaurer" : "Agrandir"}
-              onClick={() => window.bdgenDesktop.toggleMaximize().then(setMaximized)}
-            >
-              <FiSquare aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="window-control window-control-close"
-              title="Fermer"
-              onClick={() => window.bdgenDesktop.close()}
-            >
-              <FiX aria-hidden="true" />
-            </button>
-          </div>
+          {!isMac && (
+            <div className="flex h-full">
+              <button
+                type="button"
+                className="window-control"
+                title="Minimiser"
+                onClick={() => window.bdgenDesktop.minimize()}
+              >
+                <FiMinus aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="window-control"
+                title={maximized ? "Restaurer" : "Agrandir"}
+                onClick={() => window.bdgenDesktop.toggleMaximize().then(setMaximized)}
+              >
+                <FiSquare aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="window-control window-control-close"
+                title="Fermer"
+                onClick={() => window.bdgenDesktop.close()}
+              >
+                <FiX aria-hidden="true" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

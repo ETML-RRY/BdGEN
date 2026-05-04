@@ -48,6 +48,19 @@ body {
   user-select: none;
 }
 
+.desktop-titlebar-content {
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 1rem;
+}
+
+.desktop-titlebar-content-mac {
+  padding-left: 5.25rem;
+  padding-right: 1rem;
+}
+
 .desktop-drag-region {
   -webkit-app-region: drag;
 }
