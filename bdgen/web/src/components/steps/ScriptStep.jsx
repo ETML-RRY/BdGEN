@@ -14,6 +14,8 @@ export default function ScriptStep({ project, onChanged }) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState(null);
   const [confirmingRegenAll, setConfirmingRegenAll] = useState(false);
+  const [checkingCoherence, setCheckingCoherence] = useState(false);
+  const [coherenceError, setCoherenceError] = useState(null);
 
   const target = project.config?.structure?.page_count ?? null;
   const written = project.script?.pages?.length ?? 0;
@@ -39,6 +41,37 @@ export default function ScriptStep({ project, onChanged }) {
     }
   }
 
+  async function checkCoherence() {
+    setCoherenceError(null);
+    setCheckingCoherence(true);
+    try {
+      await api.checkScriptCoherence(name);
+      await onChanged();
+    } catch (e) {
+      setCoherenceError(e.message);
+    } finally {
+      setCheckingCoherence(false);
+    }
+  }
+
+  async function regenerateFlaggedPage(pageNumber) {
+    const coherence = project.coherence || { issues: [], suggestions: [] };
+    const pageIssues = (coherence.issues || []).filter((i) => i.page_number === pageNumber);
+    const pageSuggestions = (coherence.suggestions || []).filter((s) => s.page_number === pageNumber);
+    const all = [...pageIssues, ...pageSuggestions];
+    const feedback =
+      all.length > 0
+        ? `Améliore cette planche en tenant compte de ces remarques de cohérence : ${all.map((i) => i.message).join(" ")}`
+        : "Regénère cette planche pour renforcer la cohérence du scénario.";
+    await api.refinePage(name, pageNumber, feedback, true);
+    await onChanged();
+  }
+
+  async function applySuggestion(suggestionMessage) {
+    await api.applyGlobalSuggestion(name, suggestionMessage);
+    await onChanged();
+  }
+
   // Refresh project after a terminal event so the script becomes browseable.
   useEffect(() => {
     if (stream.terminal) {
@@ -58,9 +91,7 @@ export default function ScriptStep({ project, onChanged }) {
   }, [stream.events, onChanged]);
 
   if (isRunning) {
-    const hasPartial =
-      (project.script?.characters?.length ?? 0) > 0 ||
-      (project.script?.pages?.length ?? 0) > 0;
+    const hasPartial = (project.script?.characters?.length ?? 0) > 0 || (project.script?.pages?.length ?? 0) > 0;
     return (
       <div className="space-y-6">
         <ProgressPanel
@@ -71,7 +102,13 @@ export default function ScriptStep({ project, onChanged }) {
           hint="Vous pouvez consulter ce qui a déjà été écrit ci-dessous. Les retouches reviennent dès la fin de la génération."
         />
         {hasPartial && (
-          <ScriptBrowser project={project} onChanged={onChanged} readOnly />
+          <ScriptBrowser
+            project={project}
+            onChanged={onChanged}
+            readOnly
+            coherence={project.coherence}
+            onRegeneratePage={regenerateFlaggedPage}
+          />
         )}
       </div>
     );
@@ -80,8 +117,9 @@ export default function ScriptStep({ project, onChanged }) {
   // Show the post-run browser when a script exists with pages, even if not "complete"
   // (the user can iterate freely).
   if (project.script?.pages?.length > 0) {
+    const coherence = project.coherence || { dirty: false, issues: [], suggestions: [], flagged_pages: [] };
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {blocked && <RunningBanner job={stream.job} />}
         {stream.terminal && stream.terminal.status !== "completed" && (
           <TerminalBanner terminal={stream.terminal} onClear={stream.clear} />
@@ -89,8 +127,7 @@ export default function ScriptStep({ project, onChanged }) {
         {!isComplete && target !== null && !blocked && (
           <div className="card p-4 flex items-center justify-between gap-4 bg-[var(--color-peach-100)] border-[var(--color-peach-300)]">
             <span className="text-sm">
-              Scénario partiel ({written}/{target} planches). Vous pouvez
-              reprendre la génération.
+              Scénario partiel ({written}/{target} planches). Vous pouvez reprendre la génération.
             </span>
             <button className="btn btn-primary" onClick={start} disabled={starting}>
               Reprendre la génération
@@ -101,6 +138,12 @@ export default function ScriptStep({ project, onChanged }) {
           project={project}
           onChanged={onChanged}
           readOnly={blocked}
+          coherence={coherence}
+          onRegeneratePage={regenerateFlaggedPage}
+          checking={checkingCoherence}
+          coherenceError={coherenceError}
+          onCheck={checkCoherence}
+          onApplySuggestion={applySuggestion}
         />
         <div className="flex items-center justify-between">
           <button
@@ -141,13 +184,10 @@ export default function ScriptStep({ project, onChanged }) {
       <div className="card p-8 text-center">
         <h2 className="text-lg font-semibold mb-2">Lancer l'écriture</h2>
         <p className="text-[var(--color-ink-soft)] max-w-2xl mx-auto mb-6">
-          Le LLM va développer le synopsis en un scénario complet&nbsp;: personnages,
-          décors, couverture, 4ᵉ de couverture, puis chaque planche une à une.
-          Vous pourrez consulter et retoucher chaque élément à la fin.
+          Le LLM va développer le synopsis en un scénario complet&nbsp;: personnages, décors, couverture, 4ᵉ de
+          couverture, puis chaque planche une à une. Vous pourrez consulter et retoucher chaque élément à la fin.
         </p>
-        {error && (
-          <p className="text-[var(--color-rose-500)] text-sm mb-3">{error}</p>
-        )}
+        {error && <p className="text-[var(--color-rose-500)] text-sm mb-3">{error}</p>}
         <button className="btn btn-primary" onClick={start} disabled={starting || blocked}>
           {starting ? "Démarrage…" : "Lancer l'écriture"}
         </button>
@@ -158,11 +198,7 @@ export default function ScriptStep({ project, onChanged }) {
 
 function TerminalBanner({ terminal, onClear }) {
   const tone =
-    terminal.status === "completed"
-      ? "chip-mint"
-      : terminal.status === "interrupted"
-      ? "chip-peach"
-      : "chip-rose";
+    terminal.status === "completed" ? "chip-mint" : terminal.status === "interrupted" ? "chip-peach" : "chip-rose";
   return (
     <div className="card p-4 flex items-center justify-between gap-4">
       <div className="text-sm">

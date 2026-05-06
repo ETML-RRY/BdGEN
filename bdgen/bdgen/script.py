@@ -1,12 +1,15 @@
 """Step 1: generate the script in two phases (setup + per-page) with bounded retries."""
+
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import threading
 from textwrap import dedent
 from typing import TypeVar
 
@@ -38,6 +41,15 @@ from .stats import TimedCall, normalise_usage, record_event, start_timer, stop_t
 
 MAX_ATTEMPTS = 3
 RETRY_BACKOFF_BASE_SECONDS = 2
+ANTHROPIC_DEFAULT_INPUT_TOKENS_PER_MINUTE = 30_000
+ANTHROPIC_TOKEN_ESTIMATE_CHARS_PER_TOKEN = 4
+ANTHROPIC_TOKEN_ESTIMATE_SAFETY_TOKENS = 1_000
+
+_ANTHROPIC_THROTTLE_LOCK = threading.Lock()
+_ANTHROPIC_THROTTLE_STATE = {
+    "tokens": float(ANTHROPIC_DEFAULT_INPUT_TOKENS_PER_MINUTE),
+    "last": time.monotonic(),
+}
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -48,6 +60,12 @@ class _LLMCallResult:
     usage: dict
     elapsed_seconds: float
     started_at: str
+
+
+class _RetryableRateLimit(RuntimeError):
+    def __init__(self, message: str, retry_after_seconds: float | None = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
 
 
 SETUP_SYSTEM_PROMPT = dedent("""\
@@ -190,6 +208,7 @@ PAGE_SYSTEM_PROMPT = dedent("""\
 
 
 # --- Draft models for LLM output ---
+
 
 class _DraftCharacter(BaseModel):
     id: str
@@ -379,6 +398,7 @@ PAGE_REFINE_SYSTEM_PROMPT = dedent("""\
 
 # --- Top-level orchestration ---
 
+
 def generate_script(
     config: BdGenInput,
     input_path: Path,
@@ -415,11 +435,13 @@ def generate_script(
     bd_script = _try_resume(script_path, config, target_pages, rep)
 
     if bd_script is None:
-        rep.emit(ProgressEvent(
-            step="script",
-            phase="setup",
-            message=f"Setup phase: characters, locations, cover, back cover ({label})…",
-        ))
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase="setup",
+                message=f"Setup phase: characters, locations, cover, back cover ({label})…",
+            )
+        )
         flag.check()
         setup_result = _call_llm(
             SETUP_SYSTEM_PROMPT,
@@ -440,33 +462,34 @@ def generate_script(
         bd_script = _build_skeleton(config, setup, input_path, label)
         if script_path:
             bd_script.save(script_path)
-        rep.emit(ProgressEvent(
-            step="script",
-            phase="setup_done",
-            message=(
-                f"Setup terminé : {len(bd_script.characters)} personnages, "
-                f"{len(bd_script.locations)} décors."
-            ),
-            extra={
-                "characters": len(bd_script.characters),
-                "locations": len(bd_script.locations),
-            },
-        ))
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase="setup_done",
+                message=(
+                    f"Setup terminé : {len(bd_script.characters)} personnages, {len(bd_script.locations)} décors."
+                ),
+                extra={
+                    "characters": len(bd_script.characters),
+                    "locations": len(bd_script.locations),
+                },
+            )
+        )
 
     for page_n in range(len(bd_script.pages) + 1, target_pages + 1):
         flag.check()
-        rep.emit(ProgressEvent(
-            step="script",
-            phase=f"page_{page_n}",
-            message=f"Génération de la planche {page_n}/{target_pages} ({label})…",
-            current=page_n,
-            total=target_pages,
-        ))
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase=f"page_{page_n}",
+                message=f"Génération de la planche {page_n}/{target_pages} ({label})…",
+                current=page_n,
+                total=target_pages,
+            )
+        )
         page_result = _call_llm(
             PAGE_SYSTEM_PROMPT,
-            _build_page_prompt(
-                config, bd_script, page_n, target_pages, feedback, preview_pages
-            ),
+            _build_page_prompt(config, bd_script, page_n, target_pages, feedback, preview_pages),
             model_cfg,
             Page,
         )
@@ -489,23 +512,27 @@ def generate_script(
         bd_script.pages.append(page)
         if script_path:
             bd_script.save(script_path)
-        rep.emit(ProgressEvent(
-            step="script",
-            phase=f"page_{page_n}_done",
-            message=f"Planche {page_n} écrite.",
-            current=page_n,
-            total=target_pages,
-        ))
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase=f"page_{page_n}_done",
+                message=f"Planche {page_n} écrite.",
+                current=page_n,
+                total=target_pages,
+            )
+        )
 
-    rep.emit(ProgressEvent(
-        step="script",
-        phase="done",
-        message=(
-            f"Scénario complet : {len(bd_script.characters)} personnages, "
-            f"{len(bd_script.locations)} décors, {len(bd_script.pages)} planches, "
-            f"{sum(len(p.panels) for p in bd_script.pages)} cases."
-        ),
-    ))
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase="done",
+            message=(
+                f"Scénario complet : {len(bd_script.characters)} personnages, "
+                f"{len(bd_script.locations)} décors, {len(bd_script.pages)} planches, "
+                f"{sum(len(p.panels) for p in bd_script.pages)} cases."
+            ),
+        )
+    )
     return bd_script
 
 
@@ -521,40 +548,40 @@ def _try_resume(
     try:
         existing = BdGenScript.load(script_path)
     except Exception as e:
-        reporter.emit(ProgressEvent(
-            step="script",
-            phase="resume_failed",
-            message=f"Script existant illisible ({e}) ; regénération complète.",
-        ))
+        reporter.emit(
+            ProgressEvent(
+                step="script",
+                phase="resume_failed",
+                message=f"Script existant illisible ({e}) ; regénération complète.",
+            )
+        )
         return None
     if existing.project != config.project or not existing.characters:
         return None
     if len(existing.pages) >= target_pages:
-        reporter.emit(ProgressEvent(
+        reporter.emit(
+            ProgressEvent(
+                step="script",
+                phase="already_complete",
+                message=(f"Scénario déjà complet sur disque ({len(existing.pages)} planches)."),
+                current=len(existing.pages),
+                total=target_pages,
+            )
+        )
+        return existing
+    reporter.emit(
+        ProgressEvent(
             step="script",
-            phase="already_complete",
-            message=(
-                f"Scénario déjà complet sur disque ({len(existing.pages)} planches)."
-            ),
+            phase="resuming",
+            message=(f"Reprise : {len(existing.pages)}/{target_pages} planches déjà écrites."),
             current=len(existing.pages),
             total=target_pages,
-        ))
-        return existing
-    reporter.emit(ProgressEvent(
-        step="script",
-        phase="resuming",
-        message=(
-            f"Reprise : {len(existing.pages)}/{target_pages} planches déjà écrites."
-        ),
-        current=len(existing.pages),
-        total=target_pages,
-    ))
+        )
+    )
     return existing
 
 
-def _build_skeleton(
-    config: BdGenInput, setup: _LLMSetupDraft, input_path: Path, model_label: str
-) -> BdGenScript:
+def _build_skeleton(config: BdGenInput, setup: _LLMSetupDraft, input_path: Path, model_label: str) -> BdGenScript:
     source = ScriptSource(
         input_file=str(input_path),
         generated_at=datetime.now(timezone.utc).isoformat(),
@@ -567,18 +594,9 @@ def _build_skeleton(
         metadata=config.metadata,
         style=config.style,
         generation_options=config.generation_options,
-        characters=[
-            ScriptCharacter(**c.model_dump(), reference_image=None)
-            for c in setup.characters
-        ],
-        locations=[
-            ScriptLocation(**l.model_dump(), reference_image=None)
-            for l in setup.locations
-        ],
-        objects=[
-            ScriptObject(**o.model_dump(), reference_image=None)
-            for o in setup.objects
-        ],
+        characters=[ScriptCharacter(**c.model_dump(), reference_image=None) for c in setup.characters],
+        locations=[ScriptLocation(**l.model_dump(), reference_image=None) for l in setup.locations],
+        objects=[ScriptObject(**o.model_dump(), reference_image=None) for o in setup.objects],
         cover=setup.cover,
         back_cover=setup.back_cover,
         pages=[],
@@ -586,6 +604,7 @@ def _build_skeleton(
 
 
 # --- Prompt builders ---
+
 
 def _build_setup_prompt(
     config: BdGenInput,
@@ -625,25 +644,16 @@ def _build_setup_prompt(
                 f"Always copy the {n_locs} input location(s) verbatim first."
             )
         else:
-            loc_rule = (
-                "Invent every location your story will need across the FULL story "
-                "arc (the input has none)."
-            )
+            loc_rule = "Invent every location your story will need across the FULL story arc (the input has none)."
     else:
-        loc_rule = (
-            f"STRICT: Use ONLY the {n_locs} input location(s). Do NOT invent any "
-            f"new location."
-        )
+        loc_rule = f"STRICT: Use ONLY the {n_locs} input location(s). Do NOT invent any new location."
     if n_objs == 0 and config.structure.allow_extra_objects:
         obj_rule = (
             "The user provided no objects. Do NOT invent any: leave the `objects` "
             "array empty unless the brief explicitly requires a recurring object."
         )
     elif n_objs == 0:
-        obj_rule = (
-            "STRICT: The user provided no objects and disallowed inventing any. "
-            "Leave the `objects` array empty."
-        )
+        obj_rule = "STRICT: The user provided no objects and disallowed inventing any. Leave the `objects` array empty."
     elif config.structure.allow_extra_objects:
         obj_rule = (
             f"You MAY add a small number of additional objects if a recurring "
@@ -665,10 +675,7 @@ def _build_setup_prompt(
     base = (
         "Here is the project brief. Generate the SETUP only (characters, locations, "
         "objects, cover, back cover). Pages will be requested separately, one at a "
-        "time.\n\n"
-        + json.dumps(brief, ensure_ascii=False, indent=2)
-        + preview_note
-        + authoring_rules
+        "time.\n\n" + json.dumps(brief, ensure_ascii=False, indent=2) + preview_note + authoring_rules
     )
     if feedback:
         base += feedback_block(feedback)
@@ -694,14 +701,8 @@ def _build_page_prompt(
             }
             for c in bd_script.characters
         ],
-        "locations": [
-            {"id": l.id, "name": l.name, "description": l.description}
-            for l in bd_script.locations
-        ],
-        "objects": [
-            {"id": o.id, "name": o.name, "description": o.description}
-            for o in bd_script.objects
-        ],
+        "locations": [{"id": l.id, "name": l.name, "description": l.description} for l in bd_script.locations],
+        "objects": [{"id": o.id, "name": o.name, "description": o.description} for o in bd_script.objects],
     }
     prior_pages = [p.model_dump(mode="json") for p in bd_script.pages]
 
@@ -714,8 +715,7 @@ def _build_page_prompt(
         )
         if is_last_preview_page:
             preview_note += (
-                "This is the LAST preview page — end on a natural beat, do NOT "
-                "artificially wrap up the full arc."
+                "This is the LAST preview page — end on a natural beat, do NOT artificially wrap up the full arc."
             )
 
     parts = [
@@ -727,18 +727,17 @@ def _build_page_prompt(
         "",
     ]
     if prior_pages:
-        parts.extend([
-            "PREVIOUSLY GENERATED PAGES (for narrative continuity, DO NOT regenerate):",
-            json.dumps(prior_pages, ensure_ascii=False, indent=2),
-            "",
-        ])
+        parts.extend(
+            [
+                "PREVIOUSLY GENERATED PAGES (for narrative continuity, DO NOT regenerate):",
+                json.dumps(prior_pages, ensure_ascii=False, indent=2),
+                "",
+            ]
+        )
     else:
         parts.append("(No previous pages — this is page 1.)")
         parts.append("")
-    parts.append(
-        f"Now generate page {page_n} of {target_pages} as a single JSON Page object."
-        + preview_note
-    )
+    parts.append(f"Now generate page {page_n} of {target_pages} as a single JSON Page object." + preview_note)
 
     base = "\n".join(parts)
     if feedback:
@@ -748,9 +747,8 @@ def _build_page_prompt(
 
 # --- LLM dispatch with retries ---
 
-def _call_llm(
-    system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]
-) -> _LLMCallResult:
+
+def _call_llm(system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]) -> _LLMCallResult:
     """Dispatch to the configured provider, with bounded retries on parse failure.
 
     Per-call retries (rather than per-script) mean a single page failure only
@@ -772,18 +770,29 @@ def _call_llm(
                 value, usage = _call_anthropic(system, user, model_config, output_type)
                 timer = stop_timer(started_at, started)
                 return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
-            raise NotImplementedError(
-                f"Provider '{model_config.provider}' is not yet supported."
-            )
+            raise NotImplementedError(f"Provider '{model_config.provider}' is not yet supported.")
+        except _RetryableRateLimit as e:
+            last_error = e
+            short_reason = str(e).split("\n", 1)[0]
+            if attempt < MAX_ATTEMPTS:
+                wait = e.retry_after_seconds
+                if wait is None:
+                    wait = RETRY_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+                wait = max(1.0, float(wait))
+                print(
+                    f"  Claude rate limit on attempt {attempt}/{MAX_ATTEMPTS}: {short_reason}\n"
+                    f"  Waiting {wait:.0f}s before retry..."
+                )
+                time.sleep(wait)
+            else:
+                print(f"  All {MAX_ATTEMPTS} attempts failed.")
+                raise
         except RuntimeError as e:
             last_error = e
             short_reason = str(e).split("\n", 1)[0]
             if attempt < MAX_ATTEMPTS:
                 wait = RETRY_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
-                print(
-                    f"  Attempt {attempt}/{MAX_ATTEMPTS} failed: {short_reason}\n"
-                    f"  Retrying in {wait}s..."
-                )
+                print(f"  Attempt {attempt}/{MAX_ATTEMPTS} failed: {short_reason}\n  Retrying in {wait}s...")
                 time.sleep(wait)
             else:
                 print(f"  All {MAX_ATTEMPTS} attempts failed.")
@@ -793,9 +802,7 @@ def _call_llm(
     raise last_error
 
 
-def _call_openai(
-    system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]
-) -> tuple[T, dict]:
+def _call_openai(system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]) -> tuple[T, dict]:
     """OpenAI Chat Completions with structured Pydantic output."""
     client = secret_store.openai_client()
     kwargs = {
@@ -807,9 +814,7 @@ def _call_openai(
         "response_format": output_type,
     }
     try:
-        completion = client.chat.completions.parse(
-            temperature=model_config.temperature, **kwargs
-        )
+        completion = client.chat.completions.parse(temperature=model_config.temperature, **kwargs)
     except Exception as e:
         if "temperature" not in str(e).lower():
             raise
@@ -817,15 +822,11 @@ def _call_openai(
 
     message = completion.choices[0].message
     if message.parsed is None:
-        raise RuntimeError(
-            f"LLM returned no parsed content. Refusal: {message.refusal}"
-        )
+        raise RuntimeError(f"LLM returned no parsed content. Refusal: {message.refusal}")
     return message.parsed, normalise_usage(getattr(completion, "usage", None))
 
 
-def _call_xai(
-    system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]
-) -> tuple[T, dict]:
+def _call_xai(system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]) -> tuple[T, dict]:
     """xAI Grok through its OpenAI-compatible Chat Completions endpoint."""
     client = secret_store.xai_client()
     kwargs = {
@@ -837,9 +838,7 @@ def _call_xai(
         "response_format": output_type,
     }
     try:
-        completion = client.chat.completions.parse(
-            temperature=model_config.temperature, **kwargs
-        )
+        completion = client.chat.completions.parse(temperature=model_config.temperature, **kwargs)
     except Exception as e:
         if "temperature" not in str(e).lower():
             raise
@@ -847,15 +846,11 @@ def _call_xai(
 
     message = completion.choices[0].message
     if message.parsed is None:
-        raise RuntimeError(
-            f"Grok returned no parsed content. Refusal: {message.refusal}"
-        )
+        raise RuntimeError(f"Grok returned no parsed content. Refusal: {message.refusal}")
     return message.parsed, normalise_usage(getattr(completion, "usage", None))
 
 
-def _call_anthropic(
-    system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]
-) -> tuple[T, dict]:
+def _call_anthropic(system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]) -> tuple[T, dict]:
     """Anthropic Messages API in streaming mode + manual JSON parsing.
 
     The system prompt is cached (5-minute TTL) so successive calls (setup +
@@ -874,9 +869,7 @@ def _call_anthropic(
         if state["phase"] == "thinking":
             sys.stdout.write(f"\r  [thinking] {elapsed}s elapsed       ")
         elif state["phase"] == "writing":
-            sys.stdout.write(
-                f"\r  [writing JSON] {state['chars']} chars, {elapsed}s elapsed   "
-            )
+            sys.stdout.write(f"\r  [writing JSON] {state['chars']} chars, {elapsed}s elapsed   ")
         sys.stdout.flush()
 
     def commit_line() -> None:
@@ -893,44 +886,50 @@ def _call_anthropic(
         state["last_render"] = 0.0
         render(force=True)
 
-    with client.messages.stream(
-        model=model_config.model,
-        max_tokens=32000,
-        thinking={"type": "adaptive"},
-        output_config={"effort": "high"},
-        system=[
-            {
-                "type": "text",
-                "text": system,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": user}],
-    ) as stream:
-        for event in stream:
-            if event.type == "content_block_start":
-                bt = event.content_block.type
-                if bt == "thinking":
-                    start_phase("thinking")
-                elif bt == "text":
-                    start_phase("writing")
-            elif event.type == "content_block_delta":
-                dt = event.delta.type
-                if dt == "thinking_delta":
-                    if event.delta.thinking:
-                        state["chars"] += len(event.delta.thinking)
-                    render()
-                elif dt == "text_delta":
-                    text_parts.append(event.delta.text)
-                    state["chars"] += len(event.delta.text)
-                    render()
-            elif event.type == "message_stop":
-                if state["phase"] is not None:
-                    render(force=True)
-                    commit_line()
-                    state["phase"] = None
+    _wait_for_anthropic_input_budget(system, user)
+    try:
+        with client.messages.stream(
+            model=model_config.model,
+            max_tokens=_anthropic_max_tokens(output_type),
+            thinking={"type": "adaptive"},
+            output_config={"effort": "high"},
+            system=[
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[{"role": "user", "content": user}],
+        ) as stream:
+            for event in stream:
+                if event.type == "content_block_start":
+                    bt = event.content_block.type
+                    if bt == "thinking":
+                        start_phase("thinking")
+                    elif bt == "text":
+                        start_phase("writing")
+                elif event.type == "content_block_delta":
+                    dt = event.delta.type
+                    if dt == "thinking_delta":
+                        if event.delta.thinking:
+                            state["chars"] += len(event.delta.thinking)
+                        render()
+                    elif dt == "text_delta":
+                        text_parts.append(event.delta.text)
+                        state["chars"] += len(event.delta.text)
+                        render()
+                elif event.type == "message_stop":
+                    if state["phase"] is not None:
+                        render(force=True)
+                        commit_line()
+                        state["phase"] = None
 
-        final = stream.get_final_message()
+            final = stream.get_final_message()
+    except Exception as exc:
+        if _is_anthropic_rate_limit(exc):
+            raise _RetryableRateLimit(str(exc), _retry_after_seconds(exc)) from exc
+        raise
 
     usage_payload = normalise_usage(final.usage)
     if final.usage:
@@ -940,10 +939,7 @@ def _call_anthropic(
         cached_note = f", cache hit: {cache_read}" if cache_read else ""
         if cache_write and not cache_read:
             cached_note = f", cache write: {cache_write}"
-        print(
-            f"  Tokens: input={u.input_tokens + cache_read + cache_write}"
-            f"{cached_note}, output={u.output_tokens}"
-        )
+        print(f"  Tokens: input={u.input_tokens + cache_read + cache_write}{cached_note}, output={u.output_tokens}")
 
     raw = "".join(text_parts)
     if not raw.strip():
@@ -956,8 +952,7 @@ def _call_anthropic(
         if unwrapped is not None:
             return unwrapped, usage_payload
         raise RuntimeError(
-            f"Failed to parse Claude response as {output_type.__name__}: {e}\n"
-            f"Raw text (first 800 chars): {raw[:800]}"
+            f"Failed to parse Claude response as {output_type.__name__}: {e}\nRaw text (first 800 chars): {raw[:800]}"
         )
 
 
@@ -984,21 +979,102 @@ def _record_llm_stats(
     )
 
 
+def _anthropic_input_tokens_per_minute() -> int:
+    raw = os.environ.get("BDGEN_ANTHROPIC_INPUT_TOKENS_PER_MINUTE")
+    if raw is None:
+        return ANTHROPIC_DEFAULT_INPUT_TOKENS_PER_MINUTE
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return ANTHROPIC_DEFAULT_INPUT_TOKENS_PER_MINUTE
+
+
+def _estimate_anthropic_input_tokens(system: str, user: str) -> int:
+    chars = len(system) + len(user)
+    estimate = chars // ANTHROPIC_TOKEN_ESTIMATE_CHARS_PER_TOKEN
+    return max(1, estimate + ANTHROPIC_TOKEN_ESTIMATE_SAFETY_TOKENS)
+
+
+def _wait_for_anthropic_input_budget(system: str, user: str) -> None:
+    limit = _anthropic_input_tokens_per_minute()
+    if limit <= 0:
+        return
+    estimate = _estimate_anthropic_input_tokens(system, user)
+    cost = min(float(estimate), float(limit))
+    rate_per_second = float(limit) / 60.0
+    with _ANTHROPIC_THROTTLE_LOCK:
+        now = time.monotonic()
+        last = float(_ANTHROPIC_THROTTLE_STATE["last"])
+        available = min(
+            float(limit),
+            float(_ANTHROPIC_THROTTLE_STATE["tokens"]) + max(0.0, now - last) * rate_per_second,
+        )
+        missing = cost - available
+        if missing <= 0:
+            _ANTHROPIC_THROTTLE_STATE["tokens"] = available - cost
+            _ANTHROPIC_THROTTLE_STATE["last"] = now
+            return
+        wait = missing / rate_per_second
+        _ANTHROPIC_THROTTLE_STATE["tokens"] = 0.0
+        _ANTHROPIC_THROTTLE_STATE["last"] = now + wait
+    print(f"  Claude throttle: estimated input={estimate} tokens, waiting {wait:.0f}s to stay under {limit}/min...")
+    time.sleep(wait)
+
+
+def _anthropic_max_tokens(output_type: type[BaseModel]) -> int:
+    # Anthropic pre-reserves output-token capacity from max_tokens. These caps
+    # keep the reservation close to BdGEN's expected JSON size without changing
+    # the model, reasoning effort, or requested content quality.
+    if output_type is _LLMSetupDraft:
+        return 16_000
+    if output_type is Page:
+        return 8_000
+    if output_type is _DraftCharacter:
+        return 5_000
+    if output_type in {_DraftLocation, _DraftObject, Cover, BackCover}:
+        return 3_000
+    return 8_000
+
+
+def _is_anthropic_rate_limit(exc: Exception) -> bool:
+    status_code = getattr(exc, "status_code", None)
+    if status_code == 429:
+        return True
+    name = exc.__class__.__name__.lower()
+    return "ratelimit" in name or "rate_limit" in str(exc).lower()
+
+
+def _retry_after_seconds(exc: Exception) -> float | None:
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if not headers:
+        return None
+    raw = None
+    try:
+        raw = headers.get("retry-after")
+    except Exception:
+        return None
+    if raw is None:
+        return None
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        return None
+
+
 def _strip_json_fences(text: str) -> str:
     """Strip surrounding ```json fences if the model wrapped its output."""
     text = text.strip()
     if text.startswith("```"):
         first_newline = text.find("\n")
         if first_newline > 0:
-            text = text[first_newline + 1:]
+            text = text[first_newline + 1 :]
         if text.endswith("```"):
             text = text[:-3]
     return text.strip()
 
 
-def _try_unwrap_echoed_input(
-    json_text: str, output_type: type[BaseModel]
-) -> BaseModel | None:
+def _try_unwrap_echoed_input(json_text: str, output_type: type[BaseModel]) -> BaseModel | None:
     # Recovery path: refine prompts pass `{metadata, style, current_*, user_feedback}`
     # and the model sometimes echoes that wrapper back. Look for a payload nested
     # under a `current_*` or `updated_*` key that matches the target schema.
@@ -1009,8 +1085,7 @@ def _try_unwrap_echoed_input(
     if not isinstance(data, dict):
         return None
     candidate_keys = [
-        k for k in data
-        if k.startswith("current_") or k.startswith("updated_") or k in {"character", "location"}
+        k for k in data if k.startswith("current_") or k.startswith("updated_") or k in {"character", "location"}
     ]
     for key in candidate_keys:
         try:
@@ -1021,6 +1096,7 @@ def _try_unwrap_echoed_input(
 
 
 # --- Targeted regeneration (single character / location / page) ---
+
 
 def regenerate_character(
     bd_script: BdGenScript,
@@ -1036,16 +1112,23 @@ def regenerate_character(
     char = bd_script.character_by_id(character_id)
     if char is None:
         raise RuntimeError(f"Personnage inconnu : {character_id}")
-    rep.emit(ProgressEvent(
-        step="script", phase=f"refine_character_{character_id}",
-        message=f"Retouche du personnage « {char.name} »…",
-    ))
-    user_prompt = json.dumps({
-        "metadata": bd_script.metadata.model_dump(mode="json"),
-        "style": bd_script.style.model_dump(mode="json"),
-        "current_character": char.model_dump(mode="json", exclude={"reference_image"}),
-        "user_feedback": feedback_text,
-    }, ensure_ascii=False, indent=2)
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase=f"refine_character_{character_id}",
+            message=f"Retouche du personnage « {char.name} »…",
+        )
+    )
+    user_prompt = json.dumps(
+        {
+            "metadata": bd_script.metadata.model_dump(mode="json"),
+            "style": bd_script.style.model_dump(mode="json"),
+            "current_character": char.model_dump(mode="json", exclude={"reference_image"}),
+            "user_feedback": feedback_text,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
     result = _call_llm(
         CHARACTER_REFINE_SYSTEM_PROMPT,
         user_prompt,
@@ -1068,10 +1151,13 @@ def regenerate_character(
     char.outfit = draft.outfit
     char.reference_prompt = draft.reference_prompt
     char.name = draft.name
-    rep.emit(ProgressEvent(
-        step="script", phase=f"refine_character_{character_id}_done",
-        message=f"Personnage « {char.name} » mis à jour.",
-    ))
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase=f"refine_character_{character_id}_done",
+            message=f"Personnage « {char.name} » mis à jour.",
+        )
+    )
     return char
 
 
@@ -1089,16 +1175,23 @@ def regenerate_location(
     loc = bd_script.location_by_id(location_id)
     if loc is None:
         raise RuntimeError(f"Décor inconnu : {location_id}")
-    rep.emit(ProgressEvent(
-        step="script", phase=f"refine_location_{location_id}",
-        message=f"Retouche du décor « {loc.name} »…",
-    ))
-    user_prompt = json.dumps({
-        "metadata": bd_script.metadata.model_dump(mode="json"),
-        "style": bd_script.style.model_dump(mode="json"),
-        "current_location": loc.model_dump(mode="json", exclude={"reference_image"}),
-        "user_feedback": feedback_text,
-    }, ensure_ascii=False, indent=2)
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase=f"refine_location_{location_id}",
+            message=f"Retouche du décor « {loc.name} »…",
+        )
+    )
+    user_prompt = json.dumps(
+        {
+            "metadata": bd_script.metadata.model_dump(mode="json"),
+            "style": bd_script.style.model_dump(mode="json"),
+            "current_location": loc.model_dump(mode="json", exclude={"reference_image"}),
+            "user_feedback": feedback_text,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
     result = _call_llm(
         LOCATION_REFINE_SYSTEM_PROMPT,
         user_prompt,
@@ -1120,10 +1213,13 @@ def regenerate_location(
     loc.name = draft.name
     loc.description = draft.description
     loc.reference_prompt = draft.reference_prompt
-    rep.emit(ProgressEvent(
-        step="script", phase=f"refine_location_{location_id}_done",
-        message=f"Décor « {loc.name} » mis à jour.",
-    ))
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase=f"refine_location_{location_id}_done",
+            message=f"Décor « {loc.name} » mis à jour.",
+        )
+    )
     return loc
 
 
@@ -1141,16 +1237,23 @@ def regenerate_object(
     obj = bd_script.object_by_id(object_id)
     if obj is None:
         raise RuntimeError(f"Objet inconnu : {object_id}")
-    rep.emit(ProgressEvent(
-        step="script", phase=f"refine_object_{object_id}",
-        message=f"Retouche de l'objet « {obj.name} »…",
-    ))
-    user_prompt = json.dumps({
-        "metadata": bd_script.metadata.model_dump(mode="json"),
-        "style": bd_script.style.model_dump(mode="json"),
-        "current_object": obj.model_dump(mode="json", exclude={"reference_image"}),
-        "user_feedback": feedback_text,
-    }, ensure_ascii=False, indent=2)
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase=f"refine_object_{object_id}",
+            message=f"Retouche de l'objet « {obj.name} »…",
+        )
+    )
+    user_prompt = json.dumps(
+        {
+            "metadata": bd_script.metadata.model_dump(mode="json"),
+            "style": bd_script.style.model_dump(mode="json"),
+            "current_object": obj.model_dump(mode="json", exclude={"reference_image"}),
+            "user_feedback": feedback_text,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
     result = _call_llm(
         OBJECT_REFINE_SYSTEM_PROMPT,
         user_prompt,
@@ -1172,10 +1275,13 @@ def regenerate_object(
     obj.name = draft.name
     obj.description = draft.description
     obj.reference_prompt = draft.reference_prompt
-    rep.emit(ProgressEvent(
-        step="script", phase=f"refine_object_{object_id}_done",
-        message=f"Objet « {obj.name} » mis à jour.",
-    ))
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase=f"refine_object_{object_id}_done",
+            message=f"Objet « {obj.name} » mis à jour.",
+        )
+    )
     return obj
 
 
@@ -1196,11 +1302,15 @@ def regenerate_page(
     )
     if idx is None:
         raise RuntimeError(f"Planche inconnue : {page_number}")
-    rep.emit(ProgressEvent(
-        step="script", phase=f"refine_page_{page_number}",
-        message=f"Retouche de la planche {page_number}…",
-        current=page_number, total=len(bd_script.pages),
-    ))
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase=f"refine_page_{page_number}",
+            message=f"Retouche de la planche {page_number}…",
+            current=page_number,
+            total=len(bd_script.pages),
+        )
+    )
     setup = {
         "characters": [
             {
@@ -1211,33 +1321,31 @@ def regenerate_page(
             }
             for c in bd_script.characters
         ],
-        "locations": [
-            {"id": l.id, "name": l.name, "description": l.description}
-            for l in bd_script.locations
-        ],
-        "objects": [
-            {"id": o.id, "name": o.name, "description": o.description}
-            for o in bd_script.objects
-        ],
+        "locations": [{"id": l.id, "name": l.name, "description": l.description} for l in bd_script.locations],
+        "objects": [{"id": o.id, "name": o.name, "description": o.description} for o in bd_script.objects],
     }
     prior = [p.model_dump(mode="json") for p in bd_script.pages[:idx]]
-    later = [p.model_dump(mode="json") for p in bd_script.pages[idx + 1:]]
-    user_prompt = json.dumps({
-        "metadata": bd_script.metadata.model_dump(mode="json"),
-        "style": bd_script.style.model_dump(mode="json"),
-        "structure": {
-            "page_count": len(bd_script.pages),
+    later = [p.model_dump(mode="json") for p in bd_script.pages[idx + 1 :]]
+    user_prompt = json.dumps(
+        {
+            "metadata": bd_script.metadata.model_dump(mode="json"),
+            "style": bd_script.style.model_dump(mode="json"),
+            "structure": {
+                "page_count": len(bd_script.pages),
+            },
+            "setup": setup,
+            "prior_pages": prior,
+            "later_pages": later,
+            "current_page": bd_script.pages[idx].model_dump(mode="json"),
+            "user_feedback": feedback_text,
+            "instruction": (
+                f"Rewrite ONLY page {page_number} (keep page_number={page_number}). "
+                f"Preserve continuity with prior_pages AND later_pages."
+            ),
         },
-        "setup": setup,
-        "prior_pages": prior,
-        "later_pages": later,
-        "current_page": bd_script.pages[idx].model_dump(mode="json"),
-        "user_feedback": feedback_text,
-        "instruction": (
-            f"Rewrite ONLY page {page_number} (keep page_number={page_number}). "
-            f"Preserve continuity with prior_pages AND later_pages."
-        ),
-    }, ensure_ascii=False, indent=2)
+        ensure_ascii=False,
+        indent=2,
+    )
     result = _call_llm(
         PAGE_REFINE_SYSTEM_PROMPT,
         user_prompt,
@@ -1260,11 +1368,15 @@ def regenerate_page(
         panels=draft.panels,
     )
     bd_script.pages[idx] = new_page
-    rep.emit(ProgressEvent(
-        step="script", phase=f"refine_page_{page_number}_done",
-        message=f"Planche {page_number} mise à jour.",
-        current=page_number, total=len(bd_script.pages),
-    ))
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase=f"refine_page_{page_number}_done",
+            message=f"Planche {page_number} mise à jour.",
+            current=page_number,
+            total=len(bd_script.pages),
+        )
+    )
     return new_page
 
 
@@ -1280,16 +1392,23 @@ def regenerate_cover(
         raise RuntimeError("Le script n'a pas de generation_options ; impossible de retoucher.")
     if bd_script.cover is None:
         raise RuntimeError("Ce projet n'a pas de couverture à retoucher.")
-    rep.emit(ProgressEvent(
-        step="script", phase="refine_cover",
-        message="Retouche de la couverture…",
-    ))
-    user_prompt = json.dumps({
-        "metadata": bd_script.metadata.model_dump(mode="json"),
-        "style": bd_script.style.model_dump(mode="json"),
-        "current_cover": bd_script.cover.model_dump(mode="json"),
-        "user_feedback": feedback_text,
-    }, ensure_ascii=False, indent=2)
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase="refine_cover",
+            message="Retouche de la couverture…",
+        )
+    )
+    user_prompt = json.dumps(
+        {
+            "metadata": bd_script.metadata.model_dump(mode="json"),
+            "style": bd_script.style.model_dump(mode="json"),
+            "current_cover": bd_script.cover.model_dump(mode="json"),
+            "user_feedback": feedback_text,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
     result = _call_llm(
         COVER_REFINE_SYSTEM_PROMPT,
         user_prompt,
@@ -1307,10 +1426,13 @@ def regenerate_cover(
         result=result,
     )
     bd_script.cover = draft
-    rep.emit(ProgressEvent(
-        step="script", phase="refine_cover_done",
-        message="Couverture mise à jour.",
-    ))
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase="refine_cover_done",
+            message="Couverture mise à jour.",
+        )
+    )
     return draft
 
 
@@ -1326,16 +1448,23 @@ def regenerate_back_cover(
         raise RuntimeError("Le script n'a pas de generation_options ; impossible de retoucher.")
     if bd_script.back_cover is None:
         raise RuntimeError("Ce projet n'a pas de 4ᵉ de couverture à retoucher.")
-    rep.emit(ProgressEvent(
-        step="script", phase="refine_back_cover",
-        message="Retouche de la 4ᵉ de couverture…",
-    ))
-    user_prompt = json.dumps({
-        "metadata": bd_script.metadata.model_dump(mode="json"),
-        "style": bd_script.style.model_dump(mode="json"),
-        "current_back_cover": bd_script.back_cover.model_dump(mode="json"),
-        "user_feedback": feedback_text,
-    }, ensure_ascii=False, indent=2)
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase="refine_back_cover",
+            message="Retouche de la 4ᵉ de couverture…",
+        )
+    )
+    user_prompt = json.dumps(
+        {
+            "metadata": bd_script.metadata.model_dump(mode="json"),
+            "style": bd_script.style.model_dump(mode="json"),
+            "current_back_cover": bd_script.back_cover.model_dump(mode="json"),
+            "user_feedback": feedback_text,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
     result = _call_llm(
         BACK_COVER_REFINE_SYSTEM_PROMPT,
         user_prompt,
@@ -1353,10 +1482,13 @@ def regenerate_back_cover(
         result=result,
     )
     bd_script.back_cover = draft
-    rep.emit(ProgressEvent(
-        step="script", phase="refine_back_cover_done",
-        message="4ᵉ de couverture mise à jour.",
-    ))
+    rep.emit(
+        ProgressEvent(
+            step="script",
+            phase="refine_back_cover_done",
+            message="4ᵉ de couverture mise à jour.",
+        )
+    )
     return draft
 
 

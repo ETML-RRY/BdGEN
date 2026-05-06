@@ -1,4 +1,5 @@
 """FastAPI application factory."""
+
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +33,7 @@ from .. import secret_store
 from .. import service
 from .. import style_from_image as style_module
 from .. import upscale as upscale_module
-from ..models import BdGenInput
+from ..models import BackCover, BdGenInput, Cover, Page, ScriptCharacter, ScriptLocation, ScriptObject
 from .jobs import JobManager
 
 
@@ -91,6 +92,7 @@ def create_app(static_dir: Path | None = None) -> FastAPI:
 
 
 # --- API ---
+
 
 class FeedbackPayload(BaseModel):
     feedback: str
@@ -206,11 +208,7 @@ def _register_api(app: FastAPI) -> None:
         for s in service.list_projects(root):
             d = s.to_dict()
             rel = d.pop("thumbnail_rel", None)
-            d["thumbnail_url"] = (
-                _file_url(s.name, rel, service.get_project_dir(s.name, root) / rel)
-                if rel
-                else None
-            )
+            d["thumbnail_url"] = _file_url(s.name, rel, service.get_project_dir(s.name, root) / rel) if rel else None
             items.append(d)
         return {"projects": items}
 
@@ -232,13 +230,9 @@ def _register_api(app: FastAPI) -> None:
         state = service.derive_state(proj_dir)
         quality_idx = service.read_quality_index(proj_dir)
         stale_idx = service.read_stale_index(proj_dir)
+        coherence_idx = service.read_coherence_index(proj_dir)
         # Default quality to assume for items that pre-date the quality index.
-        default_quality = (
-            (cfg_dict or {})
-            .get("generation_options", {})
-            .get("image_model", {})
-            .get("quality", "high")
-        )
+        default_quality = (cfg_dict or {}).get("generation_options", {}).get("image_model", {}).get("quality", "high")
         # Per-step asset listings the frontend uses to flip through items.
         refs = {"characters": [], "locations": [], "objects": []}
         composed = []
@@ -246,61 +240,52 @@ def _register_api(app: FastAPI) -> None:
         stale_refs = set(stale_idx.get("references", []))
         stale_compose = set(stale_idx.get("compose", []))
         upscale_dir = service.get_upscale_output_dir(proj_dir, bd_script, cfg)
-        upscale_ext = (
-            (cfg_dict or {})
-            .get("generation_options", {})
-            .get("upscale", {})
-            .get("output_format", "png")
-        )
+        upscale_ext = (cfg_dict or {}).get("generation_options", {}).get("upscale", {}).get("output_format", "png")
         if bd_script is not None:
             for c in bd_script.characters:
                 ref_path = proj_dir / "references" / "characters" / f"{c.id}.png"
-                refs["characters"].append({
-                    "id": c.id,
-                    "name": c.name,
-                    "physical_description": c.physical_description,
-                    "outfit": c.outfit,
-                    "image_url": _file_url(
-                        name, f"references/characters/{c.id}.png", ref_path
-                    ),
-                    "quality": _quality_for(
-                        quality_idx, "references", c.id, ref_path, default_quality
-                    ),
-                    "stale": c.id in stale_refs and ref_path.exists(),
-                })
+                refs["characters"].append(
+                    {
+                        "id": c.id,
+                        "name": c.name,
+                        "physical_description": c.physical_description,
+                        "outfit": c.outfit,
+                        "image_url": _file_url(name, f"references/characters/{c.id}.png", ref_path),
+                        "quality": _quality_for(quality_idx, "references", c.id, ref_path, default_quality),
+                        "stale": c.id in stale_refs and ref_path.exists(),
+                    }
+                )
             for l in bd_script.locations:
                 ref_path = proj_dir / "references" / "locations" / f"{l.id}.png"
-                refs["locations"].append({
-                    "id": l.id,
-                    "name": l.name,
-                    "description": l.description,
-                    "image_url": _file_url(
-                        name, f"references/locations/{l.id}.png", ref_path
-                    ),
-                    "quality": _quality_for(
-                        quality_idx, "references", l.id, ref_path, default_quality
-                    ),
-                    "stale": l.id in stale_refs and ref_path.exists(),
-                })
+                refs["locations"].append(
+                    {
+                        "id": l.id,
+                        "name": l.name,
+                        "description": l.description,
+                        "image_url": _file_url(name, f"references/locations/{l.id}.png", ref_path),
+                        "quality": _quality_for(quality_idx, "references", l.id, ref_path, default_quality),
+                        "stale": l.id in stale_refs and ref_path.exists(),
+                    }
+                )
             for o in bd_script.objects:
                 ref_path = proj_dir / "references" / "objects" / f"{o.id}.png"
-                refs["objects"].append({
-                    "id": o.id,
-                    "name": o.name,
-                    "description": o.description,
-                    "image_url": _file_url(
-                        name, f"references/objects/{o.id}.png", ref_path
-                    ),
-                    "quality": _quality_for(
-                        quality_idx, "references", o.id, ref_path, default_quality
-                    ),
-                    "stale": o.id in stale_refs and ref_path.exists(),
-                })
+                refs["objects"].append(
+                    {
+                        "id": o.id,
+                        "name": o.name,
+                        "description": o.description,
+                        "image_url": _file_url(name, f"references/objects/{o.id}.png", ref_path),
+                        "quality": _quality_for(quality_idx, "references", o.id, ref_path, default_quality),
+                        "stale": o.id in stale_refs and ref_path.exists(),
+                    }
+                )
             if bd_script.cover is not None:
                 composed.append(_compose_entry(name, "cover", proj_dir, quality_idx, default_quality, stale_compose))
                 upscaled.append(_upscale_entry(name, "cover", proj_dir, upscale_dir, upscale_ext))
             for p in bd_script.pages:
-                composed.append(_compose_entry(name, f"page_{p.page_number}", proj_dir, quality_idx, default_quality, stale_compose))
+                composed.append(
+                    _compose_entry(name, f"page_{p.page_number}", proj_dir, quality_idx, default_quality, stale_compose)
+                )
                 upscaled.append(_upscale_entry(name, f"page_{p.page_number}", proj_dir, upscale_dir, upscale_ext))
             if bd_script.back_cover is not None:
                 composed.append(_compose_entry(name, "back", proj_dir, quality_idx, default_quality, stale_compose))
@@ -333,9 +318,7 @@ def _register_api(app: FastAPI) -> None:
         }
         for kind, items in service.list_reference_images(proj_dir).items():
             for ref_id, ref_path in items.items():
-                reference_images[kind][ref_id] = _file_url(
-                    name, f"references/{kind}/{ref_id}.png", ref_path
-                )
+                reference_images[kind][ref_id] = _file_url(name, f"references/{kind}/{ref_id}.png", ref_path)
         return {
             "name": name,
             "state": state,
@@ -347,6 +330,7 @@ def _register_api(app: FastAPI) -> None:
             "upscale": (cfg_dict or {}).get("generation_options", {}).get("upscale", {}),
             "upscale_available": upscale_module.is_available(),
             "stale": stale_idx,
+            "coherence": coherence_idx,
             "pdf_url": _file_url(name, f"{name}.pdf", proj_dir / f"{name}.pdf"),
             "default_quality": default_quality,
             "character_photos": character_photos,
@@ -383,9 +367,7 @@ def _register_api(app: FastAPI) -> None:
         except Exception as e:
             raise HTTPException(400, f"Configuration invalide : {e}")
         if cfg.project != name:
-            raise HTTPException(
-                400, "Le champ 'project' ne peut pas être renommé via cette route."
-            )
+            raise HTTPException(400, "Le champ 'project' ne peut pas être renommé via cette route.")
         service.detect_and_mark_stale(name, cfg, _output_root())
         service.save_config(cfg, _output_root())
         return {"name": name}
@@ -447,6 +429,7 @@ def _register_api(app: FastAPI) -> None:
     @app.get("/api/projects/{name}/feedback")
     def list_feedback(name: str) -> dict:
         from ..feedback import FeedbackStore, feedback_path_for
+
         proj_dir = service.get_project_dir(name, _output_root())
         store = FeedbackStore.load_or_empty(feedback_path_for(proj_dir / "bdgen-script.json"))
         return {"items": [item.model_dump(mode="json") for item in store.items]}
@@ -622,7 +605,9 @@ def _register_api(app: FastAPI) -> None:
 
         def runner(reporter, interrupt):
             service.run_step_script(
-                name, reporter, interrupt,
+                name,
+                reporter,
+                interrupt,
                 output_root=_output_root(),
                 preview_pages=payload.preview_pages,
             )
@@ -635,7 +620,9 @@ def _register_api(app: FastAPI) -> None:
 
         def runner(reporter, interrupt):
             service.run_step_references(
-                name, reporter, interrupt,
+                name,
+                reporter,
+                interrupt,
                 output_root=_output_root(),
                 force_ids=payload.force_ids,
                 quality_override=payload.quality_override,
@@ -649,7 +636,9 @@ def _register_api(app: FastAPI) -> None:
 
         def runner(reporter, interrupt):
             service.run_step_compose(
-                name, reporter, interrupt,
+                name,
+                reporter,
+                interrupt,
                 output_root=_output_root(),
                 force_ids=payload.force_ids,
                 quality_override=payload.quality_override,
@@ -668,14 +657,12 @@ def _register_api(app: FastAPI) -> None:
         if not cfg.generation_options.upscale.enabled:
             raise HTTPException(
                 400,
-                "L'upscale n'est pas activé pour ce projet. "
-                "Activez-le dans la section Préparation.",
+                "L'upscale n'est pas activé pour ce projet. Activez-le dans la section Préparation.",
             )
         if not upscale_module.is_available():
             raise HTTPException(
                 400,
-                "REPLICATE_API_TOKEN non défini. "
-                "Ajoutez votre clé API Replicate dans le fichier .env du serveur.",
+                "REPLICATE_API_TOKEN non défini. Ajoutez votre clé API Replicate dans le fichier .env du serveur.",
             )
 
         def runner(reporter, interrupt):
@@ -694,9 +681,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/character/{character_id}")
     def refine_character(name: str, character_id: str, payload: FeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_character(
-                name, character_id, payload.feedback, _output_root()
-            )
+            service.add_feedback_and_regenerate_character(name, character_id, payload.feedback, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
@@ -704,9 +689,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/location/{location_id}")
     def refine_location(name: str, location_id: str, payload: FeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_location(
-                name, location_id, payload.feedback, _output_root()
-            )
+            service.add_feedback_and_regenerate_location(name, location_id, payload.feedback, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
@@ -714,9 +697,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/object/{object_id}")
     def refine_object(name: str, object_id: str, payload: FeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_object(
-                name, object_id, payload.feedback, _output_root()
-            )
+            service.add_feedback_and_regenerate_object(name, object_id, payload.feedback, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
@@ -724,9 +705,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/cover")
     def refine_cover(name: str, payload: FeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_cover(
-                name, payload.feedback, _output_root()
-            )
+            service.add_feedback_and_regenerate_cover(name, payload.feedback, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
@@ -734,9 +713,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/back_cover")
     def refine_back_cover(name: str, payload: FeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_back_cover(
-                name, payload.feedback, _output_root()
-            )
+            service.add_feedback_and_regenerate_back_cover(name, payload.feedback, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
@@ -745,11 +722,154 @@ def _register_api(app: FastAPI) -> None:
     def refine_page(name: str, page_number: int, payload: PageFeedbackPayload) -> dict:
         try:
             service.add_feedback_and_regenerate_page(
-                name, page_number, payload.feedback,
-                cascade=payload.cascade, output_root=_output_root(),
+                name,
+                page_number,
+                payload.feedback,
+                cascade=payload.cascade,
+                output_root=_output_root(),
             )
         except Exception as e:
             raise HTTPException(400, str(e))
+        return {"ok": True}
+
+    @app.put("/api/projects/{name}/script/pages/{page_number}")
+    def update_script_page(name: str, page_number: int, payload: dict = Body(...)) -> dict:
+        if not service.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        if app.state.jobs.is_running():
+            current = app.state.jobs.current()
+            if current and current.project == name:
+                raise HTTPException(
+                    409,
+                    "Une generation est en cours sur ce projet.",
+                )
+        try:
+            page = Page.model_validate(payload)
+            service.update_script_page_manual(
+                name,
+                page_number,
+                page.model_dump(mode="json"),
+                _output_root(),
+            )
+        except RuntimeError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Planche invalide : {e}")
+        return {"ok": True}
+
+    @app.post("/api/projects/{name}/script/coherence/check")
+    def check_script_coherence(name: str) -> dict:
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        try:
+            return service.check_script_coherence(name, _output_root())
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/projects/{name}/script/suggestions/apply")
+    def apply_script_suggestion(name: str, payload: dict = Body(...)) -> dict:
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        suggestion = (payload or {}).get("suggestion", "")
+        if not suggestion:
+            raise HTTPException(400, "suggestion manquante")
+        try:
+            return service.apply_global_suggestion(name, suggestion, _output_root())
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+    @app.put("/api/projects/{name}/script/characters/{character_id}")
+    def update_script_character(name: str, character_id: str, payload: dict = Body(...)) -> dict:
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        try:
+            character = ScriptCharacter.model_validate(payload)
+            service.update_script_character_manual(name, character_id, character.model_dump(mode="json"), _output_root())
+        except RuntimeError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Personnage invalide : {e}")
+        return {"ok": True}
+
+    @app.post("/api/projects/{name}/script/characters")
+    def add_script_character(name: str, payload: dict = Body(...)) -> dict:
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        try:
+            character = ScriptCharacter.model_validate(payload)
+            service.add_script_character_manual(name, character.model_dump(mode="json"), _output_root())
+        except RuntimeError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Personnage invalide : {e}")
+        return {"ok": True}
+
+    @app.put("/api/projects/{name}/script/locations/{location_id}")
+    def update_script_location(name: str, location_id: str, payload: dict = Body(...)) -> dict:
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        try:
+            location = ScriptLocation.model_validate(payload)
+            service.update_script_location_manual(name, location_id, location.model_dump(mode="json"), _output_root())
+        except RuntimeError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Decor invalide : {e}")
+        return {"ok": True}
+
+    @app.post("/api/projects/{name}/script/locations")
+    def add_script_location(name: str, payload: dict = Body(...)) -> dict:
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        try:
+            location = ScriptLocation.model_validate(payload)
+            service.add_script_location_manual(name, location.model_dump(mode="json"), _output_root())
+        except RuntimeError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Decor invalide : {e}")
+        return {"ok": True}
+
+    @app.put("/api/projects/{name}/script/objects/{object_id}")
+    def update_script_object(name: str, object_id: str, payload: dict = Body(...)) -> dict:
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        try:
+            obj = ScriptObject.model_validate(payload)
+            service.update_script_object_manual(name, object_id, obj.model_dump(mode="json"), _output_root())
+        except RuntimeError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Objet invalide : {e}")
+        return {"ok": True}
+
+    @app.post("/api/projects/{name}/script/objects")
+    def add_script_object(name: str, payload: dict = Body(...)) -> dict:
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        try:
+            obj = ScriptObject.model_validate(payload)
+            service.add_script_object_manual(name, obj.model_dump(mode="json"), _output_root())
+        except RuntimeError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Objet invalide : {e}")
+        return {"ok": True}
+
+    @app.put("/api/projects/{name}/script/cover")
+    def update_script_cover(name: str, payload: dict = Body(...)) -> dict:
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        try:
+            cover = Cover.model_validate(payload)
+            service.update_script_cover_manual(name, cover.model_dump(mode="json"), _output_root())
+        except RuntimeError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"Couverture invalide : {e}")
+        return {"ok": True}
+
+    @app.put("/api/projects/{name}/script/back-cover")
+    def update_script_back_cover(name: str, payload: dict = Body(...)) -> dict:
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        try:
+            back_cover = BackCover.model_validate(payload)
+            service.update_script_back_cover_manual(name, back_cover.model_dump(mode="json"), _output_root())
+        except RuntimeError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(400, f"4e de couverture invalide : {e}")
         return {"ok": True}
 
     @app.post("/api/projects/{name}/inpaint/{step}/{target_id}")
@@ -767,7 +887,9 @@ def _register_api(app: FastAPI) -> None:
         if app.state.jobs.is_running():
             current = app.state.jobs.current()
             if current and current.project == name:
-                raise HTTPException(409, "Une génération est en cours. Interrompez-la avant de lancer une retouche ciblée.")
+                raise HTTPException(
+                    409, "Une génération est en cours. Interrompez-la avant de lancer une retouche ciblée."
+                )
         mask_bytes = await mask.read()
         try:
             new_path = await asyncio.to_thread(
@@ -800,7 +922,11 @@ def _register_api(app: FastAPI) -> None:
         if payload.step not in ("references", "compose"):
             raise HTTPException(400, "Étape invalide.")
         service.record_image_feedback(
-            name, payload.step, payload.target, payload.feedback, _output_root()  # type: ignore[arg-type]
+            name,
+            payload.step,
+            payload.target,
+            payload.feedback,
+            _output_root(),  # type: ignore[arg-type]
         )
         return {"ok": True}
 
@@ -834,9 +960,7 @@ def _register_api(app: FastAPI) -> None:
         auto_regenerate: bool = True,
     ) -> dict:
         try:
-            info = service.delete_character_and_cascade(
-                name, character_id, _output_root()
-            )
+            info = service.delete_character_and_cascade(name, character_id, _output_root())
         except ValueError as e:
             raise HTTPException(404, str(e))
         info["job"] = _maybe_autostart_script(name, info, auto_regenerate)
@@ -849,9 +973,7 @@ def _register_api(app: FastAPI) -> None:
         auto_regenerate: bool = True,
     ) -> dict:
         try:
-            info = service.delete_location_and_cascade(
-                name, location_id, _output_root()
-            )
+            info = service.delete_location_and_cascade(name, location_id, _output_root())
         except ValueError as e:
             raise HTTPException(404, str(e))
         info["job"] = _maybe_autostart_script(name, info, auto_regenerate)
@@ -864,9 +986,7 @@ def _register_api(app: FastAPI) -> None:
         auto_regenerate: bool = True,
     ) -> dict:
         try:
-            info = service.delete_object_and_cascade(
-                name, object_id, _output_root()
-            )
+            info = service.delete_object_and_cascade(name, object_id, _output_root())
         except ValueError as e:
             raise HTTPException(404, str(e))
         info["job"] = _maybe_autostart_script(name, info, auto_regenerate)
@@ -883,9 +1003,7 @@ def _register_api(app: FastAPI) -> None:
             return None
 
         def runner(reporter, interrupt):
-            service.run_step_script(
-                name, reporter, interrupt, output_root=_output_root()
-            )
+            service.run_step_script(name, reporter, interrupt, output_root=_output_root())
 
         try:
             snap = app.state.jobs.start(name, "script", runner)
@@ -1004,16 +1122,12 @@ def _register_api(app: FastAPI) -> None:
     # --- Per-character reference photos ---
 
     @app.put("/api/projects/{name}/characters/{character_id}/photo")
-    async def set_character_photo(
-        name: str, character_id: str, file: UploadFile = File(...)
-    ) -> dict:
+    async def set_character_photo(name: str, character_id: str, file: UploadFile = File(...)) -> dict:
         if not service.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         blob = await file.read()
         try:
-            p = service.save_character_photo(
-                name, character_id, blob, _output_root()
-            )
+            p = service.save_character_photo(name, character_id, blob, _output_root())
         except ValueError as e:
             raise HTTPException(400, str(e))
         return {
@@ -1029,24 +1143,18 @@ def _register_api(app: FastAPI) -> None:
     def remove_character_photo(name: str, character_id: str) -> dict:
         if not service.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
-        removed = service.delete_character_photo(
-            name, character_id, _output_root()
-        )
+        removed = service.delete_character_photo(name, character_id, _output_root())
         return {"ok": True, "removed": removed}
 
     # --- Per-object reference photos ---
 
     @app.put("/api/projects/{name}/objects/{object_id}/photo")
-    async def set_object_photo(
-        name: str, object_id: str, file: UploadFile = File(...)
-    ) -> dict:
+    async def set_object_photo(name: str, object_id: str, file: UploadFile = File(...)) -> dict:
         if not service.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         blob = await file.read()
         try:
-            p = service.save_object_photo(
-                name, object_id, blob, _output_root()
-            )
+            p = service.save_object_photo(name, object_id, blob, _output_root())
         except ValueError as e:
             raise HTTPException(400, str(e))
         return {
@@ -1062,24 +1170,18 @@ def _register_api(app: FastAPI) -> None:
     def remove_object_photo(name: str, object_id: str) -> dict:
         if not service.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
-        removed = service.delete_object_photo(
-            name, object_id, _output_root()
-        )
+        removed = service.delete_object_photo(name, object_id, _output_root())
         return {"ok": True, "removed": removed}
 
     # --- Per-location reference photos ---
 
     @app.put("/api/projects/{name}/locations/{location_id}/photo")
-    async def set_location_photo(
-        name: str, location_id: str, file: UploadFile = File(...)
-    ) -> dict:
+    async def set_location_photo(name: str, location_id: str, file: UploadFile = File(...)) -> dict:
         if not service.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         blob = await file.read()
         try:
-            p = service.save_location_photo(
-                name, location_id, blob, _output_root()
-            )
+            p = service.save_location_photo(name, location_id, blob, _output_root())
         except ValueError as e:
             raise HTTPException(400, str(e))
         return {
@@ -1095,17 +1197,13 @@ def _register_api(app: FastAPI) -> None:
     def remove_location_photo(name: str, location_id: str) -> dict:
         if not service.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
-        removed = service.delete_location_photo(
-            name, location_id, _output_root()
-        )
+        removed = service.delete_location_photo(name, location_id, _output_root())
         return {"ok": True, "removed": removed}
 
 
 def _validate_quality(q: str | None) -> None:
     if q is not None and q not in ("low", "medium", "high"):
-        raise HTTPException(
-            400, "quality_override doit valoir 'low', 'medium' ou 'high'."
-        )
+        raise HTTPException(400, "quality_override doit valoir 'low', 'medium' ou 'high'.")
 
 
 def _file_url(project: str, rel: str, full_path: Path) -> str | None:
@@ -1156,11 +1254,21 @@ def _compose_entry(
     return {
         "id": target,
         "image_url": _file_url(project, rel, full),
-        "quality": _quality_for(
-            quality_idx, "compose", target, full, default_quality
-        ),
+        "quality": _quality_for(quality_idx, "compose", target, full, default_quality),
         "stale": bool(stale_set and target in stale_set and exists),
     }
+
+
+def _ensure_manual_script_edit_allowed(app: FastAPI, name: str, output_root: Path) -> None:
+    if not service.project_exists(name, output_root):
+        raise HTTPException(404, "Projet inconnu.")
+    if app.state.jobs.is_running():
+        current = app.state.jobs.current()
+        if current and current.project == name:
+            raise HTTPException(
+                409,
+                "Une generation est en cours sur ce projet.",
+            )
 
 
 def _upscale_entry(

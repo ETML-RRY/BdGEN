@@ -6,6 +6,7 @@ nothing about projects-on-disk, zip files, or HTTP; the service module handles
 all of that and dispatches to the engine with the right
 reporter/interrupt/feedback wiring.
 """
+
 from __future__ import annotations
 
 import io
@@ -29,7 +30,7 @@ from . import script as script_module
 from . import stats as stats_module
 from . import upscale as upscale_module
 from .feedback import FeedbackStore, feedback_path_for
-from .models import BdGenInput, BdGenScript, Style
+from .models import BackCover, BdGenInput, BdGenScript, Cover, Page, ScriptCharacter, ScriptLocation, ScriptObject, Style
 from .progress import InterruptFlag, ProgressReporter
 
 Step = Literal["preparation", "script", "references", "compose", "done"]
@@ -37,6 +38,7 @@ Quality = Literal["low", "medium", "high"]
 PROJECT_CONFIG_NAME = "bdgen.json"
 QUALITY_INDEX_NAME = "bdgen-quality.json"
 STALE_INDEX_NAME = "bdgen-stale.json"
+COHERENCE_INDEX_NAME = "bdgen-coherence.json"
 STATS_NAME = stats_module.STATS_NAME
 STYLE_REF_NAME = "bdgen-style-ref.png"
 UPSCALED_DIRNAME = "pages_upscaled"
@@ -57,6 +59,7 @@ DEFAULT_IMAGE_MODEL = "gpt-image-2"
 @dataclass
 class ProjectSummary:
     """Light-weight project description for listings."""
+
     name: str
     display_name: str | None
     title: str | None
@@ -76,6 +79,7 @@ class ProjectSummary:
 
 
 # --- Project discovery / lifecycle ---
+
 
 def projects_root(output_root: Path | None = None) -> Path:
     return (output_root or Path("./output")).resolve()
@@ -177,30 +181,36 @@ def _structure_statistics(script: BdGenScript | None, proj_dir: Path) -> dict:
     for o in script.objects:
         generated_text_parts.extend([o.name, o.description, o.reference_prompt])
     if script.cover is not None:
-        generated_text_parts.extend([
-            script.cover.scene_description,
-            script.cover.title_placement or "",
-            script.cover.subtitle or "",
-            script.cover.tagline or "",
-        ])
+        generated_text_parts.extend(
+            [
+                script.cover.scene_description,
+                script.cover.title_placement or "",
+                script.cover.subtitle or "",
+                script.cover.tagline or "",
+            ]
+        )
     if script.back_cover is not None:
-        generated_text_parts.extend([
-            script.back_cover.synopsis_blurb,
-            script.back_cover.scene_description or "",
-            script.back_cover.tagline or "",
-            script.back_cover.layout_notes or "",
-        ])
+        generated_text_parts.extend(
+            [
+                script.back_cover.synopsis_blurb,
+                script.back_cover.scene_description or "",
+                script.back_cover.tagline or "",
+                script.back_cover.layout_notes or "",
+            ]
+        )
     used_refs: list[str] = []
     for p in script.pages:
         generated_text_parts.append(p.layout or "")
         for panel in p.panels:
-            generated_text_parts.extend([
-                panel.location,
-                panel.shot or "",
-                panel.scene_description,
-                panel.narration or "",
-                " ".join(panel.sound_effects),
-            ])
+            generated_text_parts.extend(
+                [
+                    panel.location,
+                    panel.shot or "",
+                    panel.scene_description,
+                    panel.narration or "",
+                    " ".join(panel.sound_effects),
+                ]
+            )
             used_refs.extend(panel.characters)
             used_refs.append(panel.location)
             used_refs.extend(panel.objects)
@@ -354,9 +364,7 @@ def detect_and_mark_stale(
         if not oc:
             continue
         fields_changed = (
-            nc.physical_description != oc.physical_description
-            or nc.outfit != oc.outfit
-            or nc.name != oc.name
+            nc.physical_description != oc.physical_description or nc.outfit != oc.outfit or nc.name != oc.name
         )
         if fields_changed:
             ref_png = proj_dir / "references" / "characters" / f"{nc.id}.png"
@@ -399,14 +407,12 @@ def save_config(config: BdGenInput, output_root: Path | None = None) -> Path:
     if not config.project:
         raise ValueError("config.project doit être défini.")
     _coerce_openai_image_model(config.generation_options.image_model)
-    config.output_root = (output_root or config.output_root or Path("./output"))
+    config.output_root = output_root or config.output_root or Path("./output")
     proj_dir = config.output_root / config.project
     proj_dir.mkdir(parents=True, exist_ok=True)
     config_path = proj_dir / PROJECT_CONFIG_NAME
     payload = config.to_portable_dict(config_path)
-    config_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    config_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return config_path
 
 
@@ -623,6 +629,7 @@ def restyle_project(
 
 # --- State derivation ---
 
+
 def derive_state(proj_dir: Path) -> Step:
     """Best-effort guess of what step the user should land on.
 
@@ -659,11 +666,7 @@ def derive_state(proj_dir: Path) -> Step:
 
 def _references_progress(proj_dir: Path, bd_script: BdGenScript) -> tuple[int, int]:
     refs_dir = proj_dir / "references"
-    total = (
-        len(bd_script.characters)
-        + len(bd_script.locations)
-        + len(bd_script.objects)
-    )
+    total = len(bd_script.characters) + len(bd_script.locations) + len(bd_script.objects)
     ready = 0
     for c in bd_script.characters:
         if (refs_dir / "characters" / f"{c.id}.png").exists():
@@ -829,6 +832,7 @@ def is_upscaled_stale(source_path: Path, upscaled_path: Path) -> bool:
 
 # --- Style reference image ---
 
+
 def get_style_reference_path(proj_dir: Path) -> Path | None:
     """Return the style-reference PNG if it exists, else None."""
     p = proj_dir / STYLE_REF_NAME
@@ -847,6 +851,7 @@ def save_style_reference(name: str, image_bytes: bytes, output_root: Path | None
 
 
 # --- Per-character reference photos ---
+
 
 def character_photo_path(proj_dir: Path, character_id: str) -> Path:
     """Return the canonical PNG path for a character photo (file may not exist)."""
@@ -950,9 +955,7 @@ def save_character_photo(
     return p
 
 
-def delete_character_photo(
-    name: str, character_id: str, output_root: Path | None = None
-) -> bool:
+def delete_character_photo(name: str, character_id: str, output_root: Path | None = None) -> bool:
     proj_dir = get_project_dir(name, output_root)
     p = character_photo_path(proj_dir, character_id)
     if p.exists():
@@ -965,6 +968,7 @@ def delete_character_photo(
 
 
 # --- Per-location reference photos ---
+
 
 def location_photo_path(proj_dir: Path, location_id: str) -> Path:
     """Return the canonical PNG path for a location photo (file may not exist)."""
@@ -1034,9 +1038,7 @@ def save_location_photo(
     return p
 
 
-def delete_location_photo(
-    name: str, location_id: str, output_root: Path | None = None
-) -> bool:
+def delete_location_photo(name: str, location_id: str, output_root: Path | None = None) -> bool:
     proj_dir = get_project_dir(name, output_root)
     p = location_photo_path(proj_dir, location_id)
     if p.exists():
@@ -1049,6 +1051,7 @@ def delete_location_photo(
 
 
 # --- Per-object reference photos ---
+
 
 def object_photo_path(proj_dir: Path, object_id: str) -> Path:
     """Return the canonical PNG path for an object photo (file may not exist)."""
@@ -1118,9 +1121,7 @@ def save_object_photo(
     return p
 
 
-def delete_object_photo(
-    name: str, object_id: str, output_root: Path | None = None
-) -> bool:
+def delete_object_photo(name: str, object_id: str, output_root: Path | None = None) -> bool:
     proj_dir = get_project_dir(name, output_root)
     p = object_photo_path(proj_dir, object_id)
     if p.exists():
@@ -1133,6 +1134,7 @@ def delete_object_photo(
 
 
 # --- Per-target quality index ---
+
 
 def _quality_index_path(proj_dir: Path) -> Path:
     return proj_dir / QUALITY_INDEX_NAME
@@ -1155,11 +1157,7 @@ def read_quality_index(proj_dir: Path) -> dict[str, dict[str, str]]:
             return base
         for k in ("references", "compose"):
             if isinstance(data.get(k), dict):
-                base[k] = {
-                    str(tid): str(q)
-                    for tid, q in data[k].items()
-                    if isinstance(q, str)
-                }
+                base[k] = {str(tid): str(q) for tid, q in data[k].items() if isinstance(q, str)}
         return base
     except Exception:
         return base
@@ -1168,15 +1166,58 @@ def read_quality_index(proj_dir: Path) -> dict[str, dict[str, str]]:
 def write_quality_index(proj_dir: Path, idx: dict[str, dict[str, str]]) -> None:
     p = _quality_index_path(proj_dir)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(
-        json.dumps(idx, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    p.write_text(json.dumps(idx, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 # --- Staleness index (per-target "text modified after image was generated") ---
 
+
 def _stale_index_path(proj_dir: Path) -> Path:
     return proj_dir / STALE_INDEX_NAME
+
+
+def _coherence_index_path(proj_dir: Path) -> Path:
+    return proj_dir / COHERENCE_INDEX_NAME
+
+
+def _empty_coherence_index(dirty: bool = False) -> dict:
+    return {
+        "dirty": dirty,
+        "checked_at": None,
+        "issues": [],
+        "suggestions": [],
+        "flagged_pages": [],
+    }
+
+
+def read_coherence_index(proj_dir: Path) -> dict:
+    p = _coherence_index_path(proj_dir)
+    if not p.exists():
+        return _empty_coherence_index()
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return _empty_coherence_index(True)
+    if not isinstance(data, dict):
+        return _empty_coherence_index(True)
+    base = _empty_coherence_index()
+    base.update(data)
+    base["dirty"] = bool(base.get("dirty"))
+    base["issues"] = list(base.get("issues") or [])
+    base["suggestions"] = list(base.get("suggestions") or [])
+    base["flagged_pages"] = sorted({int(p) for p in base.get("flagged_pages") or [] if isinstance(p, (int, float))})
+    return base
+
+
+def write_coherence_index(proj_dir: Path, idx: dict) -> None:
+    p = _coherence_index_path(proj_dir)
+    p.write_text(json.dumps(idx, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def mark_script_coherence_dirty(proj_dir: Path) -> None:
+    idx = read_coherence_index(proj_dir)
+    idx["dirty"] = True
+    write_coherence_index(proj_dir, idx)
 
 
 def read_stale_index(proj_dir: Path) -> dict[str, list[str]]:
@@ -1218,9 +1259,7 @@ def write_stale_index(proj_dir: Path, idx: dict[str, list[str]]) -> None:
         if p.exists():
             p.unlink()
         return
-    p.write_text(
-        json.dumps(cleaned, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    p.write_text(json.dumps(cleaned, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def mark_stale(proj_dir: Path, step: str, target_ids: str | list[str]) -> None:
@@ -1238,6 +1277,454 @@ def mark_stale(proj_dir: Path, step: str, target_ids: str | list[str]) -> None:
             bucket.append(tid)
             seen.add(tid)
     write_stale_index(proj_dir, idx)
+
+
+def _llm_coherence_check(
+    system: str,
+    user: str,
+    script_model,
+    project_dir: Path | None = None,
+    target_id: str = "script",
+) -> dict:
+    """Ask the configured LLM for coherence issues and narrative suggestions.
+
+    Returns {"issues": [...], "suggestions": [...]}.
+    """
+    provider = script_model.provider if script_model else "openai"
+    model = script_model.model if script_model else "gpt-4o-mini"
+
+    started_at, started = stats_module.start_timer()
+    usage: dict = {}
+    try:
+        if provider == "anthropic":
+            client = secret_store.anthropic_client()
+            response = client.messages.create(
+                model=model,
+                max_tokens=4096,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+            raw = response.content[0].text
+            usage = stats_module.normalise_usage(getattr(response, "usage", None))
+        elif provider == "xai":
+            client = secret_store.xai_client()
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content
+            usage = stats_module.normalise_usage(getattr(response, "usage", None))
+        else:
+            client = secret_store.openai_client()
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content
+            usage = stats_module.normalise_usage(getattr(response, "usage", None))
+    except Exception:
+        stats_module.record_event(
+            project_dir,
+            step="coherence",
+            target_id=target_id,
+            target_kind="script",
+            operation="check_coherence",
+            provider=provider,
+            model=model,
+            timer=stats_module.stop_timer(started_at, started),
+            status="error",
+            usage=usage,
+            prompt=user,
+            extra={"retouch": False},
+        )
+        return {"issues": [], "suggestions": []}
+
+    stats_module.record_event(
+        project_dir,
+        step="coherence",
+        target_id=target_id,
+        target_kind="script",
+        operation="check_coherence",
+        provider=provider,
+        model=model,
+        timer=stats_module.stop_timer(started_at, started),
+        usage=usage,
+        prompt=user,
+        extra={"retouch": False},
+    )
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", raw)
+        if match:
+            try:
+                data = json.loads(match.group())
+            except json.JSONDecodeError:
+                return {"issues": [], "suggestions": []}
+        else:
+            return {"issues": [], "suggestions": []}
+
+    if not isinstance(data, dict):
+        return {"issues": [], "suggestions": []}
+
+    def _parse_items(raw_list: list) -> list[dict]:
+        valid: list[dict] = []
+        for item in raw_list or []:
+            if not isinstance(item, dict):
+                continue
+            page_number = item.get("page_number")
+            try:
+                valid.append(
+                    {
+                        "page_number": int(page_number) if page_number is not None else None,
+                        "panel_number": item.get("panel_number"),
+                        "kind": str(item.get("kind", "unknown")),
+                        "target": str(item.get("target", "")),
+                        "message": str(item.get("message", "")),
+                    }
+                )
+            except (ValueError, TypeError):
+                continue
+        return valid
+
+    return {
+        "issues": _parse_items(data.get("issues", [])),
+        "suggestions": _parse_items(data.get("suggestions", [])),
+    }
+
+
+def check_script_coherence(name: str, output_root: Path | None = None) -> dict:
+    """Check script coherence using an LLM — both structural errors and narrative suggestions."""
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+
+    try:
+        script_model = load_config(name, output_root).generation_options.script_model
+    except FileNotFoundError:
+        opts = bd_script.generation_options
+        script_model = opts.script_model if opts else None
+
+    characters = [
+        {"id": c.id, "name": c.name, "description": c.physical_description, "outfit": c.outfit}
+        for c in bd_script.characters
+    ]
+    locations = [
+        {"id": loc.id, "name": loc.name, "description": loc.description}
+        for loc in bd_script.locations
+    ]
+    objects = [
+        {"id": o.id, "name": o.name, "description": o.description}
+        for o in bd_script.objects
+    ]
+    pages_data = []
+    for page in bd_script.pages:
+        panels_data = []
+        for panel in page.panels:
+            panels_data.append(
+                {
+                    "panel_number": panel.panel_number,
+                    "location": panel.location,
+                    "characters": panel.characters,
+                    "objects": panel.objects or [],
+                    "scene_description": panel.scene_description,
+                    "dialogs": [{"speaker": d.speaker, "type": d.type, "text": d.text} for d in panel.dialogs],
+                }
+            )
+        pages_data.append({"page_number": page.page_number, "layout": page.layout, "panels": panels_data})
+
+    script_payload = {
+        "characters": characters,
+        "locations": locations,
+        "objects": objects,
+        "pages": pages_data,
+    }
+
+    system = (
+        "Tu es un expert en scénarios de bande dessinée. "
+        "On te donne un scénario complet avec personnages, décors, objets et planches. "
+        "Tu dois :\n"
+        "1. Détecter les ERREURS structurelles (dans 'issues') : références à des ids de personnages, "
+        "décors ou objets inconnus ; personnages qui parlent sans figurer dans la liste 'characters' de la case "
+        "(sauf type 'narration') ; numéros de planche ou de case en doublon ; toute incohérence technique.\n"
+        "2. Proposer des SUGGESTIONS narratives proactives (dans 'suggestions') : personnages, décors ou objets "
+        "qui n'apparaissent dans aucune planche et pourraient être exploités ; planches où un personnage "
+        "récemment ajouté enrichirait la scène ; incohérences narratives subtiles entre la description d'un "
+        "élément et son usage dans les cases ; améliorations pour renforcer la cohérence de l'histoire.\n"
+        "Réponds UNIQUEMENT avec un objet JSON de la forme :\n"
+        '{"issues": [...], "suggestions": [...]}\n'
+        "Chaque entrée (issue ou suggestion) : "
+        '{"page_number": int|null, "panel_number": int|null, '
+        '"kind": "character"|"location"|"object"|"dialog"|"panel"|"page"|"narrative", '
+        '"target": string, "message": string (en français)}.\n'
+        'Si rien à signaler : {"issues": [], "suggestions": []}.'
+    )
+    user = f"Scénario à analyser :\n\n{json.dumps(script_payload, ensure_ascii=False, indent=2)}"
+
+    result = _llm_coherence_check(system, user, script_model, proj_dir, name)
+    issues = result.get("issues", [])
+    suggestions = result.get("suggestions", [])
+
+    idx = {
+        "dirty": False,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "issues": issues,
+        "suggestions": suggestions,
+        "flagged_pages": sorted({issue["page_number"] for issue in issues if issue.get("page_number") is not None}),
+    }
+    write_coherence_index(proj_dir, idx)
+    return idx
+
+
+def apply_global_suggestion(
+    name: str,
+    suggestion: str,
+    output_root: Path | None = None,
+) -> dict:
+    """Apply a global narrative suggestion to the script via the LLM.
+
+    The LLM returns only the modified elements (page_updates, character_updates,
+    character_additions, location_updates, location_additions, object_updates,
+    object_additions). Each is applied using the existing Pydantic validators and
+    the script is saved. Returns a summary of applied changes.
+    """
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+
+    try:
+        script_model = load_config(name, output_root).generation_options.script_model
+    except FileNotFoundError:
+        opts = bd_script.generation_options
+        script_model = opts.script_model if opts else None
+
+    provider = script_model.provider if script_model else "openai"
+    model = script_model.model if script_model else "gpt-4o-mini"
+
+    script_payload = {
+        "characters": [c.model_dump(mode="json") for c in bd_script.characters],
+        "locations": [loc.model_dump(mode="json") for loc in bd_script.locations],
+        "objects": [o.model_dump(mode="json") for o in bd_script.objects],
+        "pages": [p.model_dump(mode="json") for p in bd_script.pages],
+    }
+
+    system = (
+        "Tu es un éditeur de scénarios de bande dessinée expérimenté. "
+        "On te donne un scénario complet et une suggestion narrative à appliquer. "
+        "Applique la suggestion en retournant UNIQUEMENT les éléments modifiés au format JSON :\n"
+        "{\n"
+        '  "page_updates": [<pages complètes modifiées, avec tous leurs champs>],\n'
+        '  "character_updates": [<personnages existants à modifier>],\n'
+        '  "character_additions": [<nouveaux personnages>],\n'
+        '  "location_updates": [<décors existants à modifier>],\n'
+        '  "location_additions": [<nouveaux décors>],\n'
+        '  "object_updates": [<objets existants à modifier>],\n'
+        '  "object_additions": [<nouveaux objets>]\n'
+        "}\n"
+        "Chaque page dans page_updates doit inclure tous ses champs (page_number, layout, panels…). "
+        "Chaque personnage/décor/objet doit inclure tous ses champs obligatoires (id, name, etc.). "
+        "Retourne un tableau vide pour les catégories non modifiées. "
+        "Ne génère PAS les éléments qui n'ont pas besoin de changer."
+    )
+    user = (
+        f"Suggestion à appliquer :\n{suggestion}\n\n"
+        f"Scénario actuel :\n{json.dumps(script_payload, ensure_ascii=False, indent=2)}"
+    )
+
+    started_at, started = stats_module.start_timer()
+    usage: dict = {}
+    raw = ""
+    try:
+        if provider == "anthropic":
+            client = secret_store.anthropic_client()
+            response = client.messages.create(
+                model=model,
+                max_tokens=8192,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+            raw = response.content[0].text
+            usage = stats_module.normalise_usage(getattr(response, "usage", None))
+        elif provider == "xai":
+            client = secret_store.xai_client()
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content
+            usage = stats_module.normalise_usage(getattr(response, "usage", None))
+        else:
+            client = secret_store.openai_client()
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format={"type": "json_object"},
+            )
+            raw = response.choices[0].message.content
+            usage = stats_module.normalise_usage(getattr(response, "usage", None))
+    except Exception as exc:
+        stats_module.record_event(
+            proj_dir,
+            step="coherence",
+            target_id=name,
+            target_kind="script",
+            operation="apply_suggestion",
+            provider=provider,
+            model=model,
+            timer=stats_module.stop_timer(started_at, started),
+            status="error",
+            usage=usage,
+            prompt=user,
+            extra={"retouch": True},
+        )
+        raise RuntimeError(f"Erreur LLM : {exc}") from exc
+
+    stats_module.record_event(
+        proj_dir,
+        step="coherence",
+        target_id=name,
+        target_kind="script",
+        operation="apply_suggestion",
+        provider=provider,
+        model=model,
+        timer=stats_module.stop_timer(started_at, started),
+        usage=usage,
+        prompt=user,
+        extra={"retouch": True},
+    )
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", raw)
+        if match:
+            try:
+                data = json.loads(match.group())
+            except json.JSONDecodeError:
+                raise RuntimeError("Réponse LLM non parseable.")
+        else:
+            raise RuntimeError("Réponse LLM vide ou invalide.")
+
+    if not isinstance(data, dict):
+        raise RuntimeError("Réponse LLM invalide (objet attendu).")
+
+    changes = {
+        "page_updates": 0,
+        "character_updates": 0,
+        "character_additions": 0,
+        "location_updates": 0,
+        "location_additions": 0,
+        "object_updates": 0,
+        "object_additions": 0,
+    }
+
+    for page_data in data.get("page_updates") or []:
+        try:
+            page = Page.model_validate(page_data)
+            idx = next((i for i, p in enumerate(bd_script.pages) if p.page_number == page.page_number), None)
+            if idx is not None:
+                bd_script.pages[idx] = page
+                composed = proj_dir / "pages" / f"page_{page.page_number:02d}.png"
+                if composed.exists():
+                    mark_stale(proj_dir, "compose", f"page_{page.page_number}")
+                changes["page_updates"] += 1
+        except Exception:
+            continue
+
+    existing_char_ids = {c.id for c in bd_script.characters}
+    for char_data in data.get("character_updates") or []:
+        try:
+            char = ScriptCharacter.model_validate(char_data)
+            idx = next((i for i, c in enumerate(bd_script.characters) if c.id == char.id), None)
+            if idx is not None:
+                bd_script.characters[idx] = char
+                ref_img = proj_dir / "references" / "characters" / f"{char.id}.png"
+                if ref_img.exists():
+                    mark_stale(proj_dir, "references", char.id)
+                changes["character_updates"] += 1
+        except Exception:
+            continue
+
+    for char_data in data.get("character_additions") or []:
+        try:
+            char = ScriptCharacter.model_validate(char_data)
+            if char.id not in existing_char_ids:
+                bd_script.characters.append(char)
+                existing_char_ids.add(char.id)
+                changes["character_additions"] += 1
+        except Exception:
+            continue
+
+    existing_loc_ids = {loc.id for loc in bd_script.locations}
+    for loc_data in data.get("location_updates") or []:
+        try:
+            loc = ScriptLocation.model_validate(loc_data)
+            idx = next((i for i, l in enumerate(bd_script.locations) if l.id == loc.id), None)
+            if idx is not None:
+                bd_script.locations[idx] = loc
+                ref_img = proj_dir / "references" / "locations" / f"{loc.id}.png"
+                if ref_img.exists():
+                    mark_stale(proj_dir, "references", loc.id)
+                changes["location_updates"] += 1
+        except Exception:
+            continue
+
+    for loc_data in data.get("location_additions") or []:
+        try:
+            loc = ScriptLocation.model_validate(loc_data)
+            if loc.id not in existing_loc_ids:
+                bd_script.locations.append(loc)
+                existing_loc_ids.add(loc.id)
+                changes["location_additions"] += 1
+        except Exception:
+            continue
+
+    existing_obj_ids = {o.id for o in bd_script.objects}
+    for obj_data in data.get("object_updates") or []:
+        try:
+            obj = ScriptObject.model_validate(obj_data)
+            idx = next((i for i, o in enumerate(bd_script.objects) if o.id == obj.id), None)
+            if idx is not None:
+                bd_script.objects[idx] = obj
+                ref_img = proj_dir / "references" / "objects" / f"{obj.id}.png"
+                if ref_img.exists():
+                    mark_stale(proj_dir, "references", obj.id)
+                changes["object_updates"] += 1
+        except Exception:
+            continue
+
+    for obj_data in data.get("object_additions") or []:
+        try:
+            obj = ScriptObject.model_validate(obj_data)
+            if obj.id not in existing_obj_ids:
+                bd_script.objects.append(obj)
+                existing_obj_ids.add(obj.id)
+                changes["object_additions"] += 1
+        except Exception:
+            continue
+
+    bd_script.save(script_path)
+    coh_idx = read_coherence_index(proj_dir)
+    coh_idx["dirty"] = True
+    coh_idx["suggestions"] = [s for s in coh_idx.get("suggestions", []) if s.get("message") != suggestion]
+    write_coherence_index(proj_dir, coh_idx)
+    return {"applied": True, "changes": changes}
 
 
 def clear_stale(proj_dir: Path, step: str, target_ids: str | list[str]) -> None:
@@ -1307,6 +1794,7 @@ def _clear_stale_for_regenerated(
 
 # --- Step runners (called from the JobManager in a worker thread) ---
 
+
 def run_step_script(
     name: str,
     reporter: ProgressReporter,
@@ -1315,9 +1803,7 @@ def run_step_script(
     preview_pages: int | None = None,
 ) -> BdGenScript:
     config = load_config(name, output_root)
-    feedback_store = FeedbackStore.load_or_empty(
-        feedback_path_for(config.generation_options.script_path)
-    )
+    feedback_store = FeedbackStore.load_or_empty(feedback_path_for(config.generation_options.script_path))
     feedback = feedback_store.get_for("script")
     bd_script = script_module.generate_script(
         config,
@@ -1374,9 +1860,13 @@ def run_step_references(
     feedback_store = FeedbackStore.load_or_empty(feedback_path_for(script_path))
     try:
         references_module.generate_references(
-            bd_script, opts.references, opts.image_model,
-            script_path=script_path, feedback_store=feedback_store,
-            reporter=reporter, interrupt=interrupt,
+            bd_script,
+            opts.references,
+            opts.image_model,
+            script_path=script_path,
+            feedback_store=feedback_store,
+            reporter=reporter,
+            interrupt=interrupt,
             style_ref=style_ref,
             character_photos=character_photos,
             location_photos=location_photos,
@@ -1386,9 +1876,7 @@ def run_step_references(
     finally:
         # Even on partial completion (interruption), record what landed.
         _record_qualities(proj_dir, "references", target_paths, pre_existing, quality_used)
-        _clear_stale_for_regenerated(
-            proj_dir, "references", target_paths, pre_existing, force_ids
-        )
+        _clear_stale_for_regenerated(proj_dir, "references", target_paths, pre_existing, force_ids)
     bd_script.save(script_path)
     return bd_script
 
@@ -1430,17 +1918,18 @@ def run_step_compose(
     feedback_store = FeedbackStore.load_or_empty(feedback_path_for(script_path))
     try:
         out = compose_module.compose_output(
-            bd_script, opts, pages_dir,
+            bd_script,
+            opts,
+            pages_dir,
             feedback_store=feedback_store,
-            reporter=reporter, interrupt=interrupt,
+            reporter=reporter,
+            interrupt=interrupt,
             style_ref=style_ref,
             stats_project_dir=proj_dir,
         )
     finally:
         _record_qualities(proj_dir, "compose", target_paths, pre_existing, quality_used)
-        _clear_stale_for_regenerated(
-            proj_dir, "compose", target_paths, pre_existing, force_ids
-        )
+        _clear_stale_for_regenerated(proj_dir, "compose", target_paths, pre_existing, force_ids)
     return out
 
 
@@ -1470,8 +1959,11 @@ def run_step_upscale(
 
 # --- Targeted refinement (synchronous; called outside the JobManager) ---
 
+
 def add_feedback_and_regenerate_character(
-    name: str, character_id: str, feedback_text: str,
+    name: str,
+    character_id: str,
+    feedback_text: str,
     output_root: Path | None = None,
     reporter: ProgressReporter | None = None,
 ) -> BdGenScript:
@@ -1482,9 +1974,7 @@ def add_feedback_and_regenerate_character(
     fb_store = FeedbackStore.load_or_empty(fb_path)
     fb_store.add("script", character_id, feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_character(
-        bd_script, character_id, feedback_text, reporter, stats_project_dir=proj_dir
-    )
+    script_module.regenerate_character(bd_script, character_id, feedback_text, reporter, stats_project_dir=proj_dir)
     bd_script.save(script_path)
     # The on-disk reference PNG (if any) was generated against the previous
     # text and no longer matches; flag it so the UI can offer a one-click
@@ -1496,7 +1986,9 @@ def add_feedback_and_regenerate_character(
 
 
 def add_feedback_and_regenerate_location(
-    name: str, location_id: str, feedback_text: str,
+    name: str,
+    location_id: str,
+    feedback_text: str,
     output_root: Path | None = None,
     reporter: ProgressReporter | None = None,
 ) -> BdGenScript:
@@ -1507,9 +1999,7 @@ def add_feedback_and_regenerate_location(
     fb_store = FeedbackStore.load_or_empty(fb_path)
     fb_store.add("script", location_id, feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_location(
-        bd_script, location_id, feedback_text, reporter, stats_project_dir=proj_dir
-    )
+    script_module.regenerate_location(bd_script, location_id, feedback_text, reporter, stats_project_dir=proj_dir)
     bd_script.save(script_path)
     ref_png = proj_dir / "references" / "locations" / f"{location_id}.png"
     if ref_png.exists():
@@ -1518,7 +2008,9 @@ def add_feedback_and_regenerate_location(
 
 
 def add_feedback_and_regenerate_object(
-    name: str, object_id: str, feedback_text: str,
+    name: str,
+    object_id: str,
+    feedback_text: str,
     output_root: Path | None = None,
     reporter: ProgressReporter | None = None,
 ) -> BdGenScript:
@@ -1529,9 +2021,7 @@ def add_feedback_and_regenerate_object(
     fb_store = FeedbackStore.load_or_empty(fb_path)
     fb_store.add("script", object_id, feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_object(
-        bd_script, object_id, feedback_text, reporter, stats_project_dir=proj_dir
-    )
+    script_module.regenerate_object(bd_script, object_id, feedback_text, reporter, stats_project_dir=proj_dir)
     bd_script.save(script_path)
     ref_png = proj_dir / "references" / "objects" / f"{object_id}.png"
     if ref_png.exists():
@@ -1565,9 +2055,7 @@ def _earliest_page_using_object(bd_script: BdGenScript, object_id: str) -> int |
     return None
 
 
-def delete_character_and_cascade(
-    name: str, character_id: str, output_root: Path | None = None
-) -> dict:
+def delete_character_and_cascade(name: str, character_id: str, output_root: Path | None = None) -> dict:
     """Remove a character from the script and drop all pages from the
     earliest one that referenced them. Pages 1..(earliest-1) stay intact.
 
@@ -1592,6 +2080,7 @@ def delete_character_and_cascade(
 
     bd_script.characters = [c for c in bd_script.characters if c.id != character_id]
     bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
 
     # Tidy: drop the character's reference image and quality-index entry
     # so the references step doesn't show an orphan asset.
@@ -1615,9 +2104,7 @@ def delete_character_and_cascade(
     }
 
 
-def delete_location_and_cascade(
-    name: str, location_id: str, output_root: Path | None = None
-) -> dict:
+def delete_location_and_cascade(name: str, location_id: str, output_root: Path | None = None) -> dict:
     """Symmetric of ``delete_character_and_cascade`` for locations."""
     proj_dir = get_project_dir(name, output_root)
     script_path = proj_dir / "bdgen-script.json"
@@ -1633,6 +2120,7 @@ def delete_location_and_cascade(
 
     bd_script.locations = [l for l in bd_script.locations if l.id != location_id]
     bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
 
     ref_png = proj_dir / "references" / "locations" / f"{location_id}.png"
     if ref_png.exists():
@@ -1654,9 +2142,7 @@ def delete_location_and_cascade(
     }
 
 
-def delete_object_and_cascade(
-    name: str, object_id: str, output_root: Path | None = None
-) -> dict:
+def delete_object_and_cascade(name: str, object_id: str, output_root: Path | None = None) -> dict:
     """Symmetric of ``delete_character_and_cascade`` for objects."""
     proj_dir = get_project_dir(name, output_root)
     script_path = proj_dir / "bdgen-script.json"
@@ -1672,6 +2158,7 @@ def delete_object_and_cascade(
 
     bd_script.objects = [o for o in bd_script.objects if o.id != object_id]
     bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
 
     ref_png = proj_dir / "references" / "objects" / f"{object_id}.png"
     if ref_png.exists():
@@ -1693,9 +2180,7 @@ def delete_object_and_cascade(
     }
 
 
-def preview_delete_character(
-    name: str, character_id: str, output_root: Path | None = None
-) -> dict:
+def preview_delete_character(name: str, character_id: str, output_root: Path | None = None) -> dict:
     """Return what would happen on delete, without performing it."""
     proj_dir = get_project_dir(name, output_root)
     bd_script = BdGenScript.load(proj_dir / "bdgen-script.json")
@@ -1707,9 +2192,7 @@ def preview_delete_character(
     return {"earliest_affected": earliest, "pages_dropped": dropped}
 
 
-def preview_delete_location(
-    name: str, location_id: str, output_root: Path | None = None
-) -> dict:
+def preview_delete_location(name: str, location_id: str, output_root: Path | None = None) -> dict:
     proj_dir = get_project_dir(name, output_root)
     bd_script = BdGenScript.load(proj_dir / "bdgen-script.json")
     if bd_script.location_by_id(location_id) is None:
@@ -1720,9 +2203,7 @@ def preview_delete_location(
     return {"earliest_affected": earliest, "pages_dropped": dropped}
 
 
-def preview_delete_object(
-    name: str, object_id: str, output_root: Path | None = None
-) -> dict:
+def preview_delete_object(name: str, object_id: str, output_root: Path | None = None) -> dict:
     proj_dir = get_project_dir(name, output_root)
     bd_script = BdGenScript.load(proj_dir / "bdgen-script.json")
     if bd_script.object_by_id(object_id) is None:
@@ -1734,7 +2215,8 @@ def preview_delete_object(
 
 
 def add_feedback_and_regenerate_cover(
-    name: str, feedback_text: str,
+    name: str,
+    feedback_text: str,
     output_root: Path | None = None,
     reporter: ProgressReporter | None = None,
 ) -> BdGenScript:
@@ -1745,9 +2227,7 @@ def add_feedback_and_regenerate_cover(
     fb_store = FeedbackStore.load_or_empty(fb_path)
     fb_store.add("script", "cover", feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_cover(
-        bd_script, feedback_text, reporter, stats_project_dir=proj_dir
-    )
+    script_module.regenerate_cover(bd_script, feedback_text, reporter, stats_project_dir=proj_dir)
     bd_script.save(script_path)
     if (proj_dir / "pages" / "cover.png").exists():
         mark_stale(proj_dir, "compose", "cover")
@@ -1755,7 +2235,8 @@ def add_feedback_and_regenerate_cover(
 
 
 def add_feedback_and_regenerate_back_cover(
-    name: str, feedback_text: str,
+    name: str,
+    feedback_text: str,
     output_root: Path | None = None,
     reporter: ProgressReporter | None = None,
 ) -> BdGenScript:
@@ -1766,9 +2247,7 @@ def add_feedback_and_regenerate_back_cover(
     fb_store = FeedbackStore.load_or_empty(fb_path)
     fb_store.add("script", "back", feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_back_cover(
-        bd_script, feedback_text, reporter, stats_project_dir=proj_dir
-    )
+    script_module.regenerate_back_cover(bd_script, feedback_text, reporter, stats_project_dir=proj_dir)
     bd_script.save(script_path)
     if (proj_dir / "pages" / "back.png").exists():
         mark_stale(proj_dir, "compose", "back")
@@ -1776,7 +2255,9 @@ def add_feedback_and_regenerate_back_cover(
 
 
 def add_feedback_and_regenerate_page(
-    name: str, page_number: int, feedback_text: str,
+    name: str,
+    page_number: int,
+    feedback_text: str,
     cascade: bool = False,
     output_root: Path | None = None,
     reporter: ProgressReporter | None = None,
@@ -1792,15 +2273,219 @@ def add_feedback_and_regenerate_page(
     target = f"page_{page_number}"
     fb_store.add("script", target, feedback_text)
     fb_store.save(fb_path)
-    script_module.regenerate_page(
-        bd_script, page_number, feedback_text, reporter, stats_project_dir=proj_dir
-    )
+    script_module.regenerate_page(bd_script, page_number, feedback_text, reporter, stats_project_dir=proj_dir)
     if cascade:
         script_module.truncate_pages_from(bd_script, page_number + 1)
     bd_script.save(script_path)
+    coh_idx = read_coherence_index(proj_dir)
+    coh_idx["issues"] = [i for i in coh_idx.get("issues", []) if i.get("page_number") != page_number]
+    coh_idx["suggestions"] = [s for s in coh_idx.get("suggestions", []) if s.get("page_number") != page_number]
+    coh_idx["flagged_pages"] = [p for p in coh_idx.get("flagged_pages", []) if p != page_number]
+    write_coherence_index(proj_dir, coh_idx)
     cm = proj_dir / "pages" / f"page_{page_number:02d}.png"
     if cm.exists():
         mark_stale(proj_dir, "compose", target)
+    return bd_script
+
+
+def update_script_page_manual(
+    name: str,
+    page_number: int,
+    page_payload: dict,
+    output_root: Path | None = None,
+) -> BdGenScript:
+    """Persist a manually edited script page and mark its composed image stale."""
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+    idx = next(
+        (i for i, page in enumerate(bd_script.pages) if page.page_number == page_number),
+        None,
+    )
+    if idx is None:
+        raise RuntimeError(f"Planche inconnue : {page_number}")
+    page = Page.model_validate(page_payload)
+    if page.page_number != page_number:
+        raise RuntimeError("Le numero de planche ne peut pas etre modifie.")
+    bd_script.pages[idx] = page
+    bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
+    composed = proj_dir / "pages" / f"page_{page_number:02d}.png"
+    if composed.exists():
+        mark_stale(proj_dir, "compose", f"page_{page_number}")
+    return bd_script
+
+
+def _validate_new_script_item_id(item_id: str, existing_ids: set[str], label: str) -> None:
+    clean_id = item_id.strip()
+    if not clean_id:
+        raise RuntimeError(f"L'id du {label} est obligatoire.")
+    if clean_id != item_id:
+        raise RuntimeError(f"L'id du {label} ne doit pas commencer ou finir par un espace.")
+    if any(sep in item_id for sep in ("/", "\\")):
+        raise RuntimeError(f"L'id du {label} ne doit pas contenir de separateur de chemin.")
+    if item_id in existing_ids:
+        raise RuntimeError(f"Un {label} utilise deja l'id : {item_id}")
+
+
+def add_script_character_manual(
+    name: str,
+    character_payload: dict,
+    output_root: Path | None = None,
+) -> BdGenScript:
+    """Append a manually created character to the script."""
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+    character = ScriptCharacter.model_validate(character_payload)
+    _validate_new_script_item_id(character.id, {item.id for item in bd_script.characters}, "personnage")
+    bd_script.characters.append(character)
+    bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
+    return bd_script
+
+
+def update_script_character_manual(
+    name: str,
+    character_id: str,
+    character_payload: dict,
+    output_root: Path | None = None,
+) -> BdGenScript:
+    """Persist a manually edited character and mark its reference image stale."""
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+    idx = next((i for i, character in enumerate(bd_script.characters) if character.id == character_id), None)
+    if idx is None:
+        raise RuntimeError(f"Personnage inconnu : {character_id}")
+    character = ScriptCharacter.model_validate(character_payload)
+    if character.id != character_id:
+        raise RuntimeError("L'id du personnage ne peut pas etre modifie.")
+    bd_script.characters[idx] = character
+    bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
+    if (proj_dir / "references" / "characters" / f"{character_id}.png").exists():
+        mark_stale(proj_dir, "references", character_id)
+    return bd_script
+
+
+def add_script_location_manual(
+    name: str,
+    location_payload: dict,
+    output_root: Path | None = None,
+) -> BdGenScript:
+    """Append a manually created location to the script."""
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+    location = ScriptLocation.model_validate(location_payload)
+    _validate_new_script_item_id(location.id, {item.id for item in bd_script.locations}, "decor")
+    bd_script.locations.append(location)
+    bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
+    return bd_script
+
+
+def update_script_location_manual(
+    name: str,
+    location_id: str,
+    location_payload: dict,
+    output_root: Path | None = None,
+) -> BdGenScript:
+    """Persist a manually edited location and mark its reference image stale."""
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+    idx = next((i for i, location in enumerate(bd_script.locations) if location.id == location_id), None)
+    if idx is None:
+        raise RuntimeError(f"Decor inconnu : {location_id}")
+    location = ScriptLocation.model_validate(location_payload)
+    if location.id != location_id:
+        raise RuntimeError("L'id du decor ne peut pas etre modifie.")
+    bd_script.locations[idx] = location
+    bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
+    if (proj_dir / "references" / "locations" / f"{location_id}.png").exists():
+        mark_stale(proj_dir, "references", location_id)
+    return bd_script
+
+
+def add_script_object_manual(
+    name: str,
+    object_payload: dict,
+    output_root: Path | None = None,
+) -> BdGenScript:
+    """Append a manually created object to the script."""
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+    obj = ScriptObject.model_validate(object_payload)
+    _validate_new_script_item_id(obj.id, {item.id for item in bd_script.objects}, "objet")
+    bd_script.objects.append(obj)
+    bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
+    return bd_script
+
+
+def update_script_object_manual(
+    name: str,
+    object_id: str,
+    object_payload: dict,
+    output_root: Path | None = None,
+) -> BdGenScript:
+    """Persist a manually edited object and mark its reference image stale."""
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+    idx = next((i for i, obj in enumerate(bd_script.objects) if obj.id == object_id), None)
+    if idx is None:
+        raise RuntimeError(f"Objet inconnu : {object_id}")
+    obj = ScriptObject.model_validate(object_payload)
+    if obj.id != object_id:
+        raise RuntimeError("L'id de l'objet ne peut pas etre modifie.")
+    bd_script.objects[idx] = obj
+    bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
+    if (proj_dir / "references" / "objects" / f"{object_id}.png").exists():
+        mark_stale(proj_dir, "references", object_id)
+    return bd_script
+
+
+def update_script_cover_manual(
+    name: str,
+    cover_payload: dict,
+    output_root: Path | None = None,
+) -> BdGenScript:
+    """Persist a manually edited cover and mark its composed image stale."""
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+    if bd_script.cover is None:
+        raise RuntimeError("Couverture inconnue.")
+    bd_script.cover = Cover.model_validate(cover_payload)
+    bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
+    if (proj_dir / "pages" / "cover.png").exists():
+        mark_stale(proj_dir, "compose", "cover")
+    return bd_script
+
+
+def update_script_back_cover_manual(
+    name: str,
+    back_cover_payload: dict,
+    output_root: Path | None = None,
+) -> BdGenScript:
+    """Persist a manually edited back cover and mark its composed image stale."""
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    bd_script = BdGenScript.load(script_path)
+    if bd_script.back_cover is None:
+        raise RuntimeError("4e de couverture inconnue.")
+    bd_script.back_cover = BackCover.model_validate(back_cover_payload)
+    bd_script.save(script_path)
+    mark_script_coherence_dirty(proj_dir)
+    if (proj_dir / "pages" / "back.png").exists():
+        mark_stale(proj_dir, "compose", "back")
     return bd_script
 
 
@@ -1866,18 +2551,16 @@ def inpaint_image(
     mask_data = mask_buf.getvalue()
 
     if opts.image_model.provider != "openai":
-        raise NotImplementedError(
-            f"L'inpainting n'est pas supporté pour le provider « {opts.image_model.provider} »."
-        )
+        raise NotImplementedError(f"L'inpainting n'est pas supporté pour le provider « {opts.image_model.provider} ».")
     client = secret_store.openai_client()
 
     # gpt-image-2 inpainting is prompt-based: explicitly instruct the model to
     # preserve the rest of the image so it doesn't regenerate everything.
     guided_prompt = (
-        f"{prompt}. Keep all other parts of the image exactly as they are, "
-        "only modify the area indicated by the mask."
+        f"{prompt}. Keep all other parts of the image exactly as they are, only modify the area indicated by the mask."
     )
 
+    started_at, started = stats_module.start_timer()
     result = client.images.edit(
         model=opts.image_model.model,
         image=("image.png", img_bytes, "image/png"),
@@ -1885,6 +2568,26 @@ def inpaint_image(
         prompt=guided_prompt,
         size=size,
         quality=opts.image_model.quality,
+    )
+    if step == "compose":
+        _inpaint_kind = "cover" if target_id == "cover" else "back_cover" if target_id == "back" else "page"
+    else:
+        _kind_map = {"characters": "character", "locations": "location", "objects": "object"}
+        _inpaint_kind = _kind_map.get(image_path.parent.name, "reference")
+    stats_module.record_event(
+        proj_dir,
+        step=step,
+        target_id=target_id,
+        target_kind=_inpaint_kind,
+        operation="inpaint",
+        provider=opts.image_model.provider,
+        model=opts.image_model.model,
+        timer=stats_module.stop_timer(started_at, started),
+        usage=stats_module.normalise_usage(getattr(result, "usage", None)),
+        prompt=guided_prompt,
+        input_images=2,
+        artifact=image_path,
+        extra={"retouch": True, "quality": opts.image_model.quality},
     )
 
     result_bytes = base64.b64decode(result.data[0].b64_json)
@@ -1962,9 +2665,7 @@ def import_zip(
             raise ValueError("Archive vide.")
         top_levels = {n.split("/", 1)[0] for n in names if n.strip()}
         if len(top_levels) != 1:
-            raise ValueError(
-                "Archive invalide : un unique dossier racine est attendu."
-            )
+            raise ValueError("Archive invalide : un unique dossier racine est attendu.")
         project_name = top_levels.pop()
         target_dir = root / project_name
         if target_dir.exists() and not overwrite:
@@ -2028,9 +2729,7 @@ def _entity_kinds_map(config: BdGenInput) -> dict[str, dict[str, dict]]:
     }
 
 
-def list_exportable_references(
-    name: str, output_root: Path | None = None
-) -> dict[str, list[dict]]:
+def list_exportable_references(name: str, output_root: Path | None = None) -> dict[str, list[dict]]:
     """Return entities that have a reference PNG on disk, keyed by kind.
 
     Used by the export UI to populate its picker. Entries the user can pick
@@ -2111,14 +2810,11 @@ def export_references_bundle(
         for tid in ids:
             entry = by_kind[kind].get(tid)
             if entry is None:
-                raise ValueError(
-                    f"Identifiant inconnu dans la configuration : {kind}/{tid}"
-                )
+                raise ValueError(f"Identifiant inconnu dans la configuration : {kind}/{tid}")
             png = proj_dir / "references" / kind / f"{tid}.png"
             if not png.exists() or png.stat().st_size == 0:
                 raise ValueError(
-                    f"Référence absente sur disque : {kind}/{tid}.png. "
-                    f"Lancez l'étape Références avant d'exporter."
+                    f"Référence absente sur disque : {kind}/{tid}.png. Lancez l'étape Références avant d'exporter."
                 )
             manifest[kind].append(entry)
             files.append((f"references/{kind}/{tid}.png", png))
@@ -2167,15 +2863,11 @@ def import_references_bundle(
         try:
             manifest = json.loads(zf.read(BDREFS_MANIFEST_NAME).decode("utf-8"))
         except KeyError:
-            raise ValueError(
-                f"Bundle invalide : {BDREFS_MANIFEST_NAME} introuvable."
-            )
+            raise ValueError(f"Bundle invalide : {BDREFS_MANIFEST_NAME} introuvable.")
         except json.JSONDecodeError as e:
             raise ValueError(f"Manifest illisible : {e}")
         if manifest.get("version") != BDREFS_MANIFEST_VERSION:
-            raise ValueError(
-                f"Version de bundle non supportée : {manifest.get('version')}."
-            )
+            raise ValueError(f"Version de bundle non supportée : {manifest.get('version')}.")
 
         photos_dirname = {
             "characters": CHARACTER_PHOTOS_DIRNAME,
@@ -2183,6 +2875,7 @@ def import_references_bundle(
             "objects": OBJECT_PHOTOS_DIRNAME,
         }
         from .models import CharacterInput, LocationInput, ObjectInput
+
         constructors = {
             "characters": CharacterInput,
             "locations": LocationInput,
@@ -2215,18 +2908,14 @@ def import_references_bundle(
                 try:
                     model = constructors[kind].model_validate(entry_renamed)
                 except Exception as e:
-                    raise ValueError(
-                        f"Entrée invalide dans le bundle ({kind}/{old_id}) : {e}"
-                    )
+                    raise ValueError(f"Entrée invalide dans le bundle ({kind}/{old_id}) : {e}")
                 getattr(config, kind).append(model)
 
                 ref_arc = f"references/{kind}/{old_id}.png"
                 try:
                     ref_bytes = zf.read(ref_arc)
                 except KeyError:
-                    raise ValueError(
-                        f"PNG manquant dans le bundle : {ref_arc}"
-                    )
+                    raise ValueError(f"PNG manquant dans le bundle : {ref_arc}")
                 ref_dst = proj_dir / "references" / kind / f"{new_id}.png"
                 ref_dst.parent.mkdir(parents=True, exist_ok=True)
                 ref_dst.write_bytes(ref_bytes)
@@ -2244,6 +2933,7 @@ def import_references_bundle(
 
 
 # --- Helpers ---
+
 
 def _resolve_options(bd_script: BdGenScript, name: str, output_root: Path | None):
     try:

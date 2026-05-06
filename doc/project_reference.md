@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-04 (7)
+Last updated: 2026-05-06 (16)
 
 ## Update Rule
 
@@ -172,25 +172,206 @@ Lint/format tooling:
 
 ## Change Log
 
+### 2026-05-06 (18)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` : l'outil de cohérence de scénario est maintenant intégré dans les onglets du browser sous le label "Cohérence". Le composant `CoherenceTabContent` (extrait de l'ancien `CoherencePanel`) est rendu sans carte wrapper ni toggle de repli : un indicateur visuel (point orange si dirty, compteur rouge si erreurs) apparaît directement sur l'onglet. `ScriptBrowser` accepte 4 nouvelles props optionnelles : `checking`, `coherenceError`, `onCheck`, `onApplySuggestion`.
+- `bdgen/web/src/components/steps/ScriptStep.jsx` : suppression du `CoherencePanel` standalone au-dessus du browser (composant + JSX). Les nouvelles props de cohérence sont passées directement à `ScriptBrowser`.
+- `bdgen/bdgen/service.py` : les suggestions et problèmes appliqués disparaissent automatiquement de la liste après action. `apply_global_suggestion` retire la suggestion appliquée du fichier `bdgen-coherence.json` (correspondance par message) au lieu de juste marquer dirty. `add_feedback_and_regenerate_page` efface les issues et suggestions de la planche régénérée du fichier de cohérence.
+- Build frontend reconstruit (`npm run build` passé).
+- Vérification : `python -m py_compile bdgen/service.py` OK, `npm run lint` 0 erreur (1 warning préexistant), `npm run build` OK.
+
+### 2026-05-06 (17)
+
+- `bdgen/web/src/components/steps/ScriptStep.jsx`: ajout d'un toggle repli/dépli sur le `CoherencePanel`. Le titre "Cohérence du scénario" devient un bouton cliquable avec un chevron (▸/▾). Par défaut, le panneau est replié si aucune erreur, modification en attente ou suggestion n'est présente, et développé sinon. Les détails (erreurs par planche, suggestions, suggestions globales) ne s'affichent que lorsqu'il est développé.
+- Rebuild frontend requis avant packaging/release.
+
+### 2026-05-06 (16)
+
+- `bdgen/bdgen/service.py`: ajout du logging stats pour tous les appels modèles non encore tracés.
+  - **Retouches image** (`inpaint_image`): `stats_module.record_event()` ajouté autour de `client.images.edit()` avec `operation="inpaint"`, `extra={"retouch": True, ...}`, `input_images=2` (image + masque), `target_kind` précis (`cover`, `back_cover`, `page` pour compose ; `character`, `location`, `object` pour références via `image_path.parent.name`).
+  - **Vérification d'intégrité LLM** (`_llm_integrity_check`): signature étendue avec `project_dir` et `target_id` ; `stats_module.record_event()` appelé après succès et après erreur (status `"error"`) avec `step="integrity"`, `operation="check_integrity"`, `extra={"retouch": False}`. `check_script_integrity` passe `proj_dir` et `name` au helper.
+- Vérification : `python -m py_compile bdgen/service.py` passe sans erreur.
+
+### 2026-05-06 (15)
+
+- `bdgen/bdgen/service.py`: remplacé la vérification d'intégrité algorithmique par un appel LLM. `check_script_integrity()` sérialise le scénario (personnages, décors, objets, planches/cases) en JSON compact et le soumet au modèle de script configuré (OpenAI, Anthropic ou xAI) avec un prompt français demandant un objet `{"issues": [...]}`. Le helper `_llm_integrity_check()` gère les trois providers, parse la réponse JSON de façon défensive (extraction par regex si besoin), et valide la structure de chaque issue avant de la retourner. En cas d'erreur LLM, la liste d'issues est vide et non bloquante.
+- `bdgen/tests/test_manual_script_edit.py`: mis à jour `test_manual_edit_marks_integrity_dirty_and_check_flags_page_references` pour mocker `bdgen.service._llm_integrity_check` via `unittest.mock.patch` afin de rester déterministe sans appel réseau.
+- Vérification : `python -m py_compile bdgen/service.py` et `python -m py_compile tests/test_manual_script_edit.py` passent sans erreur.
+
+### 2026-05-06 (14)
+
+- `bdgen/bdgen/service.py`: added `bdgen-integrity.json` tracking for manual script edits plus deterministic integrity checks. Manual page, character, location, object, cover/back-cover edits and character/location/object deletions now mark the scenario as needing verification. `check_script_integrity()` validates page references to existing characters, locations, objects, dialog speakers, and duplicate page/panel numbers.
+- `bdgen/bdgen/server/app.py`: project payloads now include `integrity`, and `POST /api/projects/{name}/script/integrity/check` runs the verification with the same job-running protection as manual edits.
+- `bdgen/web/src/api.js` and `bdgen/web/src/components/ScriptBrowser.jsx`: added a per-script-tab integrity panel with a "Vérifier l'intégrité du scénario" button that is enabled only when manual edits are unverified. Detected issues are grouped by flagged page and expose a "Régénérer la planche" action; the pages tab also shows the flagged-page banner inside the page reader.
+- `bdgen/tests/test_manual_script_edit.py`: added coverage for dirty integrity state after manual page edits and issue reporting for unknown character/object references.
+- Verification: targeted Prettier, `npm run lint`, `python -m py_compile bdgen\service.py bdgen\server\app.py tests\test_manual_script_edit.py`, and `git diff --check` passed. `uv run python -m unittest tests.test_manual_script_edit` and `uv run ruff check bdgen tests` could not be rerun because the required outside-sandbox approval was blocked by the usage limit; direct `ruff` is not installed on PATH. `npm run build` still hits the known Windows/esbuild `spawn EPERM` sandbox restriction and could not be rerun without approval, so static frontend assets were not rebuilt in this turn.
+
+### 2026-05-06 (13)
+
+- `bdgen/bdgen/service.py` and `bdgen/bdgen/server/app.py`: added manual create operations and `POST /script/characters`, `/script/locations`, and `/script/objects` endpoints for script-level characters, locations, and objects. New ids are validated for blanks, path separators, and duplicates before saving `bdgen-script.json`.
+- `bdgen/web/src/api.js` and `bdgen/web/src/components/ScriptBrowser.jsx`: added "Ajouter" buttons and centered white add dialogs for characters, locations, and objects, including required id/name/description fields and optional reference image prompt fallback. Existing "Supprimer" actions continue to require `ConfirmDeleteDialog` validation before deletion.
+- `bdgen/tests/test_manual_script_edit.py`: added coverage for manually adding characters, locations, and objects, including duplicate id rejection.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the CRUD additions.
+- Verification: `uv run python -m unittest tests.test_manual_script_edit`, `uv run ruff check bdgen tests`, targeted Prettier, `npm run lint`, and `npm run build` passed; Python/Ruff and build required outside-sandbox execution because of the known uv cache and esbuild Windows restrictions.
+
+### 2026-05-06 (12)
+
+- `bdgen/bdgen/service.py` and `bdgen/bdgen/server/app.py`: added manual update routes for script characters, locations, objects, cover, and back cover. Edits persist to `bdgen-script.json` and mark existing reference or composed images stale where applicable.
+- `bdgen/web/src/api.js` and `bdgen/web/src/components/ScriptBrowser.jsx`: added popup-based manual editing for visible writing fields outside pages: character name/physical description/outfit, location name/description, object name/description, and cover/back-cover text fields.
+- `bdgen/tests/test_manual_script_edit.py`: expanded manual edit coverage to characters, locations, objects, cover, and back cover, including stale reference/compose marking.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after adding non-page writing edits.
+- Verification: `uv run python -m unittest tests.test_manual_script_edit`, `uv run ruff check bdgen tests`, targeted Prettier, `npm run lint`, and `npm run build` passed; Python/Ruff and build required running outside the sandbox because of the known uv cache and esbuild Windows restrictions.
+
+### 2026-05-06 (11)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` and `bdgen/web/src/index.css`: restored manual edit popups to centered positioning while keeping the transparent/no-backdrop behavior and the corrected compact pencil styling.
+- Verification: targeted Prettier and `npm run lint` passed. Static frontend assets were not rebuilt in this turn because the prior outside-sandbox build approval was blocked by the environment usage limit; rebuild before packaging/release.
+
+### 2026-05-06 (10)
+
+- `bdgen/web/src/index.css`: fixed the compact script metadata pencil artifact at the source by narrowing `.script-panel-facts div` to `.script-panel-facts > div`. The previous broad selector was adding the fact-card border/background to nested editor wrapper divs, which made the pencil appear inside a second rounded frame.
+- Verification: targeted Prettier and `npm run lint` passed. Static frontend assets were not rebuilt in this turn because the prior outside-sandbox build approval was blocked by the environment usage limit; rebuild before packaging/release.
+
+### 2026-05-06 (9)
+
+- `bdgen/web/src/index.css`: added a targeted exception for edit pencil buttons inside compact script metadata and dialog header fields. In those small framed zones only, the edit control renders as a bare icon without visible button border, rounded background, or shadow, while other buttons keep their normal bordered style.
+- Verification: targeted Prettier and `npm run lint` passed. Static frontend assets were not rebuilt in this turn because the prior outside-sandbox build approval was blocked by the environment usage limit; rebuild before packaging/release.
+
+### 2026-05-06 (8)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` and `bdgen/web/src/index.css`: changed manual edit popups from viewport-centered fixed modals to fixed popups positioned from the clicked edit icon. This keeps the popup near the edited script field and avoids showing it over an empty page background when the script page is scrolled.
+- Verification: targeted Prettier and `npm run lint` passed. `npm run build` could not be rerun because the required outside-sandbox build approval was rejected by the environment usage limit; rebuild static frontend assets before packaging/release.
+
+### 2026-05-06 (7)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` and `bdgen/web/src/index.css`: unified manual edit popups for both compact and long script fields around the same white-window style: contextual field title in a bordered header block, white input/select/textarea body, bordered action footer, and no backdrop so the page remains visible around the popup.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the edit popup style unification.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed; the build required running outside the sandbox because esbuild hit the known Windows `spawn EPERM` restriction inside it.
+
+### 2026-05-06 (6)
+
+- `bdgen/web/src/index.css`: refined the manual edit pencil button inside script metadata/dialog fields so it renders as a small icon without a rounded hover surface or card-like hitbox, avoiding the double-frame artifact in compact fields such as size and shot/cadrage.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the edit icon styling update.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed; the build required running outside the sandbox because esbuild hit the known Windows `spawn EPERM` restriction inside it.
+
+### 2026-05-06 (5)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` and `bdgen/web/src/index.css`: removed the full-screen invisible modal backdrop/dismiss layer from the manual field editor. The edit dialog now uses only a non-interactive fixed positioner plus the white modal window, so nothing opaque or clickable remains around the window when editing fields such as shot/cadrage.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after removing the modal overlay layer.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed; the build required running outside the sandbox because esbuild hit the known Windows `spawn EPERM` restriction inside it.
+
+### 2026-05-06 (4)
+
+- `bdgen/web/src/index.css`: removed the dark translucent backdrop from the manual edit modal so editing fields like panel shot/cadrage keeps the surrounding page visible; only the white modal window and its translucent halo remain.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the modal backdrop adjustment.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed; the build required running outside the sandbox because esbuild hit the known Windows `spawn EPERM` restriction inside it.
+
+### 2026-05-06 (3)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx`: restored contextual field titles in the manual edit modal, e.g. layout, panel facts, SFX, and dialog fields now identify the exact field being edited.
+- `bdgen/web/src/index.css`: unified the manual edit modal around a white window with a translucent outline/halo instead of relying on the generic card surface.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the modal title/style update.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed; the build required running outside the sandbox because esbuild hit the known Windows `spawn EPERM` restriction inside it.
+
+### 2026-05-06 (2)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx`: removed the explanatory helper sentence from the manual edit modal so the popup stays focused on the field and controls.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the modal copy cleanup.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed; the build required running outside the sandbox because esbuild hit the known Windows `spawn EPERM` restriction inside it.
+
+### 2026-05-06 (1)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` and `bdgen/web/src/index.css`: moved manual editing of script fields from inline controls to a modal editor, keeping panel facts such as size, shot, location, characters, objects, SFX, and dialog metadata readable without save/cancel controls overflowing the cards.
+- `bdgen/web/src/index.css`: added stronger wrapping/min-width constraints for script fact and dialog values so long values do not stretch the reader layout.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the modal editor update.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed; the build required running outside the sandbox because esbuild hit the known Windows `spawn EPERM` restriction inside it.
+
+### 2026-05-04 (17)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` and `bdgen/web/src/index.css`: added a compact editing mode for short scenario fields such as size, shot, location, characters, objects, and dialog speaker so save/cancel controls no longer inflate metadata cards.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the compact editor update.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed.
+
+### 2026-05-04 (16)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx`: expanded manual scenario editing to structured panel fields: size, shot, location, characters, objects, SFX, and per-dialog speaker/type/text. Comma-separated inputs are used for list fields such as characters, objects, and SFX.
+- `bdgen/web/src/index.css`: added compact styling for editable one-line inputs and dialog metadata headers.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after expanding scenario editing.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed.
+
+### 2026-05-04 (15)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` and `bdgen/web/src/index.css`: replaced the textual inline `Modifier` action with a small pencil icon that appears on hover/focus of editable scenario text blocks, with touch devices keeping it visible.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the edit-icon update.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed.
+
+### 2026-05-04 (14)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` and `bdgen/web/src/index.css`: moved the page-level `Régénérer` and `Retoucher la planche` buttons out of the `Découpage` description block into a separate action row above it.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the action-row layout adjustment.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed.
+
+### 2026-05-04 (13)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` and `bdgen/web/src/index.css`: wrapped the page-level `Découpage` description in its own bordered block and aligned its actions with the block instead of the surrounding reader surface.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the layout-block update.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed.
+
+### 2026-05-04 (12)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx` and `bdgen/web/src/index.css`: restyled the inline `Modifier` action in the script reader so it no longer floats over the text; it is now a compact text action aligned above the editable content.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the button style adjustment.
+- Verification: targeted Prettier, `npm run lint`, and `npm run build` passed.
+
+### 2026-05-04 (11)
+
+- `bdgen/bdgen/service.py`: added `update_script_page_manual()` to persist a manually edited `Page` in `bdgen-script.json` and mark the matching composed page stale when an image already exists.
+- `bdgen/bdgen/server/app.py`: added `PUT /api/projects/{name}/script/pages/{page_number}` with job-running protection and Page validation.
+- `bdgen/web/src/api.js`: added `updateScriptPage()`.
+- `bdgen/web/src/components/ScriptBrowser.jsx`: added inline manual editing for page layout, panel scene descriptions, narration, SFX, and dialog text with save/cancel controls.
+- `bdgen/web/src/index.css`: added small editable-text layout styles.
+- `bdgen/tests/test_manual_script_edit.py`: covers manual page persistence, stale compose marking, and page-number mismatch rejection.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after adding manual scenario editing.
+- Verification: `uv run python -m unittest tests.test_manual_script_edit`, `uv run ruff check bdgen tests`, targeted Prettier check, `npm run lint`, `uv run python -m unittest discover -s tests`, and `npm run build` passed.
+
+### 2026-05-04 (10)
+
+- `bdgen/bdgen/script.py`: added Anthropic-specific rate-limit protection for script generation: local input-token throttling, 429 retry handling that honors the `retry-after` response header, and tighter `max_tokens` caps by expected JSON payload type while keeping Claude thinking/output effort high.
+- `bdgen/tests/test_anthropic_rate_limit.py`: added focused tests for Anthropic token estimation, output caps, rate-limit detection, and `retry-after` parsing.
+- This targets Claude ITPM/OTPM limits without lowering render/script quality; `BDGEN_ANTHROPIC_INPUT_TOKENS_PER_MINUTE=0` disables the local throttle, and another integer value can tune it for a different Anthropic tier.
+- Verification: `uv run python -m unittest tests.test_anthropic_rate_limit`, `uv run ruff check bdgen tests`, targeted Ruff format check, and `uv run python -m unittest discover -s tests` passed outside the sandbox after the known local uv cache access-denied issue.
+
+### 2026-05-04 (9)
+
+- `bdgen/web/src/components/ScriptBrowser.jsx`: improved page scenario readability by rendering panels as structured reading blocks with layout, metadata, facts, scene text, narration, dialogue, and SFX separated visually.
+- `bdgen/web/src/index.css`: added script reader styles for panel cards, metadata chips, fact grids, scene/narration sections, and dialogue bubbles.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the scenario readability pass.
+- Verification: targeted Prettier passed, `npm run lint` passed, and `npm run build` passed outside the sandbox after the known Windows/esbuild `spawn EPERM` sandbox failure.
+
+### 2026-05-04 (8)
+
+- `bdgen/web/src/components/ImageStep.jsx`: added previous/next navigation directly below the image reader so generated pages/references can be flipped from both above and below the displayed image.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the image reader navigation fix.
+- Verification: frontend formatting/lint passed and `npm run build` passed outside the sandbox after the known Windows/esbuild `spawn EPERM` sandbox failure.
+
 ### 2026-05-04 (7)
 
-- `bdgen/desktop/assets/icon.icns`: added a macOS application icon generated from the vector `bd_gen_logo.svg` asset so packaged `.app`/DMG builds do not fall back to Electron's default icon.
-- `bdgen/desktop/package.json`: configured the macOS Electron Builder target to use `assets/icon.icns` explicitly.
-- `bdgen/desktop/main.js`: updated runtime icon resolution to prefer `icon.icns` on macOS, while keeping `icon.ico` on Windows and `icon.png` on Linux/fallback paths.
+- `bdgen/web/src/components/ScriptBrowser.jsx`: restored page navigation above the read page while keeping the matching navigation below it.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after restoring top-and-bottom reader navigation.
+- Verification: frontend formatting/lint passed and `npm run build` passed outside the sandbox after the known Windows/esbuild `spawn EPERM` sandbox failure.
 
 ### 2026-05-04 (6)
 
-- `bdgen/web/src/App.jsx`: made the custom desktop title bar platform-aware; on macOS it reserves space for the native traffic-light controls and hides the duplicate right-side custom window buttons.
-- `bdgen/web/src/index.css`: added reusable title bar layout classes, including a macOS left inset so the native controls no longer overlap the BdGEN logo.
-- `bdgen/bdgen/server/static/`: refreshed the built frontend assets with `npm run build` so the packaged desktop app picks up the title bar fix.
+- `bdgen/web/src/components/ScriptBrowser.jsx`: removed the top page navigation from the script page reader and kept page previous/next navigation at the bottom of the read page.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the reader navigation adjustment.
+- Verification: frontend formatting/lint passed and `npm run build` passed outside the sandbox after the known Windows/esbuild `spawn EPERM` sandbox failure.
 
 ### 2026-05-04 (5)
 
-- `bdgen/desktop/package.json`: registered an Electron Builder `afterPack` hook for packaged backend resources.
-- `bdgen/desktop/scripts/prepare-backend-resource.js`: added packaging-time preparation for the embedded backend executable; Unix builds get `chmod 755`, and macOS builds also receive an ad-hoc `codesign --sign -` signature.
-- `bdgen/desktop/main.js`: surfaced backend `spawn` failures directly so macOS permission/missing-binary errors are shown instead of only timing out while waiting for `/api/health`.
-- `Makefile` and `.github/workflows/release-portable.yml`: ad-hoc sign the PyInstaller `bdgen-server` executable on macOS immediately after build, before Electron packaging.
-- Verification: `python3 -m json.tool bdgen/desktop/package.json` passed. A full `make macos` test could not run on this machine yet because `uv`, `node`, and `npm` are not installed in the available shell environment.
+- `bdgen/web/src/index.css`: made `btn-ghost` visually consistent with other app buttons by giving it a subtle bordered surface, and added a narrow `page-select` helper for pagination controls.
+- `bdgen/web/src/components/ScriptBrowser.jsx`: updated the script browser tab buttons to use the shared button styling and added reusable page navigation above and below the page reading area, including a direct page selector.
+- `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle with the updated UI.
+- Verification: `npx prettier --check src/components/ScriptBrowser.jsx src/index.css` passed, `npm run lint` passed, and `npm run build` passed outside the sandbox after the known Windows/esbuild `spawn EPERM` sandbox failure.
 
 ### 2026-05-04 (4)
 
