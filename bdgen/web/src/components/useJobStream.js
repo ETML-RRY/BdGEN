@@ -43,10 +43,11 @@ export default function useJobStream({ project, step }) {
             ? {
                 ...j,
                 last_message: payload.message,
+                last_event: payload,
                 progress_current: payload.current ?? j.progress_current,
                 progress_total: payload.total ?? j.progress_total,
               }
-            : j
+            : j,
         );
       } else if (payload.type === "terminal") {
         setTerminal(payload);
@@ -68,8 +69,7 @@ export default function useJobStream({ project, step }) {
   }, []);
 
   // Convenience: belongs-to-this-step boolean.
-  const matchesThisStep =
-    job && job.project === project && job.step === step;
+  const matchesThisStep = job && job.project === project && job.step === step;
 
   return { job, events, terminal, refresh, interrupt, clear, matchesThisStep };
 }

@@ -21,6 +21,7 @@ const QUALITY_CHIP = {
 const MIN_BRUSH = 8;
 const MAX_BRUSH = 80;
 const DEFAULT_BRUSH = 24;
+const IDLE_PHASE_SUFFIXES = ["_done", "_skipped"];
 
 /**
  * Reusable shell for the image-generation steps (references, compose). Each
@@ -58,6 +59,7 @@ export default function ImageStep({
   const otherStepRunning = stream.job?.status === "running" && !stream.matchesThisStep;
   const blocked = otherStepRunning;
   const hasAnyImage = items.some((it) => it.image_url);
+  const activeGenerationId = generationTargetId(stream.job);
 
   // Items not yet at "high" quality — surfaced for the per-step "Tout améliorer".
   const draftItems = supportsQuality ? items.filter((it) => it.image_url && it.quality && it.quality !== "high") : [];
@@ -99,8 +101,10 @@ export default function ImageStep({
         idx={idx}
         setIdx={setIdx}
         layout={layout}
-        busy={starting || isRunning}
+        busy={starting}
+        busyItemId={activeGenerationId}
         busyLabel={isRunning ? "Génération en cours..." : "Préparation..."}
+        selectorLabel={stepId === "references" ? "Image" : "Planche"}
         onRefine={isRunning || blocked || !allowRefine ? null : (item) => setRefining(item)}
         onInpaint={
           isRunning || blocked || !allowRefine
@@ -303,13 +307,25 @@ export default function ImageStep({
   );
 }
 
+function generationTargetId(job) {
+  if (!job || job.status !== "running") return null;
+  const event = job.last_event;
+  const phase = event?.phase || "";
+  if (!event?.extra?.id) return null;
+  if (phase === "assembling" || phase === "done") return null;
+  if (IDLE_PHASE_SUFFIXES.some((suffix) => phase.endsWith(suffix))) return null;
+  return event.extra.id;
+}
+
 function ImageFlipper({
   items,
   idx,
   setIdx,
   layout,
   busy = false,
+  busyItemId = null,
   busyLabel = "Génération en cours...",
+  selectorLabel = "Planche",
   onRefine,
   onInpaint,
   onUpgrade,
@@ -333,7 +349,7 @@ function ImageFlipper({
   const canUpgrade = onUpgrade && item.image_url && item.quality && item.quality !== "high";
   const isStale = !!item.stale && !!item.image_url;
   const canRefresh = onRefresh && item.image_url;
-  const readerBusy = busy || submitting;
+  const itemBusy = busy || submitting || busyItemId === item.id;
   const readerBusyLabel = submitting ? "Retouche en cours..." : busyLabel;
 
   useEffect(() => {
@@ -470,26 +486,33 @@ function ImageFlipper({
 
   return (
     <div className="relative">
-      <div
-        className={
-          "transition duration-150 " + (readerBusy ? "opacity-40 grayscale pointer-events-none select-none" : "")
-        }
-        aria-busy={readerBusy}
-      >
+      <div>
         <div className="flex items-center justify-between mb-3 gap-2">
           <button
             className="btn btn-ghost text-sm"
-            disabled={safeIdx === 0 || inpaintActive || readerBusy}
+            disabled={safeIdx === 0 || inpaintActive || submitting}
             onClick={() => setIdx(safeIdx - 1)}
           >
             ← Précédent
           </button>
           <div className="flex items-center gap-2 min-w-0 flex-1 justify-center flex-wrap">
-            <span className="text-sm font-medium truncate text-center">
-              {item.label}
-              <span className="text-[var(--color-mute)] ml-2">
-                ({safeIdx + 1}/{items.length})
-              </span>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <span>{selectorLabel}</span>
+              <select
+                className="select page-select"
+                value={safeIdx}
+                onChange={(event) => setIdx(Number(event.target.value))}
+                disabled={inpaintActive || submitting}
+              >
+                {items.map((option, optionIdx) => (
+                  <option key={option.id} value={optionIdx}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="text-sm text-[var(--color-mute)]">
+              {safeIdx + 1}/{items.length}
             </span>
             {item.image_url && item.quality && (
               <span className={QUALITY_CHIP[item.quality] || "chip"} title={`Qualité de génération : ${item.quality}`}>
@@ -507,7 +530,7 @@ function ImageFlipper({
           </div>
           <button
             className="btn btn-ghost text-sm"
-            disabled={safeIdx === items.length - 1 || inpaintActive || readerBusy}
+            disabled={safeIdx === items.length - 1 || inpaintActive || submitting}
             onClick={() => setIdx(safeIdx + 1)}
           >
             Suivant →
@@ -515,60 +538,76 @@ function ImageFlipper({
         </div>
         <div
           className={
-            "rounded-lg bg-[var(--color-paper-soft)] flex items-center justify-center overflow-hidden " +
+            "relative rounded-lg bg-[var(--color-paper-soft)] flex items-center justify-center overflow-hidden " +
             (layout === "portrait" ? "aspect-[2/3]" : "aspect-square")
           }
+          aria-busy={itemBusy}
         >
-          {item.image_url ? (
-            inpaintActive ? (
-              <div
-                style={{
-                  display: "inline-block",
-                  lineHeight: 0,
-                  userSelect: "none",
-                  touchAction: "none",
-                  position: "relative",
-                }}
-              >
+          <div
+            className={
+              "flex h-full w-full items-center justify-center transition duration-150 " +
+              (itemBusy ? "opacity-40 grayscale select-none" : "")
+            }
+          >
+            {item.image_url ? (
+              inpaintActive ? (
+                <div
+                  style={{
+                    display: "inline-block",
+                    lineHeight: 0,
+                    userSelect: "none",
+                    touchAction: "none",
+                    position: "relative",
+                  }}
+                >
+                  <img
+                    ref={imgRef}
+                    src={item.image_url}
+                    alt={item.label}
+                    className="block max-h-full max-w-full"
+                    draggable={false}
+                  />
+                  <canvas
+                    ref={canvasRef}
+                    className="absolute inset-0 w-full h-full"
+                    style={{ cursor: "crosshair" }}
+                    onMouseDown={onPointerDown}
+                    onMouseMove={onPointerMove}
+                    onMouseUp={onPointerUp}
+                    onMouseLeave={onPointerUp}
+                    onTouchStart={onPointerDown}
+                    onTouchMove={onPointerMove}
+                    onTouchEnd={onPointerUp}
+                  />
+                </div>
+              ) : (
                 <img
-                  ref={imgRef}
                   src={item.image_url}
                   alt={item.label}
-                  className="block max-h-full max-w-full"
-                  draggable={false}
+                  className={
+                    "max-h-full max-w-full object-contain " +
+                    (isStale ? "opacity-60 ring-2 ring-[var(--color-peach-300)]" : "")
+                  }
                 />
-                <canvas
-                  ref={canvasRef}
-                  className="absolute inset-0 w-full h-full"
-                  style={{ cursor: "crosshair" }}
-                  onMouseDown={onPointerDown}
-                  onMouseMove={onPointerMove}
-                  onMouseUp={onPointerUp}
-                  onMouseLeave={onPointerUp}
-                  onTouchStart={onPointerDown}
-                  onTouchMove={onPointerMove}
-                  onTouchEnd={onPointerUp}
-                />
-              </div>
+              )
             ) : (
-              <img
-                src={item.image_url}
-                alt={item.label}
-                className={
-                  "max-h-full max-w-full object-contain " +
-                  (isStale ? "opacity-60 ring-2 ring-[var(--color-peach-300)]" : "")
-                }
-              />
-            )
-          ) : (
-            <div className="text-sm text-[var(--color-mute)]">{emptyLabel || "Pas encore généré."}</div>
+              <div className="text-sm text-[var(--color-mute)]">{emptyLabel || "Pas encore généré."}</div>
+            )}
+          </div>
+          {itemBusy && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/60 backdrop-blur-[1px]">
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-[var(--color-line)] bg-white px-5 py-4 shadow-sm">
+                <span className="inline-block h-8 w-8 rounded-full border-4 border-[var(--color-primary-100)] border-t-[var(--color-primary-500)] animate-spin" />
+                <span className="text-sm font-medium text-[var(--color-ink-soft)]">{readerBusyLabel}</span>
+              </div>
+            </div>
           )}
         </div>
 
         <div className="flex items-center justify-between mt-3 gap-2">
           <button
             className="btn btn-ghost text-sm"
-            disabled={safeIdx === 0 || inpaintActive || readerBusy}
+            disabled={safeIdx === 0 || inpaintActive || submitting}
             onClick={() => setIdx(safeIdx - 1)}
           >
             ← Précédent
@@ -578,7 +617,7 @@ function ImageFlipper({
           </span>
           <button
             className="btn btn-ghost text-sm"
-            disabled={safeIdx === items.length - 1 || inpaintActive || readerBusy}
+            disabled={safeIdx === items.length - 1 || inpaintActive || submitting}
             onClick={() => setIdx(safeIdx + 1)}
           >
             Suivant →
@@ -626,7 +665,7 @@ function ImageFlipper({
               placeholder="Ex. : remplacer le fond par un ciel étoilé, changer la couleur du manteau en rouge…"
               value={inpaintPrompt}
               onChange={(e) => setInpaintPrompt(e.target.value)}
-              disabled={readerBusy}
+              disabled={itemBusy}
             />
             {inpaintError && <p className="text-xs text-[var(--color-rose-500)]">{inpaintError}</p>}
             <div className="flex justify-end gap-2">
@@ -636,14 +675,14 @@ function ImageFlipper({
                   setInpaintActive(false);
                   clearMask();
                 }}
-                disabled={readerBusy}
+                disabled={itemBusy}
               >
                 Annuler
               </button>
               <button
                 className="btn btn-primary text-sm"
                 onClick={submitInpaint}
-                disabled={readerBusy || !hasMask || !inpaintPrompt.trim()}
+                disabled={itemBusy || !hasMask || !inpaintPrompt.trim()}
               >
                 {submitting ? "Retouche en cours…" : "Lancer la retouche"}
               </button>
@@ -660,7 +699,7 @@ function ImageFlipper({
               <button
                 className="btn btn-secondary text-sm"
                 onClick={() => setConfirmingRegen(true)}
-                disabled={readerBusy}
+                disabled={itemBusy}
                 title="Régénère cette image (la qualité actuelle est conservée)."
               >
                 ↻ Régénérer
@@ -670,7 +709,7 @@ function ImageFlipper({
               <button
                 className="btn btn-primary text-sm"
                 onClick={() => onUpgrade(item)}
-                disabled={readerBusy}
+                disabled={itemBusy}
                 title="Régénère cet élément seul en haute qualité."
               >
                 ✨ Améliorer la qualité
@@ -680,7 +719,7 @@ function ImageFlipper({
               <button
                 className="btn btn-ghost text-sm"
                 onClick={() => setInpaintActive(true)}
-                disabled={!item.image_url || readerBusy}
+                disabled={!item.image_url || itemBusy}
                 title="Peindre une zone et décrire la retouche souhaitée."
               >
                 🖌 Retouche ciblée
@@ -690,7 +729,7 @@ function ImageFlipper({
               <button
                 className="btn btn-ghost text-sm"
                 onClick={() => onRefine(item)}
-                disabled={!item.image_url || readerBusy}
+                disabled={!item.image_url || itemBusy}
               >
                 Retoucher cet élément
               </button>
@@ -710,15 +749,6 @@ function ImageFlipper({
           />
         )}
       </div>
-
-      {readerBusy && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-white/60 backdrop-blur-[1px]">
-          <div className="flex flex-col items-center gap-3 rounded-lg border border-[var(--color-line)] bg-white px-5 py-4 shadow-sm">
-            <span className="inline-block h-8 w-8 rounded-full border-4 border-[var(--color-primary-100)] border-t-[var(--color-primary-500)] animate-spin" />
-            <span className="text-sm font-medium text-[var(--color-ink-soft)]">{readerBusyLabel}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

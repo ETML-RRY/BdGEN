@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-06 (16)
+Last updated: 2026-05-06 (19)
 
 ## Update Rule
 
@@ -171,6 +171,13 @@ Lint/format tooling:
 - Avoid changing `.env` unless the user explicitly asks.
 
 ## Change Log
+
+### 2026-05-06 (19)
+
+- `bdgen/web/src/components/useJobStream.js`: le snapshot de job conserve maintenant `last_event` depuis les événements SSE live, afin que l'UI connaisse la cible exacte (`extra.id`) en cours de génération.
+- `bdgen/web/src/components/ImageStep.jsx`: le lecteur d'images reste navigable pendant une génération. L'overlay "Génération en cours..." ne s'affiche plus globalement, mais uniquement sur l'image dont l'id correspond à la cible live (`cover`, `page_N`, `back`, etc.). Les boutons précédent/suivant restent accessibles, et un menu dropdown permet d'aller directement à une planche/image comme dans le lecteur d'écriture.
+- `bdgen/bdgen/server/static/`: frontend reconstruit après les changements de lecteur (`npm run build`), avec nouveaux assets hashés.
+- Vérification : `npm run lint` OK avec 1 warning préexistant dans `ScriptBrowser.jsx` (`PageNavigation` reçoit encore `page` sans l'utiliser), `npm run build` OK. Une première tentative de lint en parallèle du build a échoué sur un fichier temporaire Vite supprimé, puis a réussi en relance seule.
 
 ### 2026-05-06 (18)
 
