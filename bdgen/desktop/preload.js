@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("bdgenDesktop", {
   toggleMaximize: () => ipcRenderer.invoke("window:toggleMaximize"),
   close: () => ipcRenderer.invoke("window:close"),
   isMaximized: () => ipcRenderer.invoke("window:isMaximized"),
+  openExternal: (url) => ipcRenderer.invoke("app:openExternal", url),
   onMaximizedChange: (callback) => {
     const listener = (_event, value) => callback(Boolean(value));
     ipcRenderer.on("window:maximized", listener);

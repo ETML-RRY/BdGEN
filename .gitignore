@@ -24,3 +24,5 @@ bdgen/desktop/node_modules/
 
 # Generated outputs
 output/
+
+.DS_Store

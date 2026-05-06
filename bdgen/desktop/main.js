@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const net = require("net");
@@ -15,6 +15,7 @@ async function createWindow() {
   const appData = app.getPath("userData");
   const outputRoot = path.join(app.getPath("documents"), "BdGEN");
   const icon = resolveWindowIcon();
+  setDockIcon();
 
   await startBackend({ port, appData, outputRoot });
   await waitForHealth(port);
@@ -38,6 +39,10 @@ async function createWindow() {
 
   mainWindow.on("maximize", () => mainWindow.webContents.send("window:maximized", true));
   mainWindow.on("unmaximize", () => mainWindow.webContents.send("window:maximized", false));
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalUrl(url);
+    return { action: "deny" };
+  });
 
   await mainWindow.loadURL(`http://127.0.0.1:${port}/`);
 }
@@ -113,6 +118,20 @@ function resolveWindowIcon() {
   return candidates.find((candidate) => fs.existsSync(candidate));
 }
 
+function setDockIcon() {
+  if (process.platform !== "darwin" || !app.dock) return;
+
+  const candidates = [
+    path.join(__dirname, "assets", "icon.png"),
+    path.join(process.resourcesPath || path.join(__dirname, ".."), "assets", "icon.png"),
+    path.join(process.resourcesPath || path.join(__dirname, ".."), "icon.png"),
+  ];
+  const dockIcon = candidates.find((candidate) => fs.existsSync(candidate));
+  if (dockIcon) {
+    app.dock.setIcon(dockIcon);
+  }
+}
+
 function findFreePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -152,6 +171,17 @@ function formatBackendLaunchError(err, exe) {
   return `Le serveur local n'a pas pu demarrer (${err.code || "erreur inconnue"}): ${err.message}`;
 }
 
+function openExternalUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    shell.openExternal(parsed.toString());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   registerWindowControls();
@@ -184,6 +214,10 @@ function registerWindowControls() {
 
   ipcMain.handle("window:isMaximized", () => {
     return BrowserWindow.getFocusedWindow()?.isMaximized() || false;
+  });
+
+  ipcMain.handle("app:openExternal", (_event, url) => {
+    return openExternalUrl(url);
   });
 }
 

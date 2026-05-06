@@ -1,11 +1,37 @@
 import { useEffect, useMemo, useState } from "react";
+import { FaArrowUpRightFromSquare, FaBookOpen, FaKey } from "react-icons/fa6";
 import { api } from "../api.js";
 
 const PROVIDERS = [
-  { id: "openai", label: "OpenAI", secret: "OPENAI_API_KEY", required: true },
-  { id: "anthropic", label: "Anthropic", secret: "ANTHROPIC_API_KEY" },
-  { id: "xai", label: "xAI", secret: "XAI_API_KEY" },
-  { id: "replicate", label: "Replicate", secret: "REPLICATE_API_TOKEN" },
+  {
+    id: "openai",
+    label: "OpenAI",
+    secret: "OPENAI_API_KEY",
+    required: true,
+    docsUrl: "https://developers.openai.com/api/reference/overview",
+    tokenUrl: "https://platform.openai.com/api-keys",
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic",
+    secret: "ANTHROPIC_API_KEY",
+    docsUrl: "https://platform.claude.com/docs/en/api/overview",
+    tokenUrl: "https://console.anthropic.com/settings/keys",
+  },
+  {
+    id: "xai",
+    label: "xAI",
+    secret: "XAI_API_KEY",
+    docsUrl: "https://docs.x.ai/developers/quickstart",
+    tokenUrl: "https://console.x.ai/team/default/api-keys",
+  },
+  {
+    id: "replicate",
+    label: "Replicate",
+    secret: "REPLICATE_API_TOKEN",
+    docsUrl: "https://replicate.com/docs/topics/security/api-tokens/",
+    tokenUrl: "https://replicate.com/account/api-tokens",
+  },
 ];
 
 const EMPTY_KEYS = Object.fromEntries(PROVIDERS.map((p) => [p.secret, ""]));
@@ -55,7 +81,7 @@ export default function SecretsPage({ mode = "page", onReady }) {
     e.preventDefault();
     setError(null);
     if (password.length < 8) {
-      setError("Choisissez un mot de passe maitre d'au moins 8 caracteres.");
+      setError("Choisissez un mot de passe maître d’au moins 8 caractères.");
       return;
     }
     if (password !== confirm) {
@@ -103,9 +129,9 @@ export default function SecretsPage({ mode = "page", onReady }) {
       <Shell isGate={isGate}>
         <form className="card p-6 space-y-4 max-w-md w-full" onSubmit={submitUnlock}>
           <div>
-            <h1 className="text-xl font-semibold">Deverrouiller BdGEN</h1>
+            <h1 className="text-xl font-semibold">Déverrouiller BdGEN</h1>
             <p className="text-sm text-[var(--color-ink-soft)] mt-1">
-              Entrez le mot de passe maitre pour dechiffrer les cles API locales.
+              Entrez le mot de passe maître pour déchiffrer les clés API locales.
             </p>
           </div>
           <input
@@ -114,11 +140,11 @@ export default function SecretsPage({ mode = "page", onReady }) {
             autoFocus
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Mot de passe maitre"
+            placeholder="Mot de passe maître"
           />
           {error && <p className="text-sm text-[var(--color-rose-500)]">{error}</p>}
           <button className="btn btn-primary w-full" disabled={saving || !password}>
-            {saving ? "Ouverture..." : "Deverrouiller"}
+            {saving ? "Ouverture..." : "Déverrouiller"}
           </button>
         </form>
       </Shell>
@@ -132,18 +158,18 @@ export default function SecretsPage({ mode = "page", onReady }) {
           <div>
             <h1 className="text-xl font-semibold">Configurer le coffre BdGEN</h1>
             <p className="text-sm text-[var(--color-ink-soft)] mt-1">
-              Les cles API seront chiffrees sur disque. Le mot de passe maitre
-              ne sera pas stocke.
+              Les clés API seront chiffrées sur disque. Le mot de passe maître
+              ne sera pas stocké.
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-3">
-            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe maitre" />
+            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe maître" />
             <input className="input" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Confirmer le mot de passe" />
           </div>
           <ProviderInputs keys={keys} setKeys={setKeys} providers={providers} />
           {error && <p className="text-sm text-[var(--color-rose-500)]">{error}</p>}
           <button className="btn btn-primary" disabled={saving}>
-            {saving ? "Creation..." : "Creer le coffre"}
+            {saving ? "Création..." : "Créer le coffre"}
           </button>
         </form>
       </Shell>
@@ -155,9 +181,9 @@ export default function SecretsPage({ mode = "page", onReady }) {
       <section className="card p-6 space-y-5 max-w-3xl w-full">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold">Cles API</h1>
+            <h1 className="text-xl font-semibold">Clés API</h1>
             <p className="text-sm text-[var(--color-ink-soft)] mt-1">
-              Les valeurs completes ne sont jamais affichees. Remplacez une cle
+              Les valeurs complètes ne sont jamais affichées. Remplacez une clé
               en saisissant une nouvelle valeur.
             </p>
           </div>
@@ -178,16 +204,17 @@ export default function SecretsPage({ mode = "page", onReady }) {
                     <p className="text-xs text-[var(--color-mute)]">{provider.secret}</p>
                   </div>
                   <span className={info.configured ? "chip chip-mint" : "chip chip-peach"}>
-                    {info.configured ? `Configuree (${info.source})` : "Absente"}
+                    {info.configured ? `Configurée (${info.source})` : "Absente"}
                   </span>
                 </div>
+                <ProviderLinks provider={provider} className="mb-3" />
                 <div className="flex gap-2">
                   <input
                     className="input"
                     type="password"
                     value={keys[provider.secret] || ""}
                     onChange={(e) => setKeys((prev) => ({ ...prev, [provider.secret]: e.target.value }))}
-                    placeholder={`Nouvelle cle ${provider.label}`}
+                    placeholder={`Nouvelle clé ${provider.label}`}
                   />
                   <button className="btn btn-primary" disabled={saving || !keys[provider.secret]?.trim()} onClick={() => updateProvider(provider.id)}>
                     Enregistrer
@@ -208,18 +235,60 @@ function ProviderInputs({ keys, setKeys, providers }) {
     <div className="space-y-3">
       {PROVIDERS.map((provider) => (
         <label key={provider.id} className="block">
-          <span className="label">
-            {provider.label}{provider.required ? " (requis)" : " (optionnel)"}
+          <span className="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <span className="label mb-0">
+              {provider.label}{provider.required ? " (requis)" : " (optionnel)"}
+            </span>
+            <ProviderLinks provider={provider} compact />
           </span>
           <input
             className="input"
             type="password"
             value={keys[provider.secret] || ""}
             onChange={(e) => setKeys((prev) => ({ ...prev, [provider.secret]: e.target.value }))}
-            placeholder={providers[provider.id]?.configured ? "Deja configuree" : provider.secret}
+            placeholder={providers[provider.id]?.configured ? "Déjà configurée" : provider.secret}
           />
         </label>
       ))}
+    </div>
+  );
+}
+
+function ProviderLinks({ provider, compact = false, className = "" }) {
+  const linkClass = compact
+    ? "text-xs inline-flex items-center gap-1 text-[var(--color-primary-700)] hover:text-[var(--color-primary-500)]"
+    : "text-xs inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[var(--color-line)] text-[var(--color-ink-soft)] hover:bg-[var(--color-paper-soft)] hover:text-[var(--color-ink)]";
+
+  function openLink(e, url) {
+    if (!window.bdgenDesktop?.openExternal) return;
+    e.preventDefault();
+    window.bdgenDesktop.openExternal(url);
+  }
+
+  return (
+    <div className={`flex flex-wrap gap-2 ${className}`}>
+      <a
+        href={provider.docsUrl}
+        target="_blank"
+        rel="noreferrer"
+        className={linkClass}
+        onClick={(e) => openLink(e, provider.docsUrl)}
+      >
+        <FaBookOpen aria-hidden />
+        Documentation
+        {!compact && <FaArrowUpRightFromSquare aria-hidden className="text-[0.65rem]" />}
+      </a>
+      <a
+        href={provider.tokenUrl}
+        target="_blank"
+        rel="noreferrer"
+        className={linkClass}
+        onClick={(e) => openLink(e, provider.tokenUrl)}
+      >
+        <FaKey aria-hidden />
+        Créer un token
+        {!compact && <FaArrowUpRightFromSquare aria-hidden className="text-[0.65rem]" />}
+      </a>
     </div>
   );
 }
