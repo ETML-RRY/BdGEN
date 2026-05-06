@@ -7,9 +7,21 @@ import Wizard from "./pages/Wizard.jsx";
 import NewProject from "./pages/NewProject.jsx";
 import ProjectStats from "./pages/ProjectStats.jsx";
 import SecretsPage from "./pages/SecretsPage.jsx";
+import OnboardingWizard, {
+  APP_ONBOARDING_KEY,
+  INITIAL_ONBOARDING_KEY,
+  dismissOnboarding,
+  hasDismissedOnboarding,
+} from "./components/OnboardingWizard.jsx";
 
 export default function App() {
   const [secretsStatus, setSecretsStatus] = useState(null);
+  const [showInitialOnboarding, setShowInitialOnboarding] = useState(
+    () => !hasDismissedOnboarding(INITIAL_ONBOARDING_KEY)
+  );
+  const [showAppOnboarding, setShowAppOnboarding] = useState(
+    () => !hasDismissedOnboarding(APP_ONBOARDING_KEY)
+  );
   const isDesktop = Boolean(window.bdgenDesktop);
 
   useEffect(() => {
@@ -20,11 +32,23 @@ export default function App() {
 
   const providers = secretsStatus?.providers || {};
   const hasConfiguredProvider = Object.values(providers).some((p) => p.configured);
+  const needsInitialSetup =
+    secretsStatus && !secretsStatus.vault_exists && !hasConfiguredProvider;
   const shouldGate =
     secretsStatus &&
     !secretsStatus.error &&
     ((secretsStatus.vault_exists && !secretsStatus.unlocked) ||
-      (!secretsStatus.vault_exists && !hasConfiguredProvider));
+      needsInitialSetup);
+
+  function dismissInitialOnboarding() {
+    dismissOnboarding(INITIAL_ONBOARDING_KEY);
+    setShowInitialOnboarding(false);
+  }
+
+  function dismissAppOnboarding() {
+    dismissOnboarding(APP_ONBOARDING_KEY);
+    setShowAppOnboarding(false);
+  }
 
   if (!secretsStatus) {
     return (
@@ -39,7 +63,18 @@ export default function App() {
       <div className="h-full flex flex-col overflow-hidden">
         {isDesktop && <DesktopTitleBar hideNav />}
         <main className="flex-1 min-h-0">
-          <SecretsPage mode="gate" onReady={setSecretsStatus} />
+          {needsInitialSetup && showInitialOnboarding ? (
+            <div className="h-full min-h-0 flex items-center justify-center overflow-auto p-6">
+              <OnboardingWizard
+                kind="initial"
+                embedded
+                onDone={dismissInitialOnboarding}
+                onSkip={dismissInitialOnboarding}
+              />
+            </div>
+          ) : (
+            <SecretsPage mode="gate" onReady={setSecretsStatus} />
+          )}
         </main>
       </div>
     );
@@ -58,6 +93,14 @@ export default function App() {
           <Route path="/projects/:name/*" element={<Wizard />} />
         </Routes>
       </main>
+
+      {showAppOnboarding && (
+        <OnboardingWizard
+          kind="app"
+          onDone={dismissAppOnboarding}
+          onSkip={dismissAppOnboarding}
+        />
+      )}
 
       <footer className="border-t border-[var(--color-line)] py-4 text-center text-xs text-[var(--color-mute)]">
         BdGEN · usage local

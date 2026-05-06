@@ -354,6 +354,37 @@ Lint/format tooling:
 - `bdgen/bdgen/server/static/`: rebuilt the frontend static bundle after the image reader navigation fix.
 - Verification: frontend formatting/lint passed and `npm run build` passed outside the sandbox after the known Windows/esbuild `spawn EPERM` sandbox failure.
 
+### 2026-05-05 (5)
+
+- `bdgen/desktop/main.js`: added a macOS runtime Dock icon assignment via `app.dock.setIcon()` using the packaged PNG asset, so the running app uses the BdGEN icon in the Dock/App Switcher/Alt-Tab UI instead of Electron's default icon.
+- Verification: `npm run lint` and `node --check main.js` passed from `bdgen/desktop`; the existing macOS bundle `Info.plist` still declares `CFBundleIconFile` as `icon.icns`.
+
+### 2026-05-05 (4)
+
+- `bdgen/desktop/main.js` and `bdgen/desktop/preload.js`: added a safe desktop bridge for opening HTTPS external links with the system default browser, and routed Electron new-window attempts through the same handler.
+- `bdgen/web/src/pages/SecretsPage.jsx`: provider documentation/token links now call the desktop external-link bridge when available, while preserving normal browser behavior on web.
+- `bdgen/bdgen/server/static/`: refreshed built frontend assets with `npm run build`.
+- Verification: `npm run lint` passed from `bdgen/desktop` and `bdgen/web`; `npm run build` passed from `bdgen/web`.
+
+### 2026-05-05 (3)
+
+- `bdgen/web/src/pages/SecretsPage.jsx`: added provider-specific external links on the API key setup/management screen, with one documentation link and one token/API key creation link for OpenAI, Anthropic, xAI, and Replicate; also restored French accents in visible secrets/setup labels touched by this screen.
+- `bdgen/bdgen/server/static/`: refreshed built frontend assets with `npm run build`.
+- Verification: `npm run build` and `npm run lint` passed from `bdgen/web`.
+
+### 2026-05-05 (2)
+
+- `bdgen/web/src/components/OnboardingWizard.jsx`: restored French accents and typographic apostrophes in the onboarding copy.
+- `bdgen/bdgen/server/static/`: refreshed built frontend assets with `npm run build` after the copy update.
+- Verification: `npm run build` passed. An initial parallel `npm run lint` collided with Vite temporary config cleanup during the build; rerunning `npm run lint` alone passed.
+
+### 2026-05-05 (1)
+
+- `bdgen/web/src/components/OnboardingWizard.jsx`: added a reusable two-mode onboarding wizard with localStorage dismissal state. The initial mode explains the master password, API key setup, and cost expectations; the app mode explains the BdGEN creation flow from preparation to compose/upscale.
+- `bdgen/web/src/App.jsx`: wired the initial wizard before first secrets vault setup and the app guide after the application becomes accessible.
+- `bdgen/bdgen/server/static/`: refreshed built frontend assets with `npm run build` so the packaged backend serves the onboarding UI.
+- Verification: `npm run lint` and `npm run build` passed from `bdgen/web`.
+
 ### 2026-05-04 (7)
 
 - `bdgen/web/src/components/ScriptBrowser.jsx`: restored page navigation above the read page while keeping the matching navigation below it.
