@@ -35,8 +35,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ password }),
     }),
-  lockSecretsVault: () =>
-    request("/api/secrets/lock", { method: "POST" }),
+  lockSecretsVault: () => request("/api/secrets/lock", { method: "POST" }),
   updateSecretProvider: (provider, value, password = null) =>
     request(`/api/secrets/providers/${encodeURIComponent(provider)}`, {
       method: "PUT",
@@ -45,25 +44,17 @@ export const api = {
 
   listProjects: () => request("/api/projects"),
   getProject: (name) => request(`/api/projects/${encodeURIComponent(name)}`),
-  getProjectStatistics: (name) =>
-    request(`/api/projects/${encodeURIComponent(name)}/statistics`),
-  createProject: (config) =>
-    request("/api/projects", { method: "POST", body: JSON.stringify(config) }),
+  getProjectStatistics: (name) => request(`/api/projects/${encodeURIComponent(name)}/statistics`),
+  createProject: (config) => request("/api/projects", { method: "POST", body: JSON.stringify(config) }),
   updateProject: (name, config) =>
     request(`/api/projects/${encodeURIComponent(name)}`, {
       method: "PUT",
       body: JSON.stringify(config),
     }),
-  deleteProject: (name) =>
-    request(`/api/projects/${encodeURIComponent(name)}`, { method: "DELETE" }),
+  deleteProject: (name) => request(`/api/projects/${encodeURIComponent(name)}`, { method: "DELETE" }),
   duplicateProject: (
     name,
-    {
-      newProject = null,
-      includeReferences = false,
-      includePhotos = true,
-      includeStyleReference = true,
-    } = {}
+    { newProject = null, includeReferences = false, includePhotos = true, includeStyleReference = true } = {},
   ) =>
     request(`/api/projects/${encodeURIComponent(name)}/duplicate`, {
       method: "POST",
@@ -90,20 +81,20 @@ export const api = {
     return res.json();
   },
 
-  listExportableReferences: (name) =>
-    request(`/api/projects/${encodeURIComponent(name)}/references/exportable`),
+  listExportableReferences: (name) => request(`/api/projects/${encodeURIComponent(name)}/references/exportable`),
   exportReferencesBundle: async (name, picks) => {
-    const res = await fetch(
-      `/api/projects/${encodeURIComponent(name)}/references/export`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(picks),
-      }
-    );
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}/references/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(picks),
+    });
     if (!res.ok) {
       let body;
-      try { body = await res.json(); } catch { body = { detail: await res.text() }; }
+      try {
+        body = await res.json();
+      } catch {
+        body = { detail: await res.text() };
+      }
       throw new Error(body.detail || res.statusText);
     }
     return res.blob();
@@ -111,52 +102,49 @@ export const api = {
   importReferencesBundle: async (name, file) => {
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch(
-      `/api/projects/${encodeURIComponent(name)}/references/import`,
-      { method: "POST", body: fd }
-    );
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}/references/import`, {
+      method: "POST",
+      body: fd,
+    });
     if (!res.ok) {
       let body;
-      try { body = await res.json(); } catch { body = { detail: await res.text() }; }
+      try {
+        body = await res.json();
+      } catch {
+        body = { detail: await res.text() };
+      }
       throw new Error(body.detail || res.statusText);
     }
     return res.json();
   },
 
   currentJob: () => request("/api/jobs/current"),
-  interruptJob: () =>
-    request("/api/jobs/current/interrupt", { method: "POST" }),
+  interruptJob: () => request("/api/jobs/current/interrupt", { method: "POST" }),
   clearJob: () => request("/api/jobs/current/clear", { method: "POST" }),
 
   startStep: (name, step, payload = {}) =>
-    request(
-      `/api/projects/${encodeURIComponent(name)}/steps/${step}/start`,
-      { method: "POST", body: JSON.stringify(payload) }
-    ),
+    request(`/api/projects/${encodeURIComponent(name)}/steps/${step}/start`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   regenerateAll: (name, step, qualityOverride) =>
-    request(
-      `/api/projects/${encodeURIComponent(name)}/steps/${step}/start`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          force_all: true,
-          quality_override: qualityOverride || undefined,
-        }),
-      }
-    ),
+    request(`/api/projects/${encodeURIComponent(name)}/steps/${step}/start`, {
+      method: "POST",
+      body: JSON.stringify({
+        force_all: true,
+        quality_override: qualityOverride || undefined,
+      }),
+    }),
   // Convenience helper: launches a force-regeneration of a single target at
   // high quality, used by the per-item "Améliorer la qualité" buttons.
   upgradeQuality: (name, step, targetIds) =>
-    request(
-      `/api/projects/${encodeURIComponent(name)}/steps/${step}/start`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          force_ids: targetIds,
-          quality_override: "high",
-        }),
-      }
-    ),
+    request(`/api/projects/${encodeURIComponent(name)}/steps/${step}/start`, {
+      method: "POST",
+      body: JSON.stringify({
+        force_ids: targetIds,
+        quality_override: "high",
+      }),
+    }),
 
   refineCharacter: (name, id, feedback) =>
     request(`/api/projects/${encodeURIComponent(name)}/refine/character/${encodeURIComponent(id)}`, {
@@ -178,32 +166,80 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ feedback, cascade }),
     }),
+  updateScriptPage: (name, n, page) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/pages/${n}`, {
+      method: "PUT",
+      body: JSON.stringify(page),
+    }),
+  checkScriptCoherence: (name) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/coherence/check`, {
+      method: "POST",
+    }),
+  updateScriptCharacter: (name, id, character) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/characters/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(character),
+    }),
+  addScriptCharacter: (name, character) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/characters`, {
+      method: "POST",
+      body: JSON.stringify(character),
+    }),
+  updateScriptLocation: (name, id, location) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/locations/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(location),
+    }),
+  addScriptLocation: (name, location) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/locations`, {
+      method: "POST",
+      body: JSON.stringify(location),
+    }),
+  updateScriptObject: (name, id, object) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/objects/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(object),
+    }),
+  addScriptObject: (name, object) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/objects`, {
+      method: "POST",
+      body: JSON.stringify(object),
+    }),
+  updateScriptCover: (name, cover) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/cover`, {
+      method: "PUT",
+      body: JSON.stringify(cover),
+    }),
+  updateScriptBackCover: (name, backCover) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/back-cover`, {
+      method: "PUT",
+      body: JSON.stringify(backCover),
+    }),
+  applyGlobalSuggestion: (name, suggestion) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/suggestions/apply`, {
+      method: "POST",
+      body: JSON.stringify({ suggestion }),
+    }),
   previewDeleteCharacter: (name, id) =>
-    request(
-      `/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(id)}/delete-preview`
-    ),
+    request(`/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(id)}/delete-preview`),
   previewDeleteLocation: (name, id) =>
-    request(
-      `/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(id)}/delete-preview`
-    ),
+    request(`/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(id)}/delete-preview`),
   previewDeleteObject: (name, id) =>
-    request(
-      `/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(id)}/delete-preview`
-    ),
+    request(`/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(id)}/delete-preview`),
   deleteCharacter: (name, id, autoRegenerate = true) =>
     request(
       `/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(id)}?auto_regenerate=${autoRegenerate}`,
-      { method: "DELETE" }
+      { method: "DELETE" },
     ),
   deleteLocation: (name, id, autoRegenerate = true) =>
     request(
       `/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(id)}?auto_regenerate=${autoRegenerate}`,
-      { method: "DELETE" }
+      { method: "DELETE" },
     ),
   deleteObject: (name, id, autoRegenerate = true) =>
     request(
       `/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(id)}?auto_regenerate=${autoRegenerate}`,
-      { method: "DELETE" }
+      { method: "DELETE" },
     ),
 
   refineCover: (name, feedback) =>
@@ -229,11 +265,15 @@ export const api = {
     fd.append("mask", maskBlob, "mask.png");
     const res = await fetch(
       `/api/projects/${encodeURIComponent(name)}/inpaint/${encodeURIComponent(step)}/${encodeURIComponent(targetId)}`,
-      { method: "POST", body: fd }
+      { method: "POST", body: fd },
     );
     if (!res.ok) {
       let body;
-      try { body = await res.json(); } catch { body = { detail: await res.text() }; }
+      try {
+        body = await res.json();
+      } catch {
+        body = { detail: await res.text() };
+      }
       throw new Error(body.detail || res.statusText);
     }
     return res.json();
@@ -242,17 +282,11 @@ export const api = {
   setStyleReference: async (name, file) => {
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch(
-      `/api/projects/${encodeURIComponent(name)}/style-reference`,
-      { method: "PUT", body: fd }
-    );
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}/style-reference`, { method: "PUT", body: fd });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
-  getStyleReferenceInfo: (name) =>
-    request(
-      `/api/projects/${encodeURIComponent(name)}/style-reference`
-    ),
+  getStyleReferenceInfo: (name) => request(`/api/projects/${encodeURIComponent(name)}/style-reference`),
 
   styleFromImage: async (file, language = "fr") => {
     const fd = new FormData();
@@ -299,17 +333,16 @@ export const api = {
     fd.append("file", file);
     const res = await fetch(
       `/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(characterId)}/photo`,
-      { method: "PUT", body: fd }
+      { method: "PUT", body: fd },
     );
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   deleteCharacterPhoto: (name, characterId) =>
-    request(
-      `/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(characterId)}/photo`,
-      { method: "DELETE" }
-    ),
+    request(`/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(characterId)}/photo`, {
+      method: "DELETE",
+    }),
 
   objectFromPhoto: async (file, language = "fr") => {
     const fd = new FormData();
@@ -334,19 +367,18 @@ export const api = {
   setObjectPhoto: async (name, objectId, file) => {
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch(
-      `/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(objectId)}/photo`,
-      { method: "PUT", body: fd }
-    );
+    const res = await fetch(`/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(objectId)}/photo`, {
+      method: "PUT",
+      body: fd,
+    });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   deleteObjectPhoto: (name, objectId) =>
-    request(
-      `/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(objectId)}/photo`,
-      { method: "DELETE" }
-    ),
+    request(`/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(objectId)}/photo`, {
+      method: "DELETE",
+    }),
 
   locationFromPhoto: async (file, language = "fr") => {
     const fd = new FormData();
@@ -373,17 +405,16 @@ export const api = {
     fd.append("file", file);
     const res = await fetch(
       `/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(locationId)}/photo`,
-      { method: "PUT", body: fd }
+      { method: "PUT", body: fd },
     );
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },
 
   deleteLocationPhoto: (name, locationId) =>
-    request(
-      `/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(locationId)}/photo`,
-      { method: "DELETE" }
-    ),
+    request(`/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(locationId)}/photo`, {
+      method: "DELETE",
+    }),
 };
 
 // Subscribe to live progress. Calls onEvent(payload) for each event.

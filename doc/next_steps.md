@@ -1,1 +1,0 @@
-- Implementer un CI/CD avec release CD manuelle et increment de version SemVer choisi par l'utilisateur au lancement du workflow CD.
