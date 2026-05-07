@@ -1,14 +1,21 @@
 import { useState, useEffect } from "react";
-import {
-  FaPlus,
-  FaTrash,
-  FaUpload,
-  FaPalette,
-  FaChevronDown,
-} from "react-icons/fa6";
+import { FaPlus, FaTrash, FaUpload, FaPalette, FaChevronDown } from "react-icons/fa6";
 import { api } from "../api.js";
 import StyleFromImageDialog from "./StyleFromImageDialog.jsx";
 import ReferencesBundlePanel from "./ReferencesBundlePanel.jsx";
+import {
+  STORY_GENRE_PRESETS,
+  STORY_TONE_PRESETS,
+  STORY_SETTING_PRESETS,
+  STORY_AUDIENCE_PRESETS,
+  STYLE_ART_STYLE_PRESETS,
+  STYLE_COLOR_PALETTE_PRESETS,
+  STYLE_LINE_WORK_PRESETS,
+  STYLE_MOOD_PRESETS,
+  STYLE_PANEL_BORDERS_PRESETS,
+  STYLE_SPEECH_BUBBLES_PRESETS,
+  STYLE_CHARACTER_RENDERING_PRESETS,
+} from "./projectFormPresets.js";
 
 export const DEFAULT_CONFIG = {
   project: "",
@@ -259,9 +266,12 @@ export default function ProjectForm({
 
   useEffect(() => {
     if (!projectName) return;
-    api.getStyleReferenceInfo(projectName).then((info) => {
-      if (info?.url) setStyleRefUrl(info.url);
-    }).catch(() => {});
+    api
+      .getStyleReferenceInfo(projectName)
+      .then((info) => {
+        if (info?.url) setStyleRefUrl(info.url);
+      })
+      .catch(() => {});
   }, [projectName]);
 
   useEffect(() => {
@@ -384,10 +394,7 @@ export default function ProjectForm({
       },
     }));
     try {
-      const extracted = await api.characterFromPhoto(
-        file,
-        config.metadata.language || "fr"
-      );
+      const extracted = await api.characterFromPhoto(file, config.metadata.language || "fr");
       setConfig((c) => {
         const next = structuredClone(c);
         const row = next.characters[i];
@@ -405,11 +412,7 @@ export default function ProjectForm({
       });
       if (projectName) {
         try {
-          const { url } = await api.setCharacterPhoto(
-            projectName,
-            charId,
-            file
-          );
+          const { url } = await api.setCharacterPhoto(projectName, charId, file);
           setCharacterPhotos((prev) => ({
             ...prev,
             [charId]: {
@@ -525,10 +528,7 @@ export default function ProjectForm({
       },
     }));
     try {
-      const extracted = await api.locationFromPhoto(
-        file,
-        config.metadata.language || "fr"
-      );
+      const extracted = await api.locationFromPhoto(file, config.metadata.language || "fr");
       setConfig((c) => {
         const next = structuredClone(c);
         const row = next.locations[i];
@@ -658,10 +658,7 @@ export default function ProjectForm({
       },
     }));
     try {
-      const extracted = await api.objectFromPhoto(
-        file,
-        config.metadata.language || "fr"
-      );
+      const extracted = await api.objectFromPhoto(file, config.metadata.language || "fr");
       setConfig((c) => {
         const next = structuredClone(c);
         const row = next.objects[i];
@@ -738,13 +735,14 @@ export default function ProjectForm({
     const out = structuredClone(config);
     const slugSource = out.display_name || out.metadata.title || "projet";
     if (isNew && !out.project) {
-      out.project = slugSource
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_+|_+$/g, "")
-        .slice(0, 60) || "projet";
+      out.project =
+        slugSource
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[̀-ͯ]/g, "")
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_+|_+$/g, "")
+          .slice(0, 60) || "projet";
     }
     out.display_name = out.display_name?.trim() || null;
     out.structure.page_count = Number(out.structure.page_count);
@@ -753,18 +751,10 @@ export default function ProjectForm({
       Number(out.structure.panels_per_page_range[0]),
       Number(out.structure.panels_per_page_range[1]),
     ];
-    out.generation_options.script_model.temperature = Number(
-      out.generation_options.script_model.temperature
-    );
-    out.generation_options.upscale.target_megapixels = Number(
-      out.generation_options.upscale.target_megapixels
-    );
-    out.generation_options.upscale.scale_factor = Number(
-      out.generation_options.upscale.scale_factor
-    );
-    out.generation_options.upscale.output_quality = Number(
-      out.generation_options.upscale.output_quality
-    );
+    out.generation_options.script_model.temperature = Number(out.generation_options.script_model.temperature);
+    out.generation_options.upscale.target_megapixels = Number(out.generation_options.upscale.target_megapixels);
+    out.generation_options.upscale.scale_factor = Number(out.generation_options.upscale.scale_factor);
+    out.generation_options.upscale.output_quality = Number(out.generation_options.upscale.output_quality);
     return out;
   }
 
@@ -772,7 +762,11 @@ export default function ProjectForm({
     if (!styleRefFile) return;
     const projName = projectName || out.project;
     if (!projName) return;
-    try { await api.setStyleReference(projName, styleRefFile); } catch { /* non-fatal */ }
+    try {
+      await api.setStyleReference(projName, styleRefFile);
+    } catch {
+      /* non-fatal */
+    }
   }
 
   async function maybeUploadPendingCharacterPhotos(out) {
@@ -783,9 +777,10 @@ export default function ProjectForm({
       const slot = characterPhotos[c.id];
       if (slot?.file) {
         updates.push(
-          api.setCharacterPhoto(projName, c.id, slot.file)
+          api
+            .setCharacterPhoto(projName, c.id, slot.file)
             .then(({ url }) => [c.id, url])
-            .catch(() => [c.id, null])
+            .catch(() => [c.id, null]),
         );
       }
     }
@@ -811,9 +806,10 @@ export default function ProjectForm({
       const slot = locationPhotos[l.id];
       if (slot?.file) {
         updates.push(
-          api.setLocationPhoto(projName, l.id, slot.file)
+          api
+            .setLocationPhoto(projName, l.id, slot.file)
             .then(({ url }) => [l.id, url])
-            .catch(() => [l.id, null])
+            .catch(() => [l.id, null]),
         );
       }
     }
@@ -839,9 +835,10 @@ export default function ProjectForm({
       const slot = objectPhotos[o.id];
       if (slot?.file) {
         updates.push(
-          api.setObjectPhoto(projName, o.id, slot.file)
+          api
+            .setObjectPhoto(projName, o.id, slot.file)
             .then(({ url }) => [o.id, url])
-            .catch(() => [o.id, null])
+            .catch(() => [o.id, null]),
         );
       }
     }
@@ -879,12 +876,15 @@ export default function ProjectForm({
 
   async function handleApplyStyleOnly() {
     if (!onApplyStyleOnly) return;
-    if (!window.confirm(
-      "Le style va remplacer celui du projet. Le scénario (textes, dialogues, " +
-      "personnages, planches) reste intact, mais les images de référence et " +
-      "planches composées seront supprimées pour pouvoir être régénérées avec " +
-      "le nouveau style.\n\nContinuer ?"
-    )) return;
+    if (
+      !window.confirm(
+        "Le style va remplacer celui du projet. Le scénario (textes, dialogues, " +
+          "personnages, planches) reste intact, mais les images de référence et " +
+          "planches composées seront supprimées pour pouvoir être régénérées avec " +
+          "le nouveau style.\n\nContinuer ?",
+      )
+    )
+      return;
     setError(null);
     setApplyingStyleOnly(true);
     try {
@@ -913,7 +913,10 @@ export default function ProjectForm({
           />
         </Field>
         {isNew && (
-          <Field label="Identifiant du projet (slug)" hint="Optionnel — déduit du nom du projet ou du titre si vide. Lettres, chiffres et underscores.">
+          <Field
+            label="Identifiant du projet (slug)"
+            hint="Optionnel — déduit du nom du projet ou du titre si vide. Lettres, chiffres et underscores."
+          >
             <input
               className="input"
               value={config.project}
@@ -960,34 +963,34 @@ export default function ProjectForm({
         </Field>
         <Grid cols={2}>
           <Field label="Genre">
-            <input
-              className="input"
+            <ComboBox
               value={config.story.genre || ""}
-              onChange={(e) => set("story.genre", e.target.value)}
+              options={STORY_GENRE_PRESETS}
+              onChange={(v) => set("story.genre", v)}
               placeholder="ex. mystère, drame familial"
             />
           </Field>
           <Field label="Ton">
-            <input
-              className="input"
+            <ComboBox
               value={config.story.tone || ""}
-              onChange={(e) => set("story.tone", e.target.value)}
+              options={STORY_TONE_PRESETS}
+              onChange={(v) => set("story.tone", v)}
               placeholder="ex. contemplatif, mélancolique"
             />
           </Field>
           <Field label="Cadre / époque">
-            <input
-              className="input"
+            <ComboBox
               value={config.story.setting || ""}
-              onChange={(e) => set("story.setting", e.target.value)}
+              options={STORY_SETTING_PRESETS}
+              onChange={(v) => set("story.setting", v)}
               placeholder="ex. Bretagne, automne 1987"
             />
           </Field>
           <Field label="Public visé">
-            <input
-              className="input"
+            <ComboBox
               value={config.story.target_audience || ""}
-              onChange={(e) => set("story.target_audience", e.target.value)}
+              options={STORY_AUDIENCE_PRESETS}
+              onChange={(v) => set("story.target_audience", v)}
               placeholder="ex. ado-adulte"
             />
           </Field>
@@ -1018,12 +1021,7 @@ export default function ProjectForm({
         title="Casting"
         intro="Personnages, décors et objets — descriptions, photos optionnelles et images de référence. Importez ou exportez un sous-ensemble en .bdrefs pour le réutiliser dans une autre BD (ex. Tome 2)."
         action={
-          projectName ? (
-            <ReferencesBundlePanel
-              projectName={projectName}
-              onImported={onReferencesImported}
-            />
-          ) : null
+          projectName ? <ReferencesBundlePanel projectName={projectName} onImported={onReferencesImported} /> : null
         }
       >
         <Subsection
@@ -1046,18 +1044,14 @@ export default function ProjectForm({
           {config.characters.length === 0 && (
             <p className="text-sm text-[var(--color-mute)]">
               Aucun personnage défini pour l'instant.
-              {config.structure.allow_extra_characters
-                ? " L'IA en proposera selon les besoins du scénario."
-                : ""}
+              {config.structure.allow_extra_characters ? " L'IA en proposera selon les besoins du scénario." : ""}
             </p>
           )}
           <div className="space-y-4">
             {config.characters.map((c, i) => (
               <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">
-                    Personnage {i + 1}
-                  </span>
+                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">Personnage {i + 1}</span>
                   <button
                     type="button"
                     className="btn btn-ghost text-xs inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
@@ -1157,9 +1151,7 @@ export default function ProjectForm({
             {config.locations.map((l, i) => (
               <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">
-                    Décor {i + 1}
-                  </span>
+                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">Décor {i + 1}</span>
                   <button
                     type="button"
                     className="btn btn-ghost text-xs inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
@@ -1221,9 +1213,8 @@ export default function ProjectForm({
           }
         >
           <p className="text-sm text-[var(--color-mute)]">
-            Optionnel. Ajoutez ici un livre, un produit, un objet symbolique qui doit
-            revenir dans l'histoire. Une photo (optionnelle) servira de guide pour en
-            dessiner une version caricaturée dans le style de la BD.
+            Optionnel. Ajoutez ici un livre, un produit, un objet symbolique qui doit revenir dans l'histoire. Une photo
+            (optionnelle) servira de guide pour en dessiner une version caricaturée dans le style de la BD.
           </p>
           <Toggle
             label="Autoriser l'IA à inventer des objets supplémentaires si l'histoire en a besoin"
@@ -1233,18 +1224,14 @@ export default function ProjectForm({
           {config.objects.length === 0 && (
             <p className="text-sm text-[var(--color-mute)]">
               Aucun objet défini pour l'instant.
-              {config.structure.allow_extra_objects
-                ? " L'IA n'en inventera qu'à la marge."
-                : ""}
+              {config.structure.allow_extra_objects ? " L'IA n'en inventera qu'à la marge." : ""}
             </p>
           )}
           <div className="space-y-4">
             {config.objects.map((o, i) => (
               <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">
-                    Objet {i + 1}
-                  </span>
+                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">Objet {i + 1}</span>
                   <button
                     type="button"
                     className="btn btn-ghost text-xs inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
@@ -1323,10 +1310,7 @@ export default function ProjectForm({
                 className="input"
                 value={config.structure.panels_per_page_range[0]}
                 onChange={(e) =>
-                  set("structure.panels_per_page_range", [
-                    e.target.value,
-                    config.structure.panels_per_page_range[1],
-                  ])
+                  set("structure.panels_per_page_range", [e.target.value, config.structure.panels_per_page_range[1]])
                 }
               />
               <input
@@ -1335,10 +1319,7 @@ export default function ProjectForm({
                 className="input"
                 value={config.structure.panels_per_page_range[1]}
                 onChange={(e) =>
-                  set("structure.panels_per_page_range", [
-                    config.structure.panels_per_page_range[0],
-                    e.target.value,
-                  ])
+                  set("structure.panels_per_page_range", [config.structure.panels_per_page_range[0], e.target.value])
                 }
               />
             </div>
@@ -1434,10 +1415,7 @@ export default function ProjectForm({
               value={config.generation_options.upscale.enabled}
               onChange={(v) => set("generation_options.upscale.enabled", v)}
             />
-            <Field
-              label="Mode d'agrandissement"
-              hint="Choisissez une cible en mégapixels ou un facteur multiplicatif."
-            >
+            <Field label="Mode d'agrandissement" hint="Choisissez une cible en mégapixels ou un facteur multiplicatif.">
               <select
                 className="select"
                 value={config.generation_options.upscale.mode}
@@ -1450,10 +1428,7 @@ export default function ProjectForm({
           </Grid>
 
           <Grid cols={2}>
-            <Field
-              label="Mégapixels cibles"
-              hint="Utilisé en mode “taille cible”. Exemple : 4 MP."
-            >
+            <Field label="Mégapixels cibles" hint="Utilisé en mode “taille cible”. Exemple : 4 MP.">
               <input
                 type="number"
                 min={1}
@@ -1491,10 +1466,7 @@ export default function ProjectForm({
                 <option value="webp">WebP</option>
               </select>
             </Field>
-            <Field
-              label="Qualité fichier"
-              hint="Appliquée aux formats JPEG et WebP. Ignorée pour PNG."
-            >
+            <Field label="Qualité fichier" hint="Appliquée aux formats JPEG et WebP. Ignorée pour PNG.">
               <input
                 type="number"
                 min={1}
@@ -1509,9 +1481,8 @@ export default function ProjectForm({
           </Grid>
 
           <p className="text-xs text-[var(--color-mute)]">
-            Utilise le modèle Pruna P-Image-Upscale via l'API Replicate.
-            Coût : ~$0.005/image (1-4 MP) ou ~$0.01/image (5-8 MP).
-            Nécessite <code>REPLICATE_API_TOKEN</code> dans le <code>.env</code> du serveur.
+            Utilise le modèle Pruna P-Image-Upscale via l'API Replicate. Coût : ~$0.005/image (1-4 MP) ou ~$0.01/image
+            (5-8 MP). Nécessite <code>REPLICATE_API_TOKEN</code> dans le <code>.env</code> du serveur.
           </p>
         </Subsection>
       </Section>
@@ -1554,9 +1525,12 @@ export default function ProjectForm({
             if (file) {
               setStyleRefLocalPreview(URL.createObjectURL(file));
               if (projectName) {
-                api.setStyleReference(projectName, file).then(({ url }) => {
-                  if (url) setStyleRefUrl(url);
-                }).catch(() => {});
+                api
+                  .setStyleReference(projectName, file)
+                  .then(({ url }) => {
+                    if (url) setStyleRefUrl(url);
+                  })
+                  .catch(() => {});
               }
             }
             setConfig((c) => {
@@ -1565,16 +1539,12 @@ export default function ProjectForm({
                 style: {
                   ...c.style,
                   art_style: style.art_style ?? c.style.art_style,
-                  color_palette:
-                    style.color_palette ?? c.style.color_palette,
+                  color_palette: style.color_palette ?? c.style.color_palette,
                   line_work: style.line_work ?? c.style.line_work,
                   mood: style.mood ?? c.style.mood,
-                  panel_borders:
-                    style.panel_borders ?? c.style.panel_borders,
-                  speech_bubbles:
-                    style.speech_bubbles ?? c.style.speech_bubbles,
-                  character_rendering:
-                    style.character_rendering ?? c.style.character_rendering,
+                  panel_borders: style.panel_borders ?? c.style.panel_borders,
+                  speech_bubbles: style.speech_bubbles ?? c.style.speech_bubbles,
+                  character_rendering: style.character_rendering ?? c.style.character_rendering,
                 },
               };
               if (Array.isArray(characters) && characters.length > 0) {
@@ -1612,9 +1582,7 @@ function Section({ title, intro, action, children }) {
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div className="flex-1 min-w-[12rem]">
           <h3 className="text-base font-semibold">{title}</h3>
-          {intro && (
-            <p className="text-sm text-[var(--color-mute)] mt-1">{intro}</p>
-          )}
+          {intro && <p className="text-sm text-[var(--color-mute)] mt-1">{intro}</p>}
         </div>
         {action && <div className="shrink-0">{action}</div>}
       </div>
@@ -1627,9 +1595,7 @@ function Subsection({ title, action, children }) {
   return (
     <div className="border-t border-[var(--color-line)] pt-5 first:border-t-0 first:pt-0">
       <div className="flex items-center justify-between mb-3">
-        <h4 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-ink-soft)]">
-          {title}
-        </h4>
+        <h4 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-ink-soft)]">{title}</h4>
         {action}
       </div>
       <div className="space-y-4">{children}</div>
@@ -1643,6 +1609,51 @@ function Field({ label, hint, children }) {
       <label className="label">{label}</label>
       {children}
       {hint && <p className="text-xs text-[var(--color-mute)] mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function ComboBox({ value, options, onChange, placeholder, required = false }) {
+  // A non-preset value forces manual mode; otherwise the user can opt in
+  // by picking "Saisir manuellement…", which we remember locally so the
+  // input stays visible even while the value is empty.
+  const valueForcesCustom = !!value && !options.includes(value);
+  const [userPickedCustom, setUserPickedCustom] = useState(false);
+  const customMode = valueForcesCustom || userPickedCustom;
+  const selectValue = customMode ? "__custom__" : value || "";
+  return (
+    <div className="space-y-2">
+      <select
+        className="select"
+        value={selectValue}
+        onChange={(e) => {
+          if (e.target.value === "__custom__") {
+            setUserPickedCustom(true);
+            return;
+          }
+          setUserPickedCustom(false);
+          onChange(e.target.value);
+        }}
+        required={required && !customMode}
+      >
+        <option value="">— Choisir —</option>
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+        <option value="__custom__">Saisir manuellement…</option>
+      </select>
+      {customMode && (
+        <input
+          className="input"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          required={required}
+          autoFocus
+        />
+      )}
     </div>
   );
 }
@@ -1685,9 +1696,7 @@ function ModelSelector({ provider, model, optionsByProvider, onChange }) {
 }
 
 function Grid({ cols = 2, children }) {
-  return (
-    <div className={`grid grid-cols-1 md:grid-cols-${cols} gap-4`}>{children}</div>
-  );
+  return <div className={`grid grid-cols-1 md:grid-cols-${cols} gap-4`}>{children}</div>;
 }
 
 function ReferenceImagePreview({ url, label }) {
@@ -1700,8 +1709,8 @@ function ReferenceImagePreview({ url, label }) {
       <div className="flex-1 min-w-0">
         <label className="label">Image de référence générée</label>
         <p className="text-xs text-[var(--color-mute)]">
-          Image utilisée comme guide visuel lors de la composition des planches.
-          Pour la régénérer, modifiez la fiche puis relancez l'étape Références.
+          Image utilisée comme guide visuel lors de la composition des planches. Pour la régénérer, modifiez la fiche
+          puis relancez l'étape Références.
         </p>
       </div>
     </div>
@@ -1716,25 +1725,17 @@ function CharacterPhotoField({ slot, onPick, onClear }) {
   return (
     <div className="mb-4 flex items-start gap-4">
       <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0">
-        {url ? (
-          <img src={url} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <span>Aucune photo</span>
-        )}
+        {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : <span>Aucune photo</span>}
       </div>
       <div className="flex-1 min-w-0">
         <label className="label">Photo de référence (optionnel)</label>
         <p className="text-xs text-[var(--color-mute)] mb-2">
-          Si vous ajoutez une photo, l'IA en extrait les caractéristiques pour
-          pré-remplir la fiche puis l'utilise comme guide de ressemblance lors
-          de la génération de la référence (effet caricature). Le style défini
-          reste prioritaire sur la photo.
+          Si vous ajoutez une photo, l'IA en extrait les caractéristiques pour pré-remplir la fiche puis l'utilise comme
+          guide de ressemblance lors de la génération de la référence (effet caricature). Le style défini reste
+          prioritaire sur la photo.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <label
-            htmlFor={inputId}
-            className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2"
-          >
+          <label htmlFor={inputId} className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2">
             <FaUpload aria-hidden />
             {url ? "Remplacer" : "Choisir une photo"}
           </label>
@@ -1759,20 +1760,13 @@ function CharacterPhotoField({ slot, onPick, onClear }) {
               <FaTrash aria-hidden /> Retirer
             </button>
           )}
-          {extracting && (
-            <span className="text-xs text-[var(--color-mute)]">
-              Analyse de la photo…
-            </span>
-          )}
+          {extracting && <span className="text-xs text-[var(--color-mute)]">Analyse de la photo…</span>}
         </div>
-        {error && (
-          <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>
-        )}
+        {error && <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>}
       </div>
     </div>
   );
 }
-
 
 function LocationPhotoField({ slot, onPick, onClear }) {
   const inputId = `loc-photo-${Math.random().toString(36).slice(2, 8)}`;
@@ -1782,25 +1776,17 @@ function LocationPhotoField({ slot, onPick, onClear }) {
   return (
     <div className="mb-4 flex items-start gap-4">
       <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0">
-        {url ? (
-          <img src={url} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <span>Aucune photo</span>
-        )}
+        {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : <span>Aucune photo</span>}
       </div>
       <div className="flex-1 min-w-0">
         <label className="label">Photo de référence (optionnel)</label>
         <p className="text-xs text-[var(--color-mute)] mb-2">
-          Si vous ajoutez une photo du lieu, l'IA en extrait nom + description
-          pour pré-remplir la fiche, puis l'utilise comme guide visuel pour
-          dessiner le décor (architecture, ambiance) dans le style de la BD.
-          Aucun personnage ne sera repris depuis la photo.
+          Si vous ajoutez une photo du lieu, l'IA en extrait nom + description pour pré-remplir la fiche, puis l'utilise
+          comme guide visuel pour dessiner le décor (architecture, ambiance) dans le style de la BD. Aucun personnage ne
+          sera repris depuis la photo.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <label
-            htmlFor={inputId}
-            className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2"
-          >
+          <label htmlFor={inputId} className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2">
             <FaUpload aria-hidden />
             {url ? "Remplacer" : "Choisir une photo"}
           </label>
@@ -1825,20 +1811,13 @@ function LocationPhotoField({ slot, onPick, onClear }) {
               <FaTrash aria-hidden /> Retirer
             </button>
           )}
-          {extracting && (
-            <span className="text-xs text-[var(--color-mute)]">
-              Analyse de la photo…
-            </span>
-          )}
+          {extracting && <span className="text-xs text-[var(--color-mute)]">Analyse de la photo…</span>}
         </div>
-        {error && (
-          <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>
-        )}
+        {error && <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>}
       </div>
     </div>
   );
 }
-
 
 function ObjectPhotoField({ slot, onPick, onClear }) {
   const inputId = `obj-photo-${Math.random().toString(36).slice(2, 8)}`;
@@ -1848,24 +1827,16 @@ function ObjectPhotoField({ slot, onPick, onClear }) {
   return (
     <div className="mb-4 flex items-start gap-4">
       <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0">
-        {url ? (
-          <img src={url} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <span>Aucune photo</span>
-        )}
+        {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : <span>Aucune photo</span>}
       </div>
       <div className="flex-1 min-w-0">
         <label className="label">Photo de référence (optionnel)</label>
         <p className="text-xs text-[var(--color-mute)] mb-2">
-          Si vous ajoutez une photo, l'IA en extrait nom + description pour
-          pré-remplir la fiche, puis l'utilise comme guide visuel pour produire
-          une version caricaturée de l'objet dans le style de la BD.
+          Si vous ajoutez une photo, l'IA en extrait nom + description pour pré-remplir la fiche, puis l'utilise comme
+          guide visuel pour produire une version caricaturée de l'objet dans le style de la BD.
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <label
-            htmlFor={inputId}
-            className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2"
-          >
+          <label htmlFor={inputId} className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2">
             <FaUpload aria-hidden />
             {url ? "Remplacer" : "Choisir une photo"}
           </label>
@@ -1890,20 +1861,13 @@ function ObjectPhotoField({ slot, onPick, onClear }) {
               <FaTrash aria-hidden /> Retirer
             </button>
           )}
-          {extracting && (
-            <span className="text-xs text-[var(--color-mute)]">
-              Analyse de la photo…
-            </span>
-          )}
+          {extracting && <span className="text-xs text-[var(--color-mute)]">Analyse de la photo…</span>}
         </div>
-        {error && (
-          <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>
-        )}
+        {error && <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>}
       </div>
     </div>
   );
 }
-
 
 function StyleReferenceCard({ url, onPickImage, config, set }) {
   const [expanded, setExpanded] = useState(false);
@@ -1923,75 +1887,70 @@ function StyleReferenceCard({ url, onPickImage, config, set }) {
       <div className="flex-1 min-w-0 space-y-3">
         <div>
           <label className="label">Style artistique</label>
-          <input
-            className="input"
+          <ComboBox
             value={config.style.art_style}
-            onChange={(e) => set("style.art_style", e.target.value)}
+            options={STYLE_ART_STYLE_PRESETS}
+            onChange={(v) => set("style.art_style", v)}
             placeholder="ex. ligne claire, aquarelle douce"
             required
           />
-          <p className="text-xs text-[var(--color-mute)] mt-1">
-            Évitez de citer des artistes ou marques.
-          </p>
+          <p className="text-xs text-[var(--color-mute)] mt-1">Évitez de citer des artistes ou marques.</p>
         </div>
         <button
           type="button"
           className="text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)] inline-flex items-center gap-1 transition-colors"
           onClick={() => setExpanded((v) => !v)}
         >
-          <FaChevronDown
-            aria-hidden
-            className={"transition-transform " + (expanded ? "rotate-180" : "")}
-          />
+          <FaChevronDown aria-hidden className={"transition-transform " + (expanded ? "rotate-180" : "")} />
           {expanded ? "Masquer les détails" : "Détails du style"}
         </button>
         {expanded && (
           <div className="space-y-3">
             <Grid cols={3}>
               <Field label="Palette de couleurs">
-                <input
-                  className="input"
+                <ComboBox
                   value={config.style.color_palette || ""}
-                  onChange={(e) => set("style.color_palette", e.target.value)}
+                  options={STYLE_COLOR_PALETTE_PRESETS}
+                  onChange={(v) => set("style.color_palette", v)}
                 />
               </Field>
               <Field label="Encrage / traits">
-                <input
-                  className="input"
+                <ComboBox
                   value={config.style.line_work || ""}
-                  onChange={(e) => set("style.line_work", e.target.value)}
+                  options={STYLE_LINE_WORK_PRESETS}
+                  onChange={(v) => set("style.line_work", v)}
                 />
               </Field>
               <Field label="Atmosphère">
-                <input
-                  className="input"
+                <ComboBox
                   value={config.style.mood || ""}
-                  onChange={(e) => set("style.mood", e.target.value)}
+                  options={STYLE_MOOD_PRESETS}
+                  onChange={(v) => set("style.mood", v)}
                 />
               </Field>
             </Grid>
             <Grid cols={3}>
               <Field label="Tour des cases">
-                <input
-                  className="input"
+                <ComboBox
                   value={config.style.panel_borders || ""}
-                  onChange={(e) => set("style.panel_borders", e.target.value)}
+                  options={STYLE_PANEL_BORDERS_PRESETS}
+                  onChange={(v) => set("style.panel_borders", v)}
                   placeholder="ex. cadre noir épais légèrement irrégulier"
                 />
               </Field>
               <Field label="Dessin des bulles">
-                <input
-                  className="input"
+                <ComboBox
                   value={config.style.speech_bubbles || ""}
-                  onChange={(e) => set("style.speech_bubbles", e.target.value)}
+                  options={STYLE_SPEECH_BUBBLES_PRESETS}
+                  onChange={(v) => set("style.speech_bubbles", v)}
                   placeholder="ex. bulles blanches contour fin et rond"
                 />
               </Field>
               <Field label="Dessin des personnages">
-                <input
-                  className="input"
+                <ComboBox
                   value={config.style.character_rendering || ""}
-                  onChange={(e) => set("style.character_rendering", e.target.value)}
+                  options={STYLE_CHARACTER_RENDERING_PRESETS}
+                  onChange={(v) => set("style.character_rendering", v)}
                   placeholder="ex. visages ronds, yeux en points, peu d'ombres"
                 />
               </Field>
@@ -2012,16 +1971,10 @@ function Toggle({ label, value, onChange }) {
           (value ? "bg-[var(--color-primary-500)]" : "bg-[var(--color-line)]")
         }
       >
-        <input
-          type="checkbox"
-          className="sr-only"
-          checked={value}
-          onChange={(e) => onChange(e.target.checked)}
-        />
+        <input type="checkbox" className="sr-only" checked={value} onChange={(e) => onChange(e.target.checked)} />
         <span
           className={
-            "absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition " +
-            (value ? "left-[18px]" : "left-0.5")
+            "absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition " + (value ? "left-[18px]" : "left-0.5")
           }
         />
       </span>

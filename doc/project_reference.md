@@ -2,7 +2,7 @@
 
 Operational reference for future work on BdGEN. Keep this file concise and update it after every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-07 (3)
+Last updated: 2026-05-07 (4)
 
 ## Update Rule
 
@@ -175,6 +175,13 @@ Lint/format:
 - If a frontend build fails with esbuild `spawn EPERM` on Windows, rerun the build outside the sandbox.
 
 ## Recent Change Log
+
+### 2026-05-07 (4)
+
+- `bdgen/web/src/components/projectFormPresets.js`: new file with preset lists for genre, tone, setting, target audience, and the seven style fields used by the project form.
+- `bdgen/web/src/components/ProjectForm.jsx`: replaced free-text inputs with a `ComboBox` helper that exposes the preset list plus a "Saisir manuellement…" entry. Pre-existing custom values are preserved (shown as custom on edit). Affected fields: `story.genre`, `story.tone`, `story.setting`, `story.target_audience`, and all of `style.*`.
+- `bdgen/bdgen/server/static/`: rebuilt after the form change.
+- Verification: frontend lint OK, Prettier OK, `npm run build` OK.
 
 ### 2026-05-07 (3)
 
