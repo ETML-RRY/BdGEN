@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..models import BdGenInput, BdGenScript
-from ._helpers import _coerce_openai_image_model
+from ._helpers import _coerce_openai_image_model, update_reference_prompts_for_style_change
 from .constants import PROJECT_CONFIG_NAME
 from .indices import mark_stale
 
@@ -83,6 +83,7 @@ def detect_and_mark_stale(
         if compose_ids:
             mark_stale(proj_dir, "compose", compose_ids)
 
+        update_reference_prompts_for_style_change(bd_script, old_cfg.style, new_config.style)
         bd_script.style = new_config.style
         bd_script.generation_options = new_config.generation_options
         bd_script.save(script_path)

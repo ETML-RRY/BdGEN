@@ -82,15 +82,12 @@ SETUP_SYSTEM_PROMPT = dedent("""\
        `name`, `physical_description` and `outfit` verbatim. ADD `reference_prompt`: a
        detailed English image-generation prompt for a character sheet showing THREE
        views on a single image with a neutral white background — face close-up, full
-       body front, and an expressions sheet. The prompt MUST quote the project's
-       full global style: `style.art_style`, `style.line_work`, `style.color_palette`
-       and — CRITICALLY — `style.character_rendering` verbatim (face geometry, eye/
-       nose/mouth treatment, body proportions, hands, hair, skin shading). If
-       `style.stylization_level` is set, quote it verbatim — it tells the image
-       generator HOW FAR from realism to push (e.g. "extremely abstract — characters
-       are amorphous ink blobs"). If `style.negative_constraints` is set, include
-       it as a "DO NOT …" instruction. It must also describe the character's full
-       appearance and outfit.
+       body front, and an expressions sheet.
+       The prompt must describe the character's full physical appearance and outfit
+       with as much visual specificity as possible (hair, face, build, skin tone, age,
+       clothing cut and colors, accessories). Do NOT include any art style, color
+       palette, line work, rendering technique, or stylization instructions — visual
+       style is injected separately at image-generation time.
        HANDS AND ARMS — MANDATORY in every `reference_prompt`: the full-body
        front view MUST explicitly show both hands with clearly separated fingers
        (5 fingers per hand: 4 fingers + 1 thumb). Include the instruction:
@@ -105,27 +102,28 @@ SETUP_SYSTEM_PROMPT = dedent("""\
     2. LOCATIONS — first, for EACH entry in the input `locations` array (which may be
        empty), copy `id`, `name`, and `description` verbatim. ADD `reference_prompt`:
        an English image-generation prompt for an establishing shot, no characters, no
-       text. The prompt MUST quote the project's `style.art_style`,
-       `style.color_palette`, `style.line_work`, and if set `style.stylization_level`
-       and `style.negative_constraints` verbatim so the location matches the album's
-       visual identity, and end with "No text. No characters." Whether you may invent
-       ADDITIONAL locations is decided by the AUTHORING RULES at the end of the user
-       message.
+       text. The prompt must describe the place's key visual features — architecture,
+       spatial layout, dominant landmarks, materials, lighting mood, time of day —
+       with as much specificity as possible. Do NOT include any art style, color
+       palette, line work, rendering technique, or stylization instructions — visual
+       style is injected separately at image-generation time. End with
+       "No text. No characters." Whether you may invent ADDITIONAL locations is
+       decided by the AUTHORING RULES at the end of the user message.
 
     3. OBJECTS — first, for EACH entry in the input `objects` array (which may be
        empty), copy `id`, `name`, and `description` verbatim. ADD `reference_prompt`:
-       an English image-generation prompt for an isolated object reference rendered
-       as a stylized caricature in the project's art style, on a neutral background,
-       no characters, no text. The prompt MUST quote `style.art_style`,
-       `style.color_palette`, `style.line_work`, and if set `style.stylization_level`
-       and `style.negative_constraints` verbatim, and end with "No text.
-       No characters." If the user provided a photo of this object (passed at image-
-       generation time), the resulting illustration must remain recognizably the
-       SAME object — same shape, key markings, characteristic silhouette — but
-       rendered ENTIRELY in the project's art style (never as a photograph). Plan
-       how each object will recur across the story so panels can reference it
-       consistently. Whether you may invent ADDITIONAL objects is decided by the
-       AUTHORING RULES at the end of the user message.
+       an English image-generation prompt for an isolated object reference on a
+       neutral background, no characters, no text. The prompt must describe the
+       object's shape, proportions, silhouette, key structural details, dominant
+       colors and any distinctive markings with as much specificity as possible.
+       If the user provided a photo of this object (passed at image-generation time),
+       the resulting illustration must remain recognizably the SAME object — same
+       shape, key markings, characteristic silhouette. Do NOT include any art style,
+       color palette, line work, rendering technique, or stylization instructions —
+       visual style is injected separately at image-generation time. Plan how each
+       object will recur across the story so panels can reference it consistently.
+       End with "No text. No characters." Whether you may invent ADDITIONAL objects
+       is decided by the AUTHORING RULES at the end of the user message.
 
     4. COVER — only if `structure.include_cover` is true. Provide:
        - `scene_description`: an evocative illustration concept for the front cover
@@ -270,6 +268,9 @@ CHARACTER_REFINE_SYSTEM_PROMPT = dedent("""\
     - The `reference_prompt` MUST include an explicit instruction for anatomically
       correct hands (5 fingers per hand: 4 fingers + 1 opposable thumb) and arms
       (one elbow joint per arm, correct proportions shoulder→elbow→wrist).
+    - Do NOT include any art style, color palette, line work, rendering technique,
+      or stylization instructions in `reference_prompt` — visual style is injected
+      separately at image-generation time.
     - Never name a real-world artist, studio, franchise or copyrighted character.
     - Output ONLY the JSON object. No markdown fences, no commentary.
     """)
@@ -300,6 +301,9 @@ LOCATION_REFINE_SYSTEM_PROMPT = dedent("""\
     - Keep `id` unchanged.
     - Write narrative content in the language specified by `metadata.language`.
     - Keep `reference_prompt` in English; it must end with "No text. No characters."
+    - Do NOT include any art style, color palette, line work, rendering technique,
+      or stylization instructions in `reference_prompt` — visual style is injected
+      separately at image-generation time.
     - Never name a real-world artist, studio, franchise or copyrighted character.
     - Output ONLY the JSON object. No markdown fences, no commentary.
     """)
@@ -331,6 +335,9 @@ OBJECT_REFINE_SYSTEM_PROMPT = dedent("""\
     - Keep `id` unchanged.
     - Write narrative content in the language specified by `metadata.language`.
     - Keep `reference_prompt` in English; it must end with "No text. No characters."
+    - Do NOT include any art style, color palette, line work, rendering technique,
+      or stylization instructions in `reference_prompt` — visual style is injected
+      separately at image-generation time.
     - Never name a real-world artist, studio, franchise or copyrighted character.
     - Output ONLY the JSON object. No markdown fences, no commentary.
     """)

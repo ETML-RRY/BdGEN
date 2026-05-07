@@ -271,12 +271,22 @@ def generate_references(
     return script
 
 
+_STYLE_RESET_BRIDGE = (
+    "STYLE RESET — The description above defines WHAT to draw (subject, "
+    "appearance, composition). It may contain style mentions that are now "
+    "OUTDATED. Disregard any art style, color palette, line work, or rendering "
+    "technique named anywhere above this line. The MANDATORY STYLE ENFORCEMENT "
+    "section below is the sole and final authority on visual style."
+)
+
+
 def _augment_prompt(
     prompt: str, feedback_store: FeedbackStore | None, target: str,
     style: Style | None = None,
 ) -> str:
     parts = [prompt, IMAGE_CONSTRAINTS]
     if style is not None:
+        parts.append(_STYLE_RESET_BRIDGE)
         parts.append(_style_enforcement_block(style))
     if feedback_store is not None:
         feedbacks = feedback_store.get_for("references", target)

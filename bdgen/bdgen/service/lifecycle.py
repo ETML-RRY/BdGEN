@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..models import BdGenScript, Style
 from . import ProjectSummary
+from ._helpers import update_reference_prompts_for_style_change
 from .config import _force_writable_and_retry, load_config, save_config
 from .constants import (
     CHARACTER_PHOTOS_DIRNAME,
@@ -212,7 +213,9 @@ def restyle_project(
     script_path = proj_dir / "bdgen-script.json"
     if script_path.exists():
         bd_script = BdGenScript.load(script_path)
+        old_style = bd_script.style.model_copy(deep=True)
         bd_script.style = config.style
+        update_reference_prompts_for_style_change(bd_script, old_style, config.style)
         for c in bd_script.characters:
             c.reference_image = None
         for l in bd_script.locations:
