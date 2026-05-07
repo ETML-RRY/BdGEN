@@ -7,15 +7,6 @@ import pytest
 from bdgen import secret_store
 
 
-@pytest.fixture
-def vault_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setenv("BDGEN_CONFIG_ROOT", str(tmp_path))
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    secret_store.lock_vault()
-    yield tmp_path
-    secret_store.lock_vault()
-
-
 def test_create_unlock_and_persist_update(vault_root: Path) -> None:
     secret_store.create_vault(
         "correct horse battery staple",
