@@ -22,6 +22,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ruff>=0.8.0",
+    "code-review-graph>=2.3.2",
 ]
 
 [tool.ruff]

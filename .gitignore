@@ -26,3 +26,15 @@ bdgen/desktop/node_modules/
 output/
 
 .DS_Store
+# Added by code-review-graph
+.code-review-graph/
+
+# AI tool configurations (personal dev environments)
+.cursor/
+.kiro/
+.mcp.json
+.opencode.json
+.cursorrules
+.windsurfrules
+AGENTS.md
+GEMINI.md
