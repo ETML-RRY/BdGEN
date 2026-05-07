@@ -30,6 +30,7 @@ export default defineConfig({
       reporter: ["text", "html", "lcov"],
       exclude: [
         "**/*.config.js",
+        "**/*.{test,spec}.{js,jsx}",
         "src/test/**",
         "src/main.jsx",
         "**/dist/**",

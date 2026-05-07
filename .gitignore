@@ -38,3 +38,6 @@ output/
 .windsurfrules
 AGENTS.md
 GEMINI.md
+
+# Coverage tests results
+bdgen/web/coverage/
