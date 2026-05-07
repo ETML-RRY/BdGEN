@@ -8,6 +8,23 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+PageFormat = Literal["portrait", "landscape", "square", "strip"]
+
+# OpenAI gpt-image-* accepts a fixed set of canvas sizes; pick the closest match
+# to each user-facing format. "strip" reuses landscape and conveys the strip
+# look through the layout prompt rather than the canvas, since the API does not
+# support arbitrary aspect ratios.
+_PAGE_FORMAT_TO_SIZE: dict[str, str] = {
+    "portrait": "1024x1536",
+    "landscape": "1536x1024",
+    "square": "1024x1024",
+    "strip": "1536x1024",
+}
+
+
+def image_size_for_format(page_format: str | None) -> str:
+    return _PAGE_FORMAT_TO_SIZE.get(page_format or "portrait", "1024x1536")
+
 
 def _resolve_path(value: Path | str | None, base_dir: Path) -> Path | None:
     if value is None:
@@ -100,6 +117,10 @@ class Structure(BaseModel):
     include_cover: bool = False
     include_back_cover: bool = False
     narrative_pacing: str | None = None
+    # Page canvas format. Drives the image generation size and the layout
+    # guidance fed to both the script LLM and the image model.
+    # ``strip`` is a single horizontal row of panels on a landscape canvas.
+    page_format: PageFormat = "portrait"
     # When False, the LLM must use ONLY the characters / locations / objects
     # supplied by the user. When True (default), it may invent additional ones
     # if the story arc needs them. Defaults preserve previous behavior on
@@ -315,6 +336,10 @@ class BdGenScript(BaseModel):
     source: ScriptSource
     metadata: Metadata
     style: Style
+    # Defaults to "portrait" so existing scripts on disk keep their behavior
+    # when reloaded. New scripts inherit the value from their input Structure
+    # via _build_skeleton.
+    page_format: PageFormat = "portrait"
     generation_options: GenerationOptions | None = None
     characters: list[ScriptCharacter]
     locations: list[ScriptLocation]

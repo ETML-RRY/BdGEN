@@ -20,6 +20,7 @@ from .models import (
     GenerationOptions,
     ImageModelConfig,
     Page,
+    image_size_for_format,
 )
 from .progress import (
     InterruptFlag,
@@ -30,7 +31,49 @@ from .progress import (
 )
 from .stats import normalise_usage, record_event, start_timer, stop_timer
 
-PAGE_SIZE = "1024x1536"
+
+# Human-readable publication spec injected into image prompts. Drives the
+# "Format: ..." line in the cover / page / back-cover prompts so the model
+# knows the expected canvas, aspect ratio, and (for strips) the row layout.
+_PAGE_FORMAT_SPECS: dict[str, dict[str, str]] = {
+    "portrait": {
+        "label": "portrait",
+        "page_format_line": "standard album BD portrait, 21x28cm aspect ratio",
+        "cover_format_line": "standard album BD portrait, 21x28cm aspect ratio",
+        "layout_hint": "balanced grid suited to a portrait page",
+    },
+    "landscape": {
+        "label": "paysage",
+        "page_format_line": "album BD paysage (landscape), 28x21cm aspect ratio",
+        "cover_format_line": "album BD paysage (landscape), 28x21cm aspect ratio",
+        "layout_hint": (
+            "horizontally-oriented layout — favour wide panels arranged in 1 to 3 "
+            "rows so the eye reads left-to-right across the wider page"
+        ),
+    },
+    "square": {
+        "label": "carré",
+        "page_format_line": "square album, 21x21cm aspect ratio",
+        "cover_format_line": "square album, 21x21cm aspect ratio",
+        "layout_hint": "balanced layout suited to a square page (e.g. 2x2 or 3x2 grids)",
+    },
+    "strip": {
+        "label": "strip",
+        "page_format_line": (
+            "comic strip, single horizontal row of panels (newspaper-strip "
+            "format), landscape canvas"
+        ),
+        "cover_format_line": "landscape strip cover, single horizontal banner",
+        "layout_hint": (
+            "single horizontal row of panels reading left-to-right; do NOT stack "
+            "panels vertically; keep all panels at the same height"
+        ),
+    },
+}
+
+
+def _format_spec(page_format: str | None) -> dict[str, str]:
+    return _PAGE_FORMAT_SPECS.get(page_format or "portrait", _PAGE_FORMAT_SPECS["portrait"])
 
 
 def compose_output(
@@ -264,7 +307,10 @@ def _generate_page(
         feedbacks = feedback_store.get_for("compose", f"page_{page.page_number}")
         if feedbacks:
             prompt += feedback_block(feedbacks)
-    return _call_image(client, image_model, prompt, target, refs)
+    return _call_image(
+        client, image_model, prompt, target, refs,
+        size=image_size_for_format(script.page_format),
+    )
 
 
 def _collect_refs(
@@ -333,6 +379,7 @@ def _build_page_prompt(
     language = script.metadata.language
     page_n = page.page_number
     folio_side = "right" if page_n % 2 == 1 else "left"
+    fmt = _format_spec(script.page_format)
 
     panels_text: list[str] = []
     for panel in page.panels:
@@ -406,7 +453,7 @@ def _build_page_prompt(
         {f"- NEGATIVE CONSTRAINTS: {style.negative_constraints}" if style.negative_constraints else ""}
 
         PAGE LAYOUT:
-        {page.layout or "balanced grid"}
+        {page.layout or fmt["layout_hint"]}
 
         This page contains {len(page.panels)} panel(s). Arrange them following
         the layout description above.
@@ -417,7 +464,7 @@ def _build_page_prompt(
     footer = dedent(f"""
 
         PUBLICATION SPECS:
-        - Format: standard album BD portrait, 21x28cm aspect ratio.
+        - Format: {fmt["page_format_line"]}.
         - Bleed (fond perdu): artwork extends 5mm beyond the trim line on all
           sides; no white margin around the page.
         - Safety margin (zone tranquille): keep critical content (faces, eyes,
@@ -507,7 +554,10 @@ def _generate_cover(
         feedbacks = feedback_store.get_for("compose", "cover")
         if feedbacks:
             prompt += feedback_block(feedbacks)
-    return _call_image(client, image_model, prompt, target, refs)
+    return _call_image(
+        client, image_model, prompt, target, refs,
+        size=image_size_for_format(script.page_format),
+    )
 
 
 def _generate_back(
@@ -529,7 +579,10 @@ def _generate_back(
         feedbacks = feedback_store.get_for("compose", "back")
         if feedbacks:
             prompt += feedback_block(feedbacks)
-    return _call_image(client, image_model, prompt, target, refs)
+    return _call_image(
+        client, image_model, prompt, target, refs,
+        size=image_size_for_format(script.page_format),
+    )
 
 
 def _collect_album_refs(
@@ -580,6 +633,7 @@ def _call_image(
     prompt: str,
     target: Path,
     refs: list[Path],
+    size: str,
 ) -> dict:
     if refs:
         files = [(p.name, p.read_bytes(), "image/png") for p in refs]
@@ -587,7 +641,7 @@ def _call_image(
             model=image_model.model,
             image=files,
             prompt=prompt,
-            size=PAGE_SIZE,
+            size=size,
             quality=image_model.quality,
         )
         # `input_fidelity` is a gpt-image-1 knob; gpt-image-2 rejects it with
@@ -599,7 +653,7 @@ def _call_image(
         result = client.images.generate(
             model=image_model.model,
             prompt=prompt,
-            size=PAGE_SIZE,
+            size=size,
             quality=image_model.quality,
         )
     image_b64 = result.data[0].b64_json
@@ -618,9 +672,10 @@ def _build_cover_prompt(
 ) -> str:
     style = script.style
     language = script.metadata.language
+    fmt = _format_spec(script.page_format)
     base = IMAGE_CONSTRAINTS + "\n" + dedent(f"""\
         Generate the FRONT COVER of a comic book album, as a single
-        publication-ready image, portrait format.
+        publication-ready image, {fmt["label"]} format.
 
         GLOBAL STYLE:
         - Art style: {style.art_style}
@@ -653,7 +708,7 @@ def _build_cover_prompt(
         texture you must NOT transcribe.
 
         PUBLICATION SPECS:
-        - Format: standard album BD portrait, 21x28cm aspect ratio
+        - Format: {fmt["cover_format_line"]}
         - Bleed (fond perdu): full bleed, no white margin
         - Safety margin: keep title and critical content within 5mm inside the trim
         - Eye-catching composition: the main illustration must dominate
@@ -694,9 +749,10 @@ def _build_back_prompt(
     style = script.style
     language = script.metadata.language
     disclaimer = _ai_disclaimer(language)
+    fmt = _format_spec(script.page_format)
     base = IMAGE_CONSTRAINTS + "\n" + dedent(f"""\
         Generate the BACK COVER of a comic book album, as a single
-        publication-ready image, portrait format.
+        publication-ready image, {fmt["label"]} format.
 
         GLOBAL STYLE:
         - Art style: {style.art_style}
@@ -753,7 +809,7 @@ def _build_back_prompt(
           as forbidden surfaces — no ink, no pixels, no decoration, no text.
 
         PUBLICATION SPECS:
-        - Format: standard album BD portrait, 21x28cm aspect ratio
+        - Format: {fmt["cover_format_line"]}
         - Bleed (fond perdu): full bleed for the artwork; the two reserved
           empty zones above stay white regardless
         - Safety margin: 5mm inside trim

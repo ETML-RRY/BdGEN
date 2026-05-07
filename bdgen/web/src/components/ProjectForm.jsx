@@ -48,6 +48,7 @@ export const DEFAULT_CONFIG = {
     include_cover: true,
     include_back_cover: true,
     narrative_pacing: "",
+    page_format: "portrait",
     allow_extra_characters: true,
     allow_extra_locations: true,
     allow_extra_objects: true,
@@ -179,6 +180,9 @@ function normalize(cfg) {
   if (!Array.isArray(out.locations)) out.locations = [];
   if (!Array.isArray(out.objects)) out.objects = [];
   if (!out.structure) out.structure = {};
+  if (!["portrait", "landscape", "square", "strip"].includes(out.structure.page_format)) {
+    out.structure.page_format = "portrait";
+  }
   if (typeof out.structure.allow_extra_characters !== "boolean") {
     out.structure.allow_extra_characters = true;
   }
@@ -1337,6 +1341,21 @@ export default function ProjectForm({
             onChange={(v) => set("structure.include_back_cover", v)}
           />
         </Grid>
+        <Field
+          label="Format de page"
+          hint="Détermine le ratio de la planche et le gabarit imposé au modèle d'image."
+        >
+          <select
+            className="select"
+            value={config.structure.page_format}
+            onChange={(e) => set("structure.page_format", e.target.value)}
+          >
+            <option value="portrait">Portrait — album BD (21×28 cm)</option>
+            <option value="landscape">Paysage — album à l'italienne (28×21 cm)</option>
+            <option value="square">Carré — album carré (21×21 cm)</option>
+            <option value="strip">Strip — bande horizontale, cases en une rangée</option>
+          </select>
+        </Field>
         <Field label="Rythme narratif">
           <input
             className="input"

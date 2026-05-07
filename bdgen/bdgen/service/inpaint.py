@@ -10,7 +10,7 @@ from typing import Literal
 from .. import secret_store
 from .. import stats as stats_module
 from ..feedback import FeedbackStore, feedback_path_for
-from ..models import BdGenScript
+from ..models import BdGenScript, image_size_for_format
 from ._helpers import _resolve_options
 from ._paths import _composed_path
 
@@ -44,7 +44,7 @@ def inpaint_image(
     if step == "compose":
         pages_dir = proj_dir / "pages"
         image_path = _composed_path(pages_dir, target_id)
-        size = "1024x1536"
+        size = image_size_for_format(bd_script.page_format)
     elif step == "references":
         image_path = _reference_path_for_id(proj_dir, bd_script, target_id)
         size = "1024x1024"
