@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-07 (1)
+Last updated: 2026-05-07 (2)
 
 ## Update Rule
 
@@ -171,6 +171,13 @@ Lint/format tooling:
 - Avoid changing `.env` unless the user explicitly asks.
 
 ## Change Log
+
+### 2026-05-07 (2)
+
+- `LICENSE`: ajout de la licence MIT avec copyright `2026 ETML-RRY`.
+- `README.md`: ajout d'une section "License" pointant vers le fichier `LICENSE`.
+- `bdgen/pyproject.toml`, `bdgen/web/package.json`, `bdgen/desktop/package.json`: declaration de la licence `MIT` dans les metadonnees projet/package.
+- Verification : parsing JSON/TOML OK, `git diff --check` OK, Prettier local OK sur `README.md` et les deux `package.json`.
 
 ### 2026-05-07 (1)
 

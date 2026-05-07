@@ -1,7 +1,6 @@
 # BdGEN
 
 [![CI/CD Desktop Releases](https://github.com/ETML-RRY/bdgen/actions/workflows/release-portable.yml/badge.svg)](https://github.com/ETML-RRY/bdgen/actions/workflows/release-portable.yml)
-[![Latest release](https://img.shields.io/github/v/release/ETML-RRY/bdgen?label=release)](https://github.com/ETML-RRY/bdgen/releases/latest)
 [![License](https://img.shields.io/github/license/ETML-RRY/bdgen)](https://github.com/ETML-RRY/bdgen/blob/main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![Electron](https://img.shields.io/badge/desktop-Electron-47848f)](https://www.electronjs.org/)
@@ -172,12 +171,12 @@ Electron application configuration data uses the application user data folder ma
 
 BdGEN follows four main steps:
 
-| Step | Role | Output |
-| --- | --- | --- |
-| Script | Expands the project description into a detailed script | `bdgen-script.json` |
-| References | Generates model sheets for characters, environments, and objects | `references/` |
-| Pages | Composes final pages, the cover, and the back cover | `pages/`, final PDF |
-| Upscale | Optional, enlarges the final images | `pages_upscaled/` |
+| Step       | Role                                                             | Output              |
+| ---------- | ---------------------------------------------------------------- | ------------------- |
+| Script     | Expands the project description into a detailed script           | `bdgen-script.json` |
+| References | Generates model sheets for characters, environments, and objects | `references/`       |
+| Pages      | Composes final pages, the cover, and the back cover              | `pages/`, final PDF |
+| Upscale    | Optional, enlarges the final images                              | `pages_upscaled/`   |
 
 ## Useful Commands
 
@@ -243,13 +242,17 @@ If these checks pass, the workflow automatically computes the next SemVer versio
 
 The version number is inferred from commit messages since the latest `vX.Y.Z` tag:
 
-| Version type | Commit message | Example |
-| --- | --- | --- |
-| Major | `BREAKING CHANGE:` in the commit body, or `!` after the type | `feat!: change the project format` |
-| Minor | `feat` type | `feat: add an image provider` |
-| Patch | any other message | `fix: correct desktop shutdown` |
+| Version type | Commit message                                               | Example                            |
+| ------------ | ------------------------------------------------------------ | ---------------------------------- |
+| Major        | `BREAKING CHANGE:` in the commit body, or `!` after the type | `feat!: change the project format` |
+| Minor        | `feat` type                                                  | `feat: add an image provider`      |
+| Patch        | any other message                                            | `fix: correct desktop shutdown`    |
 
 By default, if no commit requests a major or minor version, the next version is a patch.
+
+## License
+
+BdGEN is distributed under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Generated Project Structure
 

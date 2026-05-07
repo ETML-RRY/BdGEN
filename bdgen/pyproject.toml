@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Generate comic books from JSON definitions using generative AI."
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
 dependencies = [
     "pydantic>=2.0",
     "openai>=2.0",
