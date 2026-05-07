@@ -22,7 +22,31 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ruff>=0.8.0",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
     "code-review-graph>=2.3.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+
+[tool.coverage.run]
+branch = true
+source = ["bdgen"]
+omit = [
+    "bdgen/server/static/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
 ]
 
 [tool.ruff]

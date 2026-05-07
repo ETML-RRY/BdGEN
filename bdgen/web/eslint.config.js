@@ -5,7 +5,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 
 export default [
-  { ignores: ["dist", "../bdgen/server/static"] },
+  { ignores: ["dist", "coverage", "../bdgen/server/static"] },
   js.configs.recommended,
   {
     files: ["**/*.{js,jsx}"],

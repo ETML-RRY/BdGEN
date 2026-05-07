@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import tempfile
-import unittest
 import json
 from pathlib import Path
 
@@ -124,53 +122,47 @@ def _script(root: Path) -> BdGenScript:
     )
 
 
-class GenerationOptionsSyncTests(unittest.TestCase):
-    def test_image_model_change_updates_script_options_and_marks_images_stale(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            output_root = Path(tmp)
-            project_root = output_root / "demo"
-            save_config(_config(output_root, "openai", "gpt-image-2"), output_root)
-            _script(project_root).save(project_root / "bdgen-script.json")
-            _png(project_root / "references" / "characters" / "hero.png")
-            _png(project_root / "references" / "locations" / "home.png")
-            _png(project_root / "references" / "objects" / "book.png")
-            _png(project_root / "pages" / "page_01.png")
+def test_image_model_change_updates_script_options_and_marks_images_stale(tmp_path: Path) -> None:
+    output_root = tmp_path
+    project_root = output_root / "demo"
+    save_config(_config(output_root, "openai", "gpt-image-2"), output_root)
+    _script(project_root).save(project_root / "bdgen-script.json")
+    _png(project_root / "references" / "characters" / "hero.png")
+    _png(project_root / "references" / "locations" / "home.png")
+    _png(project_root / "references" / "objects" / "book.png")
+    _png(project_root / "pages" / "page_01.png")
 
-            updated = _config(output_root, "openai", "gpt-image-1")
-            detect_and_mark_stale("demo", updated, output_root)
-            save_config(updated, output_root)
+    updated = _config(output_root, "openai", "gpt-image-1")
+    detect_and_mark_stale("demo", updated, output_root)
+    save_config(updated, output_root)
 
-            script = BdGenScript.load(project_root / "bdgen-script.json")
-            self.assertEqual(script.generation_options.image_model.provider, "openai")
-            self.assertEqual(script.generation_options.image_model.model, "gpt-image-1")
+    script = BdGenScript.load(project_root / "bdgen-script.json")
+    assert script.generation_options.image_model.provider == "openai"
+    assert script.generation_options.image_model.model == "gpt-image-1"
 
-            opts = _resolve_options(script, "demo", output_root)
-            self.assertEqual(opts.image_model.provider, "openai")
-            self.assertEqual(opts.image_model.model, "gpt-image-1")
+    opts = _resolve_options(script, "demo", output_root)
+    assert opts.image_model.provider == "openai"
+    assert opts.image_model.model == "gpt-image-1"
 
-            stale = read_stale_index(project_root)
-            self.assertEqual(set(stale["references"]), {"hero", "home", "book"})
-            self.assertEqual(stale["compose"], ["page_1"])
+    stale = read_stale_index(project_root)
+    assert set(stale["references"]) == {"hero", "home", "book"}
+    assert stale["compose"] == ["page_1"]
 
-            persisted_config = load_config("demo", output_root)
-            self.assertEqual(persisted_config.generation_options.image_model.provider, "openai")
-            self.assertEqual(persisted_config.generation_options.image_model.model, "gpt-image-1")
-
-    def test_legacy_xai_image_config_is_coerced_to_openai(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            output_root = Path(tmp)
-            config = _config(output_root, "xai", "legacy-xai-image-model")
-            config_path = output_root / "demo" / "bdgen.json"
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            config_path.write_text(
-                json.dumps(config.to_portable_dict(config_path), ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-
-            persisted_config = load_config("demo", output_root)
-            self.assertEqual(persisted_config.generation_options.image_model.provider, "openai")
-            self.assertEqual(persisted_config.generation_options.image_model.model, "gpt-image-2")
+    persisted_config = load_config("demo", output_root)
+    assert persisted_config.generation_options.image_model.provider == "openai"
+    assert persisted_config.generation_options.image_model.model == "gpt-image-1"
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_legacy_xai_image_config_is_coerced_to_openai(tmp_path: Path) -> None:
+    output_root = tmp_path
+    config = _config(output_root, "xai", "legacy-xai-image-model")
+    config_path = output_root / "demo" / "bdgen.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        json.dumps(config.to_portable_dict(config_path), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    persisted_config = load_config("demo", output_root)
+    assert persisted_config.generation_options.image_model.provider == "openai"
+    assert persisted_config.generation_options.image_model.model == "gpt-image-2"

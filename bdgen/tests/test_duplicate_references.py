@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import tempfile
-import unittest
 from pathlib import Path
 
 from bdgen.compose import _collect_refs
@@ -99,35 +97,19 @@ def _script(root: Path) -> BdGenScript:
     )
 
 
-class DuplicateReferenceTests(unittest.TestCase):
-    def test_existing_copied_references_are_attached_and_used_for_compose(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            _png(root / "references" / "characters" / "hero.png")
-            _png(root / "references" / "locations" / "home.png")
-            _png(root / "references" / "objects" / "book.png")
+def test_existing_copied_references_are_attached_and_used_for_compose(tmp_path: Path) -> None:
+    _png(tmp_path / "references" / "characters" / "hero.png")
+    _png(tmp_path / "references" / "locations" / "home.png")
+    _png(tmp_path / "references" / "objects" / "book.png")
 
-            script = _script(root)
-            changed = attach_existing_reference_images(root, script)
+    script = _script(tmp_path)
+    changed = attach_existing_reference_images(tmp_path, script)
 
-            self.assertTrue(changed)
-            self.assertEqual(
-                script.characters[0].reference_image,
-                root / "references" / "characters" / "hero.png",
-            )
-            self.assertEqual(
-                script.locations[0].reference_image,
-                root / "references" / "locations" / "home.png",
-            )
-            self.assertEqual(
-                script.objects[0].reference_image,
-                root / "references" / "objects" / "book.png",
-            )
+    assert changed is True
+    assert script.characters[0].reference_image == tmp_path / "references" / "characters" / "hero.png"
+    assert script.locations[0].reference_image == tmp_path / "references" / "locations" / "home.png"
+    assert script.objects[0].reference_image == tmp_path / "references" / "objects" / "book.png"
 
-            refs = _collect_refs(script, script.pages[0])
-            self.assertEqual(len(refs), 3)
-            self.assertEqual({p.name for p, _ in refs}, {"hero.png", "home.png", "book.png"})
-
-
-if __name__ == "__main__":
-    unittest.main()
+    refs = _collect_refs(script, script.pages[0])
+    assert len(refs) == 3
+    assert {p.name for p, _ in refs} == {"hero.png", "home.png", "book.png"}

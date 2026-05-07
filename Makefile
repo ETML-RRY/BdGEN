@@ -14,7 +14,7 @@ LINUX_DIST := $(BUILD_DIR)/linux
 # the IDE has the root .venv active.
 export UV_PROJECT_ENVIRONMENT := ../.venv
 
-.PHONY: help build portable macos linux sync frontend backend backend-windows backend-unix desktop desktop-windows desktop-macos desktop-linux lint lint-backend lint-frontend lint-desktop format format-backend format-frontend format-desktop format-check format-check-backend format-check-frontend format-check-desktop test dev-desktop clean
+.PHONY: help build portable macos linux sync frontend backend backend-windows backend-unix desktop desktop-windows desktop-macos desktop-linux lint lint-backend lint-frontend lint-desktop format format-backend format-frontend format-desktop format-check format-check-backend format-check-frontend format-check-desktop test test-backend test-frontend test-cov dev-desktop clean
 
 help:
 	@echo "BdGEN build targets"
@@ -28,7 +28,10 @@ help:
 	@echo "  make lint         Run backend, frontend, and desktop linters"
 	@echo "  make format       Format backend, frontend, and desktop code"
 	@echo "  make format-check Check backend, frontend, and desktop formatting"
-	@echo "  make test         Run Python tests"
+	@echo "  make test         Run backend and frontend tests"
+	@echo "  make test-backend Run pytest"
+	@echo "  make test-frontend Run vitest"
+	@echo "  make test-cov     Run pytest with coverage report"
 	@echo "  make dev-desktop  Start Electron in development mode"
 	@echo "  make clean        Remove build outputs"
 
@@ -105,8 +108,16 @@ format-check-frontend:
 format-check-desktop:
 	cd $(DESKTOP_DIR) && npm run format:check
 
-test:
-	cd $(APP_DIR) && uv run python -m unittest discover -s tests
+test: test-backend test-frontend
+
+test-backend:
+	cd $(APP_DIR) && uv run pytest
+
+test-frontend:
+	cd $(WEB_DIR) && npm test
+
+test-cov:
+	cd $(APP_DIR) && uv run pytest --cov --cov-report=term-missing --cov-report=html
 
 dev-desktop: frontend
 	cd $(DESKTOP_DIR) && npm install && npm run dev
