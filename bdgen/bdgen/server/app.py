@@ -646,13 +646,23 @@ def _register_api(app: FastAPI) -> None:
         _check_api_key(cfg.generation_options.image_model.provider)
         _validate_quality(payload.quality_override)
 
+        force_ids = payload.force_ids
+        if payload.force_all and not force_ids:
+            bd_script = svc_config.load_script_if_present(name, _output_root())
+            if bd_script:
+                force_ids = (
+                    [c.id for c in bd_script.characters]
+                    + [l.id for l in bd_script.locations]
+                    + [o.id for o in bd_script.objects]
+                )
+
         def runner(reporter, interrupt):
             pipeline.run_step_references(
                 name,
                 reporter,
                 interrupt,
                 output_root=_output_root(),
-                force_ids=payload.force_ids,
+                force_ids=force_ids,
                 quality_override=payload.quality_override,
             )
 
@@ -669,13 +679,26 @@ def _register_api(app: FastAPI) -> None:
         _check_api_key(cfg.generation_options.image_model.provider)
         _validate_quality(payload.quality_override)
 
+        force_ids = payload.force_ids
+        if payload.force_all and not force_ids:
+            bd_script = svc_config.load_script_if_present(name, _output_root())
+            if bd_script:
+                ids = []
+                if bd_script.cover is not None:
+                    ids.append("cover")
+                for p in bd_script.pages:
+                    ids.append(f"page_{p.page_number}")
+                if bd_script.back_cover is not None:
+                    ids.append("back")
+                force_ids = ids
+
         def runner(reporter, interrupt):
             pipeline.run_step_compose(
                 name,
                 reporter,
                 interrupt,
                 output_root=_output_root(),
-                force_ids=payload.force_ids,
+                force_ids=force_ids,
                 quality_override=payload.quality_override,
             )
 
