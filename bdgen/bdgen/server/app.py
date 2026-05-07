@@ -594,6 +594,11 @@ def _register_api(app: FastAPI) -> None:
     def start_script(name: str, payload: StartStepPayload = Body(default=StartStepPayload())) -> dict:
         if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
+        try:
+            cfg = svc_config.load_config(name, _output_root())
+        except FileNotFoundError:
+            raise HTTPException(400, "Configuration du projet introuvable.")
+        _check_api_key(cfg.generation_options.script_model.provider)
 
         if payload.force_all:
             proj_dir = lifecycle.get_project_dir(name, _output_root())
@@ -632,6 +637,13 @@ def _register_api(app: FastAPI) -> None:
 
     @app.post("/api/projects/{name}/steps/references/start")
     def start_references(name: str, payload: StartStepPayload = Body(default=StartStepPayload())) -> dict:
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        try:
+            cfg = svc_config.load_config(name, _output_root())
+        except FileNotFoundError:
+            raise HTTPException(400, "Configuration du projet introuvable.")
+        _check_api_key(cfg.generation_options.image_model.provider)
         _validate_quality(payload.quality_override)
 
         def runner(reporter, interrupt):
@@ -648,6 +660,13 @@ def _register_api(app: FastAPI) -> None:
 
     @app.post("/api/projects/{name}/steps/compose/start")
     def start_compose(name: str, payload: StartStepPayload = Body(default=StartStepPayload())) -> dict:
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        try:
+            cfg = svc_config.load_config(name, _output_root())
+        except FileNotFoundError:
+            raise HTTPException(400, "Configuration du projet introuvable.")
+        _check_api_key(cfg.generation_options.image_model.provider)
         _validate_quality(payload.quality_override)
 
         def runner(reporter, interrupt):
@@ -1065,6 +1084,7 @@ def _register_api(app: FastAPI) -> None:
         characters usable in the Préparation form. Output:
         ``{style: {...}, characters: [...]}``.
         """
+        _check_api_key("openai")
         blob = await file.read()
         mime = file.content_type or "image/jpeg"
         try:
@@ -1085,6 +1105,7 @@ def _register_api(app: FastAPI) -> None:
         itself is NOT stored by this endpoint — the caller persists it via
         the per-character photo endpoint after the project exists.
         """
+        _check_api_key("openai")
         blob = await file.read()
         mime = file.content_type or "image/jpeg"
         try:
@@ -1105,6 +1126,7 @@ def _register_api(app: FastAPI) -> None:
         endpoint — the caller persists it via the per-object photo endpoint
         after the project exists.
         """
+        _check_api_key("openai")
         blob = await file.read()
         mime = file.content_type or "image/jpeg"
         try:
@@ -1125,6 +1147,7 @@ def _register_api(app: FastAPI) -> None:
         endpoint — the caller persists it via the per-location photo endpoint
         after the project exists.
         """
+        _check_api_key("openai")
         blob = await file.read()
         mime = file.content_type or "image/jpeg"
         try:
@@ -1220,6 +1243,18 @@ def _register_api(app: FastAPI) -> None:
 def _validate_quality(q: str | None) -> None:
     if q is not None and q not in ("low", "medium", "high"):
         raise HTTPException(400, "quality_override doit valoir 'low', 'medium' ou 'high'.")
+
+
+def _check_api_key(provider: str) -> None:
+    secret_name = secret_store.PROVIDERS.get(provider)
+    if secret_name is None:
+        raise HTTPException(400, f"Provider '{provider}' inconnu.")
+    if not secret_store.get_secret(secret_name):
+        raise HTTPException(
+            400,
+            f"Clé API manquante : {secret_name} est requis pour le provider '{provider}'. "
+            "Configurez-la dans le coffre BdGEN.",
+        )
 
 
 def _file_url(project: str, rel: str, full_path: Path) -> str | None:

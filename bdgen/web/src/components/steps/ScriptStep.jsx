@@ -181,6 +181,9 @@ export default function ScriptStep({ project, onChanged }) {
   return (
     <div className="space-y-4">
       {blocked && <RunningBanner job={stream.job} />}
+      {stream.terminal && stream.terminal.status !== "completed" && (
+        <TerminalBanner terminal={stream.terminal} onClear={stream.clear} />
+      )}
       <div className="card p-8 text-center">
         <h2 className="text-lg font-semibold mb-2">Lancer l'écriture</h2>
         <p className="text-[var(--color-ink-soft)] max-w-2xl mx-auto mb-6">

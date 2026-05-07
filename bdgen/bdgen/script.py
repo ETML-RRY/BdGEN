@@ -887,13 +887,23 @@ def _call_anthropic(system: str, user: str, model_config: ScriptModelConfig, out
         state["last_render"] = 0.0
         render(force=True)
 
+    _ANTHROPIC_THINKING_MODELS = (
+        "claude-opus-4",
+        "claude-sonnet-4-5",
+        "claude-3-7-sonnet",
+    )
+    supports_thinking = any(model_config.model.startswith(m) for m in _ANTHROPIC_THINKING_MODELS)
+    extra_kwargs: dict = {}
+    if supports_thinking:
+        extra_kwargs["thinking"] = {"type": "adaptive"}
+        extra_kwargs["output_config"] = {"effort": "high"}
+
     _wait_for_anthropic_input_budget(system, user)
     try:
         with client.messages.stream(
             model=model_config.model,
             max_tokens=_anthropic_max_tokens(output_type),
-            thinking={"type": "adaptive"},
-            output_config={"effort": "high"},
+            **extra_kwargs,
             system=[
                 {
                     "type": "text",
