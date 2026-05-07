@@ -53,6 +53,7 @@ def detect_and_mark_stale(
     old_reference_model = old_cfg.generation_options.reference_image_model().model_dump()
     new_reference_model = new_config.generation_options.reference_image_model().model_dump()
     reference_model_changed = old_reference_model != new_reference_model
+    page_format_changed = old_cfg.structure.page_format != new_config.structure.page_format
 
     if style_changed:
         ref_ids: list[str] = []
@@ -159,6 +160,25 @@ def detect_and_mark_stale(
             ref_png = proj_dir / "references" / "objects" / f"{no.id}.png"
             if ref_png.exists():
                 mark_stale(proj_dir, "references", no.id)
+
+    if page_format_changed:
+        compose_ids: list[str] = []
+        if bd_script.cover is not None:
+            cover_png = proj_dir / "pages" / "cover.png"
+            if cover_png.exists():
+                compose_ids.append("cover")
+        for p in bd_script.pages:
+            page_png = proj_dir / "pages" / f"page_{p.page_number:02d}.png"
+            if page_png.exists():
+                compose_ids.append(f"page_{p.page_number}")
+        if bd_script.back_cover is not None:
+            back_png = proj_dir / "pages" / "back.png"
+            if back_png.exists():
+                compose_ids.append("back")
+        if compose_ids:
+            mark_stale(proj_dir, "compose", compose_ids)
+        bd_script.page_format = new_config.structure.page_format
+        script_changed = True
 
     if bd_script.generation_options != new_config.generation_options:
         bd_script.generation_options = new_config.generation_options
