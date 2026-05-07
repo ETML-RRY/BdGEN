@@ -141,16 +141,7 @@ export default function OnboardingWizard({ kind = "initial", onDone, onSkip, emb
             <h2 className="text-xl font-semibold">{current.title}</h2>
             <p className="mt-3 text-[var(--color-ink-soft)] leading-relaxed">{current.body}</p>
           </div>
-          <label className="mt-6 flex items-center gap-2 text-sm text-[var(--color-ink-soft)]">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-[var(--color-line)] text-[var(--color-primary-600)] focus:ring-[var(--color-primary-200)]"
-              checked={dontShowAgain}
-              onChange={(event) => setDontShowAgain(event.target.checked)}
-            />
-            <span className="min-w-0">Ne plus afficher ce guide au lancement</span>
-          </label>
-          <div className="mt-4 flex justify-between gap-3">
+          <div className="mt-6 flex justify-between gap-3">
             <button
               type="button"
               className="btn btn-secondary"
@@ -168,6 +159,15 @@ export default function OnboardingWizard({ kind = "initial", onDone, onSkip, emb
               {!isLast && <FaArrowRight aria-hidden />}
             </button>
           </div>
+          <label className="mt-4 flex items-center gap-2 text-sm text-[var(--color-ink-soft)]">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-[var(--color-line)] text-[var(--color-primary-600)] focus:ring-[var(--color-primary-200)]"
+              checked={dontShowAgain}
+              onChange={(event) => setDontShowAgain(event.target.checked)}
+            />
+            <span className="min-w-0">Ne plus afficher ce guide au lancement</span>
+          </label>
         </div>
       </div>
     </section>

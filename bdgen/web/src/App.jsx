@@ -96,7 +96,7 @@ export default function App() {
       {showAppOnboarding && <OnboardingWizard kind="app" onDone={dismissAppOnboarding} onSkip={dismissAppOnboarding} />}
 
       <footer className="border-t border-[var(--color-line)] py-4 text-center text-xs text-[var(--color-mute)]">
-        BdGEN · usage local
+        BdGEN · made with ❤ in Switzerland
       </footer>
     </div>
   );
