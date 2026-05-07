@@ -23,13 +23,12 @@ from bdgen.models import (
     ScriptSource,
     Style,
 )
-from bdgen.service import (
+from bdgen.service.coherence import check_script_coherence
+from bdgen.service.indices import read_coherence_index, read_stale_index
+from bdgen.service.manual_edits import (
     add_script_character_manual,
     add_script_location_manual,
     add_script_object_manual,
-    check_script_coherence,
-    read_coherence_index,
-    read_stale_index,
     update_script_back_cover_manual,
     update_script_character_manual,
     update_script_cover_manual,
@@ -291,7 +290,7 @@ def test_manual_edit_marks_coherence_dirty_and_check_flags_page_references(tmp_p
         ],
         "suggestions": [],
     }
-    with unittest.mock.patch("bdgen.service._llm_coherence_check", return_value=llm_result):
+    with unittest.mock.patch("bdgen.service.coherence._llm_coherence_check", return_value=llm_result):
         coherence = check_script_coherence("demo", tmp_path)
 
     assert coherence["dirty"] is False

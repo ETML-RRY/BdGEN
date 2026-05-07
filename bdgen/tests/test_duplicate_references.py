@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable
 
 from bdgen.compose import _collect_refs
-from bdgen.service import attach_existing_reference_images
+from bdgen.service.style_refs import attach_existing_reference_images
 
 from tests.factories import make_minimal_script
 

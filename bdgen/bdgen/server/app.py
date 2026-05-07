@@ -30,9 +30,25 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .. import secret_store
-from .. import service
 from .. import style_from_image as style_module
 from .. import upscale as upscale_module
+from ..service import (
+    cascades,
+    coherence,
+    feedback_ops,
+    import_export,
+    indices,
+    inpaint,
+    lifecycle,
+    manual_edits,
+    photos,
+    pipeline,
+    stale_detection,
+    style_refs,
+)
+from ..service import config as svc_config
+from ..service import constants as svc_const
+from ..service import state as svc_state
 from ..models import BackCover, BdGenInput, Cover, Page, ScriptCharacter, ScriptLocation, ScriptObject
 from .jobs import JobManager
 
@@ -205,32 +221,32 @@ def _register_api(app: FastAPI) -> None:
     def list_projects() -> dict:
         root = _output_root()
         items = []
-        for s in service.list_projects(root):
+        for s in lifecycle.list_projects(root):
             d = s.to_dict()
             rel = d.pop("thumbnail_rel", None)
-            d["thumbnail_url"] = _file_url(s.name, rel, service.get_project_dir(s.name, root) / rel) if rel else None
+            d["thumbnail_url"] = _file_url(s.name, rel, lifecycle.get_project_dir(s.name, root) / rel) if rel else None
             items.append(d)
         return {"projects": items}
 
     @app.get("/api/projects/{name}")
     def get_project(name: str) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
-        proj_dir = service.get_project_dir(name, _output_root())
-        cfg_path = proj_dir / service.PROJECT_CONFIG_NAME
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
+        cfg_path = proj_dir / svc_const.PROJECT_CONFIG_NAME
         script_path = proj_dir / "bdgen-script.json"
         cfg = None
         try:
-            cfg = service.load_config(name, _output_root())
+            cfg = svc_config.load_config(name, _output_root())
             cfg_dict = cfg.to_portable_dict(cfg_path)
         except FileNotFoundError:
             cfg_dict = None
-        bd_script = service.load_script_if_present(name, _output_root())
+        bd_script = svc_config.load_script_if_present(name, _output_root())
         script_dict = bd_script.to_portable_dict(script_path) if bd_script else None
-        state = service.derive_state(proj_dir)
-        quality_idx = service.read_quality_index(proj_dir)
-        stale_idx = service.read_stale_index(proj_dir)
-        coherence_idx = service.read_coherence_index(proj_dir)
+        state = svc_state.derive_state(proj_dir)
+        quality_idx = indices.read_quality_index(proj_dir)
+        stale_idx = indices.read_stale_index(proj_dir)
+        coherence_idx = indices.read_coherence_index(proj_dir)
         # Default quality to assume for items that pre-date the quality index.
         default_quality = (cfg_dict or {}).get("generation_options", {}).get("image_model", {}).get("quality", "high")
         # Per-step asset listings the frontend uses to flip through items.
@@ -239,7 +255,7 @@ def _register_api(app: FastAPI) -> None:
         upscaled = []
         stale_refs = set(stale_idx.get("references", []))
         stale_compose = set(stale_idx.get("compose", []))
-        upscale_dir = service.get_upscale_output_dir(proj_dir, bd_script, cfg)
+        upscale_dir = photos.get_upscale_output_dir(proj_dir, bd_script, cfg)
         upscale_ext = (cfg_dict or {}).get("generation_options", {}).get("upscale", {}).get("output_format", "png")
         if bd_script is not None:
             for c in bd_script.characters:
@@ -291,24 +307,24 @@ def _register_api(app: FastAPI) -> None:
                 composed.append(_compose_entry(name, "back", proj_dir, quality_idx, default_quality, stale_compose))
                 upscaled.append(_upscale_entry(name, "back", proj_dir, upscale_dir, upscale_ext))
         character_photos: dict[str, str | None] = {}
-        for cid, photo_path in service.list_character_photos(proj_dir).items():
+        for cid, photo_path in photos.list_character_photos(proj_dir).items():
             character_photos[cid] = _file_url(
                 name,
-                f"{service.CHARACTER_PHOTOS_DIRNAME}/{cid}.png",
+                f"{svc_const.CHARACTER_PHOTOS_DIRNAME}/{cid}.png",
                 photo_path,
             )
         location_photos: dict[str, str | None] = {}
-        for lid, photo_path in service.list_location_photos(proj_dir).items():
+        for lid, photo_path in photos.list_location_photos(proj_dir).items():
             location_photos[lid] = _file_url(
                 name,
-                f"{service.LOCATION_PHOTOS_DIRNAME}/{lid}.png",
+                f"{svc_const.LOCATION_PHOTOS_DIRNAME}/{lid}.png",
                 photo_path,
             )
         object_photos: dict[str, str | None] = {}
-        for oid, photo_path in service.list_object_photos(proj_dir).items():
+        for oid, photo_path in photos.list_object_photos(proj_dir).items():
             object_photos[oid] = _file_url(
                 name,
-                f"{service.OBJECT_PHOTOS_DIRNAME}/{oid}.png",
+                f"{svc_const.OBJECT_PHOTOS_DIRNAME}/{oid}.png",
                 photo_path,
             )
         reference_images: dict[str, dict[str, str | None]] = {
@@ -316,7 +332,7 @@ def _register_api(app: FastAPI) -> None:
             "locations": {},
             "objects": {},
         }
-        for kind, items in service.list_reference_images(proj_dir).items():
+        for kind, items in photos.list_reference_images(proj_dir).items():
             for ref_id, ref_path in items.items():
                 reference_images[kind][ref_id] = _file_url(name, f"references/{kind}/{ref_id}.png", ref_path)
         return {
@@ -341,9 +357,9 @@ def _register_api(app: FastAPI) -> None:
 
     @app.get("/api/projects/{name}/statistics")
     def get_project_statistics(name: str) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
-        return service.project_statistics(name, _output_root())
+        return svc_state.project_statistics(name, _output_root())
 
     @app.post("/api/projects")
     def create_project(payload: dict = Body(...)) -> dict:
@@ -353,14 +369,14 @@ def _register_api(app: FastAPI) -> None:
             raise HTTPException(400, f"Configuration invalide : {e}")
         if not cfg.project:
             raise HTTPException(400, "Le champ 'project' est obligatoire.")
-        if service.project_exists(cfg.project, _output_root()):
+        if lifecycle.project_exists(cfg.project, _output_root()):
             raise HTTPException(409, f"Un projet « {cfg.project} » existe déjà.")
-        service.save_config(cfg, _output_root())
+        svc_config.save_config(cfg, _output_root())
         return {"name": cfg.project}
 
     @app.put("/api/projects/{name}")
     def update_project(name: str, payload: dict = Body(...)) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         try:
             cfg = BdGenInput.model_validate(payload)
@@ -368,24 +384,24 @@ def _register_api(app: FastAPI) -> None:
             raise HTTPException(400, f"Configuration invalide : {e}")
         if cfg.project != name:
             raise HTTPException(400, "Le champ 'project' ne peut pas être renommé via cette route.")
-        service.detect_and_mark_stale(name, cfg, _output_root())
-        service.save_config(cfg, _output_root())
+        stale_detection.detect_and_mark_stale(name, cfg, _output_root())
+        svc_config.save_config(cfg, _output_root())
         return {"name": name}
 
     @app.delete("/api/projects/{name}")
     def delete_project(name: str) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         if app.state.jobs.is_running():
             current = app.state.jobs.current()
             if current and current.project == name:
                 raise HTTPException(409, "Une génération est en cours sur ce projet.")
-        service.delete_project(name, _output_root())
+        lifecycle.delete_project(name, _output_root())
         return {"deleted": name}
 
     @app.post("/api/projects/{name}/duplicate")
     def duplicate_project(name: str, payload: dict = Body(default_factory=dict)) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         data = payload or {}
         new_id = data.get("new_project") or None
@@ -393,7 +409,7 @@ def _register_api(app: FastAPI) -> None:
         include_photos = bool(data.get("include_photos", True))
         include_style_ref = bool(data.get("include_style_reference", True))
         try:
-            created = service.duplicate_project(
+            created = lifecycle.duplicate_project(
                 name,
                 new_id,
                 _output_root(),
@@ -409,7 +425,7 @@ def _register_api(app: FastAPI) -> None:
 
     @app.post("/api/projects/{name}/restyle")
     def restyle_project(name: str, payload: dict = Body(...)) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         if app.state.jobs.is_running():
             current = app.state.jobs.current()
@@ -419,7 +435,7 @@ def _register_api(app: FastAPI) -> None:
         if not isinstance(style, dict):
             raise HTTPException(400, "Le champ 'style' est obligatoire.")
         try:
-            deleted = service.restyle_project(name, style, _output_root())
+            deleted = lifecycle.restyle_project(name, style, _output_root())
         except FileNotFoundError as e:
             raise HTTPException(404, str(e))
         except Exception as e:
@@ -430,13 +446,13 @@ def _register_api(app: FastAPI) -> None:
     def list_feedback(name: str) -> dict:
         from ..feedback import FeedbackStore, feedback_path_for
 
-        proj_dir = service.get_project_dir(name, _output_root())
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
         store = FeedbackStore.load_or_empty(feedback_path_for(proj_dir / "bdgen-script.json"))
         return {"items": [item.model_dump(mode="json") for item in store.items]}
 
     @app.get("/api/projects/{name}/files/{path:path}")
     def serve_project_file(name: str, path: str):
-        proj_dir = service.get_project_dir(name, _output_root())
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
         target = (proj_dir / path).resolve()
         # Path traversal guard
         try:
@@ -451,9 +467,9 @@ def _register_api(app: FastAPI) -> None:
 
     @app.get("/api/projects/{name}/export")
     def export_project(name: str):
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
-        blob = service.export_zip(name, _output_root())
+        blob = import_export.export_zip(name, _output_root())
         return Response(
             content=blob,
             media_type="application/zip",
@@ -466,7 +482,7 @@ def _register_api(app: FastAPI) -> None:
     async def import_project(file: UploadFile = File(...)) -> dict:
         blob = await file.read()
         try:
-            project_name = service.import_zip(blob, _output_root())
+            project_name = import_export.import_zip(blob, _output_root())
         except Exception as e:
             raise HTTPException(400, f"Archive invalide : {e}")
         return {"name": project_name}
@@ -475,19 +491,19 @@ def _register_api(app: FastAPI) -> None:
 
     @app.get("/api/projects/{name}/references/exportable")
     def list_exportable_refs(name: str) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         try:
-            return service.list_exportable_references(name, _output_root())
+            return import_export.list_exportable_references(name, _output_root())
         except FileNotFoundError as e:
             raise HTTPException(404, str(e))
 
     @app.post("/api/projects/{name}/references/export")
     def export_refs_bundle(name: str, payload: dict = Body(default_factory=dict)) -> Response:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         try:
-            blob = service.export_references_bundle(
+            blob = import_export.export_references_bundle(
                 name,
                 character_ids=list((payload or {}).get("characters") or []),
                 location_ids=list((payload or {}).get("locations") or []),
@@ -508,11 +524,11 @@ def _register_api(app: FastAPI) -> None:
 
     @app.post("/api/projects/{name}/references/import")
     async def import_refs_bundle(name: str, file: UploadFile = File(...)) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         blob = await file.read()
         try:
-            return service.import_references_bundle(name, blob, _output_root())
+            return import_export.import_references_bundle(name, blob, _output_root())
         except ValueError as e:
             raise HTTPException(400, str(e))
         except FileNotFoundError as e:
@@ -576,14 +592,14 @@ def _register_api(app: FastAPI) -> None:
 
     @app.post("/api/projects/{name}/steps/script/start")
     def start_script(name: str, payload: StartStepPayload = Body(default=StartStepPayload())) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
 
         if payload.force_all:
-            proj_dir = service.get_project_dir(name, _output_root())
+            proj_dir = lifecycle.get_project_dir(name, _output_root())
             script_path = proj_dir / "bdgen-script.json"
             if script_path.exists():
-                bd_script = service.load_script_if_present(name, _output_root())
+                bd_script = svc_config.load_script_if_present(name, _output_root())
                 if bd_script:
                     ref_ids = (
                         [c.id for c in bd_script.characters]
@@ -598,13 +614,13 @@ def _register_api(app: FastAPI) -> None:
                     if bd_script.back_cover is not None:
                         compose_ids.append("back")
                     if ref_ids:
-                        service.mark_stale(proj_dir, "references", ref_ids)
+                        indices.mark_stale(proj_dir, "references", ref_ids)
                     if compose_ids:
-                        service.mark_stale(proj_dir, "compose", compose_ids)
+                        indices.mark_stale(proj_dir, "compose", compose_ids)
                 script_path.unlink()
 
         def runner(reporter, interrupt):
-            service.run_step_script(
+            pipeline.run_step_script(
                 name,
                 reporter,
                 interrupt,
@@ -619,7 +635,7 @@ def _register_api(app: FastAPI) -> None:
         _validate_quality(payload.quality_override)
 
         def runner(reporter, interrupt):
-            service.run_step_references(
+            pipeline.run_step_references(
                 name,
                 reporter,
                 interrupt,
@@ -635,7 +651,7 @@ def _register_api(app: FastAPI) -> None:
         _validate_quality(payload.quality_override)
 
         def runner(reporter, interrupt):
-            service.run_step_compose(
+            pipeline.run_step_compose(
                 name,
                 reporter,
                 interrupt,
@@ -648,10 +664,10 @@ def _register_api(app: FastAPI) -> None:
 
     @app.post("/api/projects/{name}/steps/upscale/start")
     def start_upscale(name: str, payload: StartStepPayload = Body(default=StartStepPayload())) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         try:
-            cfg = service.load_config(name, _output_root())
+            cfg = svc_config.load_config(name, _output_root())
         except FileNotFoundError:
             raise HTTPException(400, "Configuration du projet introuvable.")
         if not cfg.generation_options.upscale.enabled:
@@ -666,7 +682,7 @@ def _register_api(app: FastAPI) -> None:
             )
 
         def runner(reporter, interrupt):
-            service.run_step_upscale(
+            pipeline.run_step_upscale(
                 name,
                 reporter,
                 interrupt,
@@ -681,7 +697,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/character/{character_id}")
     def refine_character(name: str, character_id: str, payload: FeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_character(name, character_id, payload.feedback, _output_root())
+            feedback_ops.add_feedback_and_regenerate_character(name, character_id, payload.feedback, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
@@ -689,7 +705,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/location/{location_id}")
     def refine_location(name: str, location_id: str, payload: FeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_location(name, location_id, payload.feedback, _output_root())
+            feedback_ops.add_feedback_and_regenerate_location(name, location_id, payload.feedback, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
@@ -697,7 +713,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/object/{object_id}")
     def refine_object(name: str, object_id: str, payload: FeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_object(name, object_id, payload.feedback, _output_root())
+            feedback_ops.add_feedback_and_regenerate_object(name, object_id, payload.feedback, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
@@ -705,7 +721,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/cover")
     def refine_cover(name: str, payload: FeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_cover(name, payload.feedback, _output_root())
+            feedback_ops.add_feedback_and_regenerate_cover(name, payload.feedback, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
@@ -713,7 +729,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/back_cover")
     def refine_back_cover(name: str, payload: FeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_back_cover(name, payload.feedback, _output_root())
+            feedback_ops.add_feedback_and_regenerate_back_cover(name, payload.feedback, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
         return {"ok": True}
@@ -721,7 +737,7 @@ def _register_api(app: FastAPI) -> None:
     @app.post("/api/projects/{name}/refine/page/{page_number}")
     def refine_page(name: str, page_number: int, payload: PageFeedbackPayload) -> dict:
         try:
-            service.add_feedback_and_regenerate_page(
+            feedback_ops.add_feedback_and_regenerate_page(
                 name,
                 page_number,
                 payload.feedback,
@@ -734,7 +750,7 @@ def _register_api(app: FastAPI) -> None:
 
     @app.put("/api/projects/{name}/script/pages/{page_number}")
     def update_script_page(name: str, page_number: int, payload: dict = Body(...)) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         if app.state.jobs.is_running():
             current = app.state.jobs.current()
@@ -745,7 +761,7 @@ def _register_api(app: FastAPI) -> None:
                 )
         try:
             page = Page.model_validate(payload)
-            service.update_script_page_manual(
+            manual_edits.update_script_page_manual(
                 name,
                 page_number,
                 page.model_dump(mode="json"),
@@ -761,7 +777,7 @@ def _register_api(app: FastAPI) -> None:
     def check_script_coherence(name: str) -> dict:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
-            return service.check_script_coherence(name, _output_root())
+            return coherence.check_script_coherence(name, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
 
@@ -772,7 +788,7 @@ def _register_api(app: FastAPI) -> None:
         if not suggestion:
             raise HTTPException(400, "suggestion manquante")
         try:
-            return service.apply_global_suggestion(name, suggestion, _output_root())
+            return coherence.apply_global_suggestion(name, suggestion, _output_root())
         except Exception as e:
             raise HTTPException(400, str(e))
 
@@ -781,7 +797,7 @@ def _register_api(app: FastAPI) -> None:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             character = ScriptCharacter.model_validate(payload)
-            service.update_script_character_manual(name, character_id, character.model_dump(mode="json"), _output_root())
+            manual_edits.update_script_character_manual(name, character_id, character.model_dump(mode="json"), _output_root())
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -793,7 +809,7 @@ def _register_api(app: FastAPI) -> None:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             character = ScriptCharacter.model_validate(payload)
-            service.add_script_character_manual(name, character.model_dump(mode="json"), _output_root())
+            manual_edits.add_script_character_manual(name, character.model_dump(mode="json"), _output_root())
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -805,7 +821,7 @@ def _register_api(app: FastAPI) -> None:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             location = ScriptLocation.model_validate(payload)
-            service.update_script_location_manual(name, location_id, location.model_dump(mode="json"), _output_root())
+            manual_edits.update_script_location_manual(name, location_id, location.model_dump(mode="json"), _output_root())
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -817,7 +833,7 @@ def _register_api(app: FastAPI) -> None:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             location = ScriptLocation.model_validate(payload)
-            service.add_script_location_manual(name, location.model_dump(mode="json"), _output_root())
+            manual_edits.add_script_location_manual(name, location.model_dump(mode="json"), _output_root())
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -829,7 +845,7 @@ def _register_api(app: FastAPI) -> None:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             obj = ScriptObject.model_validate(payload)
-            service.update_script_object_manual(name, object_id, obj.model_dump(mode="json"), _output_root())
+            manual_edits.update_script_object_manual(name, object_id, obj.model_dump(mode="json"), _output_root())
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -841,7 +857,7 @@ def _register_api(app: FastAPI) -> None:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             obj = ScriptObject.model_validate(payload)
-            service.add_script_object_manual(name, obj.model_dump(mode="json"), _output_root())
+            manual_edits.add_script_object_manual(name, obj.model_dump(mode="json"), _output_root())
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -853,7 +869,7 @@ def _register_api(app: FastAPI) -> None:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             cover = Cover.model_validate(payload)
-            service.update_script_cover_manual(name, cover.model_dump(mode="json"), _output_root())
+            manual_edits.update_script_cover_manual(name, cover.model_dump(mode="json"), _output_root())
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -865,7 +881,7 @@ def _register_api(app: FastAPI) -> None:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             back_cover = BackCover.model_validate(payload)
-            service.update_script_back_cover_manual(name, back_cover.model_dump(mode="json"), _output_root())
+            manual_edits.update_script_back_cover_manual(name, back_cover.model_dump(mode="json"), _output_root())
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -882,7 +898,7 @@ def _register_api(app: FastAPI) -> None:
     ) -> dict:
         if step not in ("references", "compose"):
             raise HTTPException(400, "Étape invalide (references ou compose).")
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         if app.state.jobs.is_running():
             current = app.state.jobs.current()
@@ -893,7 +909,7 @@ def _register_api(app: FastAPI) -> None:
         mask_bytes = await mask.read()
         try:
             new_path = await asyncio.to_thread(
-                service.inpaint_image,
+                inpaint.inpaint_image,
                 name,
                 step,
                 target_id,
@@ -907,7 +923,7 @@ def _register_api(app: FastAPI) -> None:
             raise HTTPException(400, str(e))
         except Exception as e:
             raise HTTPException(400, f"Retouche échouée : {e}")
-        proj_dir = service.get_project_dir(name, _output_root())
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
         try:
             rel = new_path.relative_to(proj_dir).as_posix()
         except ValueError:
@@ -921,7 +937,7 @@ def _register_api(app: FastAPI) -> None:
     def add_image_feedback(name: str, payload: ImageFeedbackPayload) -> dict:
         if payload.step not in ("references", "compose"):
             raise HTTPException(400, "Étape invalide.")
-        service.record_image_feedback(
+        inpaint.record_image_feedback(
             name,
             payload.step,
             payload.target,
@@ -935,21 +951,21 @@ def _register_api(app: FastAPI) -> None:
     @app.get("/api/projects/{name}/characters/{character_id}/delete-preview")
     def preview_delete_char(name: str, character_id: str) -> dict:
         try:
-            return service.preview_delete_character(name, character_id, _output_root())
+            return cascades.preview_delete_character(name, character_id, _output_root())
         except ValueError as e:
             raise HTTPException(404, str(e))
 
     @app.get("/api/projects/{name}/locations/{location_id}/delete-preview")
     def preview_delete_loc(name: str, location_id: str) -> dict:
         try:
-            return service.preview_delete_location(name, location_id, _output_root())
+            return cascades.preview_delete_location(name, location_id, _output_root())
         except ValueError as e:
             raise HTTPException(404, str(e))
 
     @app.get("/api/projects/{name}/objects/{object_id}/delete-preview")
     def preview_delete_obj(name: str, object_id: str) -> dict:
         try:
-            return service.preview_delete_object(name, object_id, _output_root())
+            return cascades.preview_delete_object(name, object_id, _output_root())
         except ValueError as e:
             raise HTTPException(404, str(e))
 
@@ -960,7 +976,7 @@ def _register_api(app: FastAPI) -> None:
         auto_regenerate: bool = True,
     ) -> dict:
         try:
-            info = service.delete_character_and_cascade(name, character_id, _output_root())
+            info = cascades.delete_character_and_cascade(name, character_id, _output_root())
         except ValueError as e:
             raise HTTPException(404, str(e))
         info["job"] = _maybe_autostart_script(name, info, auto_regenerate)
@@ -973,7 +989,7 @@ def _register_api(app: FastAPI) -> None:
         auto_regenerate: bool = True,
     ) -> dict:
         try:
-            info = service.delete_location_and_cascade(name, location_id, _output_root())
+            info = cascades.delete_location_and_cascade(name, location_id, _output_root())
         except ValueError as e:
             raise HTTPException(404, str(e))
         info["job"] = _maybe_autostart_script(name, info, auto_regenerate)
@@ -986,7 +1002,7 @@ def _register_api(app: FastAPI) -> None:
         auto_regenerate: bool = True,
     ) -> dict:
         try:
-            info = service.delete_object_and_cascade(name, object_id, _output_root())
+            info = cascades.delete_object_and_cascade(name, object_id, _output_root())
         except ValueError as e:
             raise HTTPException(404, str(e))
         info["job"] = _maybe_autostart_script(name, info, auto_regenerate)
@@ -1003,7 +1019,7 @@ def _register_api(app: FastAPI) -> None:
             return None
 
         def runner(reporter, interrupt):
-            service.run_step_script(name, reporter, interrupt, output_root=_output_root())
+            pipeline.run_step_script(name, reporter, interrupt, output_root=_output_root())
 
         try:
             snap = app.state.jobs.start(name, "script", runner)
@@ -1021,23 +1037,23 @@ def _register_api(app: FastAPI) -> None:
         image as the first input to every images.edit call so gpt-image-2 can
         *see* the target style rather than only reading a text description.
         """
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         blob = await file.read()
-        p = service.save_style_reference(name, blob, _output_root())
+        p = style_refs.save_style_reference(name, blob, _output_root())
         return {
             "ok": True,
             "path": str(p),
-            "url": _file_url(name, service.STYLE_REF_NAME, p),
+            "url": _file_url(name, svc_const.STYLE_REF_NAME, p),
         }
 
     @app.get("/api/projects/{name}/style-reference")
     def get_style_reference_info(name: str) -> dict:
-        proj_dir = service.get_project_dir(name, _output_root())
-        ref = service.get_style_reference_path(proj_dir)
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
+        ref = style_refs.get_style_reference_path(proj_dir)
         return {
             "exists": ref is not None,
-            "url": _file_url(name, service.STYLE_REF_NAME, ref) if ref else None,
+            "url": _file_url(name, svc_const.STYLE_REF_NAME, ref) if ref else None,
         }
 
     @app.post("/api/style-from-image")
@@ -1123,81 +1139,81 @@ def _register_api(app: FastAPI) -> None:
 
     @app.put("/api/projects/{name}/characters/{character_id}/photo")
     async def set_character_photo(name: str, character_id: str, file: UploadFile = File(...)) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         blob = await file.read()
         try:
-            p = service.save_character_photo(name, character_id, blob, _output_root())
+            p = photos.save_character_photo(name, character_id, blob, _output_root())
         except ValueError as e:
             raise HTTPException(400, str(e))
         return {
             "ok": True,
             "url": _file_url(
                 name,
-                f"{service.CHARACTER_PHOTOS_DIRNAME}/{character_id}.png",
+                f"{svc_const.CHARACTER_PHOTOS_DIRNAME}/{character_id}.png",
                 p,
             ),
         }
 
     @app.delete("/api/projects/{name}/characters/{character_id}/photo")
     def remove_character_photo(name: str, character_id: str) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
-        removed = service.delete_character_photo(name, character_id, _output_root())
+        removed = photos.delete_character_photo(name, character_id, _output_root())
         return {"ok": True, "removed": removed}
 
     # --- Per-object reference photos ---
 
     @app.put("/api/projects/{name}/objects/{object_id}/photo")
     async def set_object_photo(name: str, object_id: str, file: UploadFile = File(...)) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         blob = await file.read()
         try:
-            p = service.save_object_photo(name, object_id, blob, _output_root())
+            p = photos.save_object_photo(name, object_id, blob, _output_root())
         except ValueError as e:
             raise HTTPException(400, str(e))
         return {
             "ok": True,
             "url": _file_url(
                 name,
-                f"{service.OBJECT_PHOTOS_DIRNAME}/{object_id}.png",
+                f"{svc_const.OBJECT_PHOTOS_DIRNAME}/{object_id}.png",
                 p,
             ),
         }
 
     @app.delete("/api/projects/{name}/objects/{object_id}/photo")
     def remove_object_photo(name: str, object_id: str) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
-        removed = service.delete_object_photo(name, object_id, _output_root())
+        removed = photos.delete_object_photo(name, object_id, _output_root())
         return {"ok": True, "removed": removed}
 
     # --- Per-location reference photos ---
 
     @app.put("/api/projects/{name}/locations/{location_id}/photo")
     async def set_location_photo(name: str, location_id: str, file: UploadFile = File(...)) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         blob = await file.read()
         try:
-            p = service.save_location_photo(name, location_id, blob, _output_root())
+            p = photos.save_location_photo(name, location_id, blob, _output_root())
         except ValueError as e:
             raise HTTPException(400, str(e))
         return {
             "ok": True,
             "url": _file_url(
                 name,
-                f"{service.LOCATION_PHOTOS_DIRNAME}/{location_id}.png",
+                f"{svc_const.LOCATION_PHOTOS_DIRNAME}/{location_id}.png",
                 p,
             ),
         }
 
     @app.delete("/api/projects/{name}/locations/{location_id}/photo")
     def remove_location_photo(name: str, location_id: str) -> dict:
-        if not service.project_exists(name, _output_root()):
+        if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
-        removed = service.delete_location_photo(name, location_id, _output_root())
+        removed = photos.delete_location_photo(name, location_id, _output_root())
         return {"ok": True, "removed": removed}
 
 
@@ -1260,7 +1276,7 @@ def _compose_entry(
 
 
 def _ensure_manual_script_edit_allowed(app: FastAPI, name: str, output_root: Path) -> None:
-    if not service.project_exists(name, output_root):
+    if not lifecycle.project_exists(name, output_root):
         raise HTTPException(404, "Projet inconnu.")
     if app.state.jobs.is_running():
         current = app.state.jobs.current()
@@ -1303,7 +1319,7 @@ def _upscale_entry(
         "id": target,
         "image_url": _file_url(project, rel, full) if rel is not None else None,
         "quality": None,
-        "stale": service.is_upscaled_stale(source, full),
+        "stale": photos.is_upscaled_stale(source, full),
     }
 
 

@@ -12,13 +12,10 @@ from bdgen.models import (
     Structure,
     Style,
 )
-from bdgen.service import (
-    detect_and_mark_stale,
-    load_config,
-    read_stale_index,
-    save_config,
-    _resolve_options,
-)
+from bdgen.service._helpers import _resolve_options
+from bdgen.service.config import load_config, save_config
+from bdgen.service.indices import read_stale_index
+from bdgen.service.stale_detection import detect_and_mark_stale
 
 from tests.factories import make_minimal_script, make_options
 
