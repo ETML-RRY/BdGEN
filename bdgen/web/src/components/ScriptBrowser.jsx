@@ -646,7 +646,7 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
 
   return (
     <div>
-      <PageNavigation idx={currentIdx} page={page} pageCount={pages.length} onChange={setIdx} className="mb-3" />
+      <PageNavigation idx={currentIdx} pageCount={pages.length} onChange={setIdx} className="mb-3" />
 
       <div className="script-page-reader">
         {pageCoherenceIssues.length > 0 && (
@@ -929,7 +929,7 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
         )}
       </div>
 
-      <PageNavigation idx={currentIdx} page={page} pageCount={pages.length} onChange={setIdx} className="mt-3" />
+      <PageNavigation idx={currentIdx} pageCount={pages.length} onChange={setIdx} className="mt-3" />
 
       {refining && (
         <RefineDialog
@@ -1413,7 +1413,7 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
   );
 }
 
-function PageNavigation({ idx, page, pageCount, onChange, className = "" }) {
+function PageNavigation({ idx, pageCount, onChange, className = "" }) {
   return (
     <div className={"flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between " + className}>
       <button
