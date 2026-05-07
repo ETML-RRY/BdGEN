@@ -44,6 +44,19 @@ function prepareBackendResource(context) {
     execFileSync("codesign", ["--force", "--sign", "-", backend], {
       stdio: "inherit",
     });
+
+    // Sign the entire .app bundle so macOS Gatekeeper doesn't reject it as "damaged".
+    if (context?.appOutDir) {
+      const productName = context.packager.appInfo.productFilename;
+      const appBundle = path.join(context.appOutDir, `${productName}.app`);
+      if (fs.existsSync(appBundle)) {
+        // Remove extended attributes (Finder metadata) that block codesigning.
+        execFileSync("xattr", ["-cr", appBundle], { stdio: "inherit" });
+        execFileSync("codesign", ["--force", "--deep", "--sign", "-", appBundle], {
+          stdio: "inherit",
+        });
+      }
+    }
   }
 }
 
