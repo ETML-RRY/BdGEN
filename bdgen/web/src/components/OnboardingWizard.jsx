@@ -1,13 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  FaArrowRight,
-  FaCheck,
-  FaCoins,
-  FaKey,
-  FaLock,
-  FaWandMagicSparkles,
-  FaXmark,
-} from "react-icons/fa6";
+import { FaArrowRight, FaCheck, FaCoins, FaKey, FaLock, FaWandMagicSparkles, FaXmark } from "react-icons/fa6";
 
 export const INITIAL_ONBOARDING_KEY = "bdgen.initialOnboarding.dismissed";
 export const APP_ONBOARDING_KEY = "bdgen.appOnboarding.dismissed";
@@ -16,20 +8,17 @@ const INITIAL_STEPS = [
   {
     icon: FaLock,
     title: "Protéger vos clés API",
-    body:
-      "Le mot de passe principal sert à chiffrer vos clés sur cet ordinateur. BdGEN ne le stocke pas : il faudra le retenir pour rouvrir le coffre.",
+    body: "Le mot de passe principal sert à chiffrer vos clés sur cet ordinateur. BdGEN ne le stocke pas : il faudra le retenir pour rouvrir le coffre.",
   },
   {
     icon: FaKey,
     title: "Récupérer les clés utiles",
-    body:
-      "OpenAI est requis pour démarrer. Anthropic, xAI et Replicate sont optionnels selon les modèles que vous souhaitez utiliser.",
+    body: "OpenAI est requis pour démarrer. Anthropic, xAI et Replicate sont optionnels selon les modèles que vous souhaitez utiliser.",
   },
   {
     icon: FaCoins,
     title: "Comprendre le budget",
-    body:
-      "Une BD consomme des appels texte et image. Le coût varie selon les modèles, le nombre de pages, les essais et l’upscale ; prévoyez d’abord un petit projet de test et suivez les statistiques de coût dans BdGEN.",
+    body: "Une BD consomme des appels texte et image. Le coût varie selon les modèles, le nombre de pages, les essais et l’upscale ; prévoyez d’abord un petit projet de test et suivez les statistiques de coût dans BdGEN.",
   },
 ];
 
@@ -37,26 +26,22 @@ const APP_STEPS = [
   {
     icon: FaWandMagicSparkles,
     title: "1. Préparer le projet",
-    body:
-      "Décrivez l’histoire, le format, les personnages et le style. Plus la base est claire, plus les étapes suivantes seront cohérentes.",
+    body: "Décrivez l’histoire, le format, les personnages et le style. Plus la base est claire, plus les étapes suivantes seront cohérentes.",
   },
   {
     icon: FaCheck,
     title: "2. Écrire et relire",
-    body:
-      "L’étape Écriture transforme votre brief en script structuré. Vous pouvez corriger le résultat avant de lancer les images.",
+    body: "L’étape Écriture transforme votre brief en script structuré. Vous pouvez corriger le résultat avant de lancer les images.",
   },
   {
     icon: FaKey,
     title: "3. Générer les références",
-    body:
-      "BdGEN crée les fiches visuelles des personnages, lieux et objets. Validez-les ou affinez-les avant les planches finales.",
+    body: "BdGEN crée les fiches visuelles des personnages, lieux et objets. Validez-les ou affinez-les avant les planches finales.",
   },
   {
     icon: FaCoins,
     title: "4. Composer la BD",
-    body:
-      "Les planches, la couverture et le PDF sont générés à partir du script et des références. L’upscale reste optionnel pour améliorer la définition.",
+    body: "Les planches, la couverture et le PDF sont générés à partir du script et des références. L’upscale reste optionnel pour améliorer la définition.",
   },
 ];
 
@@ -70,14 +55,10 @@ export function dismissOnboarding(key) {
   window.localStorage.setItem(key, "true");
 }
 
-export default function OnboardingWizard({
-  kind = "initial",
-  onDone,
-  onSkip,
-  embedded = false,
-}) {
+export default function OnboardingWizard({ kind = "initial", onDone, onSkip, embedded = false }) {
   const steps = kind === "initial" ? INITIAL_STEPS : APP_STEPS;
   const [index, setIndex] = useState(0);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
   const current = steps[index];
   const Icon = current.icon;
   const isLast = index === steps.length - 1;
@@ -99,11 +80,15 @@ export default function OnboardingWizard({
               "L’outil avance par étapes. Vous pouvez revenir en arrière, relancer une partie et garder la main avant les générations coûteuses.",
             done: "Commencer",
           },
-    [kind]
+    [kind],
   );
 
   function finish() {
-    onDone?.();
+    onDone?.(dontShowAgain);
+  }
+
+  function skip() {
+    onSkip?.(dontShowAgain);
   }
 
   const panel = (
@@ -111,13 +96,9 @@ export default function OnboardingWizard({
       <div className="grid md:grid-cols-[0.9fr_1.1fr]">
         <div className="bg-[var(--color-paper-soft)] p-6 flex flex-col justify-between gap-6">
           <div>
-            <p className="text-xs font-semibold uppercase text-[var(--color-primary-700)]">
-              {copy.eyebrow}
-            </p>
+            <p className="text-xs font-semibold uppercase text-[var(--color-primary-700)]">{copy.eyebrow}</p>
             <h1 className="mt-2 text-2xl font-semibold">{copy.title}</h1>
-            <p className="mt-3 text-sm text-[var(--color-ink-soft)]">
-              {copy.intro}
-            </p>
+            <p className="mt-3 text-sm text-[var(--color-ink-soft)]">{copy.intro}</p>
           </div>
           <ol className="flex md:flex-col gap-2" aria-label="Progression du guide">
             {steps.map((step, stepIndex) => (
@@ -132,9 +113,7 @@ export default function OnboardingWizard({
                   aria-label={step.title}
                   onClick={() => setIndex(stepIndex)}
                 >
-                  <span className="hidden md:block text-sm font-medium">
-                    {step.title}
-                  </span>
+                  <span className="hidden md:block text-sm font-medium">{step.title}</span>
                 </button>
               </li>
             ))}
@@ -149,7 +128,7 @@ export default function OnboardingWizard({
                 className="p-2 rounded-md text-[var(--color-mute)] hover:bg-[var(--color-paper-soft)] hover:text-[var(--color-ink)]"
                 title="Passer le guide"
                 aria-label="Passer le guide"
-                onClick={onSkip}
+                onClick={skip}
               >
                 <FaXmark aria-hidden />
               </button>
@@ -160,11 +139,18 @@ export default function OnboardingWizard({
               <Icon aria-hidden className="text-xl" />
             </div>
             <h2 className="text-xl font-semibold">{current.title}</h2>
-            <p className="mt-3 text-[var(--color-ink-soft)] leading-relaxed">
-              {current.body}
-            </p>
+            <p className="mt-3 text-[var(--color-ink-soft)] leading-relaxed">{current.body}</p>
           </div>
-          <div className="mt-6 flex justify-between gap-3">
+          <label className="mt-6 flex items-center gap-2 text-sm text-[var(--color-ink-soft)]">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-[var(--color-line)] text-[var(--color-primary-600)] focus:ring-[var(--color-primary-200)]"
+              checked={dontShowAgain}
+              onChange={(event) => setDontShowAgain(event.target.checked)}
+            />
+            <span className="min-w-0">Ne plus afficher ce guide au lancement</span>
+          </label>
+          <div className="mt-4 flex justify-between gap-3">
             <button
               type="button"
               className="btn btn-secondary"
@@ -191,9 +177,5 @@ export default function OnboardingWizard({
     return panel;
   }
 
-  return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/35 p-4">
-      {panel}
-    </div>
-  );
+  return <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/35 p-4">{panel}</div>;
 }

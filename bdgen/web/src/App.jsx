@@ -17,44 +17,43 @@ import OnboardingWizard, {
 export default function App() {
   const [secretsStatus, setSecretsStatus] = useState(null);
   const [showInitialOnboarding, setShowInitialOnboarding] = useState(
-    () => !hasDismissedOnboarding(INITIAL_ONBOARDING_KEY)
+    () => !hasDismissedOnboarding(INITIAL_ONBOARDING_KEY),
   );
-  const [showAppOnboarding, setShowAppOnboarding] = useState(
-    () => !hasDismissedOnboarding(APP_ONBOARDING_KEY)
-  );
+  const [showAppOnboarding, setShowAppOnboarding] = useState(() => !hasDismissedOnboarding(APP_ONBOARDING_KEY));
   const isDesktop = Boolean(window.bdgenDesktop);
 
   useEffect(() => {
-    api.secretsStatus()
+    api
+      .secretsStatus()
       .then(setSecretsStatus)
       .catch(() => setSecretsStatus({ error: true }));
   }, []);
 
   const providers = secretsStatus?.providers || {};
   const hasConfiguredProvider = Object.values(providers).some((p) => p.configured);
-  const needsInitialSetup =
-    secretsStatus && !secretsStatus.vault_exists && !hasConfiguredProvider;
+  const needsInitialSetup = secretsStatus && !secretsStatus.vault_exists && !hasConfiguredProvider;
   const shouldGate =
     secretsStatus &&
     !secretsStatus.error &&
-    ((secretsStatus.vault_exists && !secretsStatus.unlocked) ||
-      needsInitialSetup);
+    ((secretsStatus.vault_exists && !secretsStatus.unlocked) || needsInitialSetup);
 
-  function dismissInitialOnboarding() {
-    dismissOnboarding(INITIAL_ONBOARDING_KEY);
+  function dismissInitialOnboarding(remember = false) {
+    if (remember) {
+      dismissOnboarding(INITIAL_ONBOARDING_KEY);
+    }
     setShowInitialOnboarding(false);
   }
 
-  function dismissAppOnboarding() {
-    dismissOnboarding(APP_ONBOARDING_KEY);
+  function dismissAppOnboarding(remember = false) {
+    if (remember) {
+      dismissOnboarding(APP_ONBOARDING_KEY);
+    }
     setShowAppOnboarding(false);
   }
 
   if (!secretsStatus) {
     return (
-      <div className="min-h-full flex items-center justify-center text-sm text-[var(--color-mute)]">
-        Chargement...
-      </div>
+      <div className="min-h-full flex items-center justify-center text-sm text-[var(--color-mute)]">Chargement...</div>
     );
   }
 
@@ -94,13 +93,7 @@ export default function App() {
         </Routes>
       </main>
 
-      {showAppOnboarding && (
-        <OnboardingWizard
-          kind="app"
-          onDone={dismissAppOnboarding}
-          onSkip={dismissAppOnboarding}
-        />
-      )}
+      {showAppOnboarding && <OnboardingWizard kind="app" onDone={dismissAppOnboarding} onSkip={dismissAppOnboarding} />}
 
       <footer className="border-t border-[var(--color-line)] py-4 text-center text-xs text-[var(--color-mute)]">
         BdGEN · usage local
@@ -131,11 +124,7 @@ function DesktopTitleBar({ hideNav = false }) {
 
   return (
     <header className="desktop-titlebar sticky top-0 z-20 border-b border-[var(--color-line)] bg-white/90 backdrop-blur">
-      <div
-        className={`desktop-drag-region desktop-titlebar-content ${
-          isMac ? "desktop-titlebar-content-mac" : ""
-        }`}
-      >
+      <div className={`desktop-drag-region desktop-titlebar-content ${isMac ? "desktop-titlebar-content-mac" : ""}`}>
         <BrandLink compact />
         <div className="desktop-no-drag flex h-full items-center gap-4">
           {!hideNav && <AppNav compact />}
@@ -182,11 +171,7 @@ function BrandLink({ compact = false }) {
         className={compact ? "w-8 h-8 object-contain" : "w-10 h-10 object-contain"}
       />
       <span>BdGEN</span>
-      {!compact && (
-        <span className="text-sm font-normal text-[var(--color-mute)]">
-          générateur de bandes dessinées
-        </span>
-      )}
+      {!compact && <span className="text-sm font-normal text-[var(--color-mute)]">générateur de bandes dessinées</span>}
     </Link>
   );
 }

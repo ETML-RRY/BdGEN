@@ -3,7 +3,7 @@
 This file is the working reference for future operations in this project.
 Update it on every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-06 (19)
+Last updated: 2026-05-07 (1)
 
 ## Update Rule
 
@@ -171,6 +171,13 @@ Lint/format tooling:
 - Avoid changing `.env` unless the user explicitly asks.
 
 ## Change Log
+
+### 2026-05-07 (1)
+
+- `bdgen/web/src/components/OnboardingWizard.jsx`: ajout d'une case a cocher "Ne plus afficher ce guide au lancement". Le wizard transmet maintenant le choix utilisateur a ses handlers de fermeture.
+- `bdgen/web/src/App.jsx`: la fermeture du guide ne persiste plus automatiquement dans `localStorage`; elle masque le wizard pour la session courante, et n'ecrit la cle de dismissal que si la case est cochee.
+- `bdgen/bdgen/server/static/`: frontend reconstruit avec `npm run build` apres le changement du wizard (nouveaux assets `index-WqdfiN0V.js` et `index-pPHqr3Xq.css`).
+- Verification : `npm run lint` OK avec 1 warning preexistant dans `ScriptBrowser.jsx` (`page` inutilise), `npx prettier --check src/App.jsx src/components/OnboardingWizard.jsx` OK, `npm run build` OK hors sandbox apres le `spawn EPERM` esbuild attendu dans le sandbox.
 
 ### 2026-05-06 (19)
 
