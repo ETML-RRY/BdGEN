@@ -1641,7 +1641,7 @@ function Field({ label, hint, children }) {
   );
 }
 
-function ComboBox({ value, options, onChange, placeholder, required = false }) {
+function ComboBox({ value, options, onChange, placeholder, required = false, disabled = false }) {
   // A non-preset value forces manual mode; otherwise the user can opt in
   // by picking "Saisir manuellement…", which we remember locally so the
   // input stays visible even while the value is empty.
@@ -1662,7 +1662,8 @@ function ComboBox({ value, options, onChange, placeholder, required = false }) {
           setUserPickedCustom(false);
           onChange(e.target.value);
         }}
-        required={required && !customMode}
+        required={required && !customMode && !disabled}
+        disabled={disabled}
       >
         <option value="">— Choisir —</option>
         {options.map((opt) => (
@@ -1678,7 +1679,8 @@ function ComboBox({ value, options, onChange, placeholder, required = false }) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          required={required}
+          required={required && !disabled}
+          disabled={disabled}
           autoFocus
         />
       )}
@@ -1900,6 +1902,25 @@ function ObjectPhotoField({ slot, onPick, onClear }) {
 function StyleReferenceCard({ url, onPickImage, config, set }) {
   const [expanded, setExpanded] = useState(false);
   const allowStyleCopy = !!config.allow_style_copy;
+  // When a style reference image is uploaded it carries the overall art-style
+  // and atmosphere on its own — the matching text fields become redundant
+  // (and risk conflicting with the image). Disable them; keep the precise,
+  // descriptive fields (palette, line work, borders, bubbles, character
+  // rendering) enabled because those refine constraints the image alone
+  // cannot pin down (e.g. forcing B&W when the reference is in color).
+  const hasStyleRef = !!url;
+  const STYLE_REF_DISABLED_HINT = "Désactivé : l'image de référence de style ci-contre fixe déjà ce paramètre.";
+  // Required `art_style` must remain non-empty for backend validation. Auto-
+  // fill with a sentinel when the user uploads a style reference image but
+  // left this field blank — it never overrides existing user input.
+  useEffect(() => {
+    if (hasStyleRef && !(config.style.art_style || "").trim()) {
+      set("style.art_style", "Défini par l'image de référence de style.");
+    }
+    // We intentionally fire only on hasStyleRef transitions: re-running on
+    // every art_style change would clobber the user's own edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasStyleRef]);
   return (
     <div className="space-y-4">
     <div className="flex items-start gap-4">
@@ -1923,8 +1944,11 @@ function StyleReferenceCard({ url, onPickImage, config, set }) {
             onChange={(v) => set("style.art_style", v)}
             placeholder="ex. ligne claire, aquarelle douce"
             required
+            disabled={hasStyleRef}
           />
-          <p className="text-xs text-[var(--color-mute)] mt-1">Évitez de citer des artistes ou marques.</p>
+          <p className="text-xs text-[var(--color-mute)] mt-1">
+            {hasStyleRef ? STYLE_REF_DISABLED_HINT : "Évitez de citer des artistes ou marques."}
+          </p>
         </div>
         <button
           type="button"
@@ -1936,6 +1960,13 @@ function StyleReferenceCard({ url, onPickImage, config, set }) {
         </button>
         {expanded && (
           <div className="space-y-3">
+            {hasStyleRef && (
+              <p className="text-xs text-[var(--color-mute)]">
+                Avec une image de référence de style, seuls les champs descriptifs
+                précis (palette, encrage, cadres, bulles, rendu des personnages)
+                restent actifs. Ils complètent l'image, ils ne la remplacent pas.
+              </p>
+            )}
             <Grid cols={3}>
               <Field label="Palette de couleurs">
                 <ComboBox
@@ -1956,7 +1987,11 @@ function StyleReferenceCard({ url, onPickImage, config, set }) {
                   value={config.style.mood || ""}
                   options={STYLE_MOOD_PRESETS}
                   onChange={(v) => set("style.mood", v)}
+                  disabled={hasStyleRef}
                 />
+                {hasStyleRef && (
+                  <p className="text-xs text-[var(--color-mute)] mt-1">{STYLE_REF_DISABLED_HINT}</p>
+                )}
               </Field>
             </Grid>
             <Grid cols={3}>

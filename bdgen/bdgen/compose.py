@@ -11,7 +11,13 @@ from PIL import Image
 from . import secret_store
 from .feedback import FeedbackStore, feedback_block
 from .image_rules import IMAGE_CONSTRAINTS
-from .references import _style_enforcement_block, style_ref_label
+from .references import (
+    LOCATION_PHOTO_REF_LABEL,
+    OBJECT_PHOTO_REF_LABEL,
+    PHOTO_REF_LABEL,
+    _style_enforcement_block,
+    style_ref_label,
+)
 from .models import (
     BackCover,
     BdGenScript,
@@ -345,6 +351,10 @@ def _collect_refs(
                 f"and outfit. Match it EXACTLY in every panel they appear in."
             )
             refs.append((ref_path, label))
+        elif char:
+            photo_path = _existing_photo_path(script, "character", cid)
+            if photo_path:
+                refs.append((photo_path, _photo_fallback_label("character", char.name)))
     for lid in sorted(loc_ids):
         loc = script.location_by_id(lid)
         ref_path = _existing_reference_path(
@@ -356,6 +366,10 @@ def _collect_refs(
                 f"atmosphere and visual elements when this location appears."
             )
             refs.append((ref_path, label))
+        elif loc:
+            photo_path = _existing_photo_path(script, "location", lid)
+            if photo_path:
+                refs.append((photo_path, _photo_fallback_label("location", loc.name)))
     for oid in sorted(obj_ids):
         obj = script.object_by_id(oid)
         ref_path = _existing_reference_path(
@@ -369,6 +383,10 @@ def _collect_refs(
                 f"EXACTLY so it stays recognizable across the album."
             )
             refs.append((ref_path, label))
+        elif obj:
+            photo_path = _existing_photo_path(script, "object", oid)
+            if photo_path:
+                refs.append((photo_path, _photo_fallback_label("object", obj.name)))
 
     return refs
 
@@ -513,7 +531,45 @@ def _build_page_prompt(
 
         """) + _build_refs_section(ref_labels)
 
-    return header + "\n\n".join(panels_text) + footer + "\n\n" + _style_enforcement_block(style)
+    body = header + "\n\n".join(panels_text) + footer + "\n\n" + _style_enforcement_block(style)
+    attribution = _attribution_free_block(script)
+    if attribution:
+        body += "\n\n" + attribution
+    return body
+
+
+def _attribution_free_block(script: BdGenScript) -> str:
+    """Hard rule appended to image prompts when the style-copy bypass is on.
+
+    The bypass lifts the strict non-copy rule so the model can emulate a known
+    visual identity — but the *output image* must still not name or label its
+    source. Any author / franchise / brand reference the user typed into the
+    style fields is to be read as a STYLISTIC cue, never reproduced verbatim
+    in the rendered image.
+    """
+    if not bool(getattr(script, "allow_style_copy", False)):
+        return ""
+    return dedent("""\
+        ATTRIBUTION-FREE OUTPUT — HARD RULE:
+        If the GLOBAL STYLE fields above (art style, color palette, line work,
+        character rendering, stylization level, etc.) mention by name any
+        real-world author, illustrator, studio, publisher, franchise, series,
+        copyrighted character, mascot, brand or trademark, you MUST treat
+        those names as PURE STYLISTIC DESCRIPTORS — internal cues telling you
+        WHAT visual qualities to emulate (line quality, palette, proportions,
+        costumes, decorative motifs, panel rhythm).
+        - Emulate the visual qualities those names evoke with high fidelity,
+          so the output is recognisably in that visual family.
+        - Do NOT render any of those names anywhere in the image: no signature,
+          no credit line, no watermark, no logo, no series title, no publisher
+          mark, no trademark, no caption naming a known author or work.
+        - Do NOT introduce the named author's / franchise's signature
+          characters, mascots, sidekicks or props as new figures in the scene
+          — the project's own character sheets are the only authoritative
+          source for WHO appears.
+        - The rendered image must read as an original work that happens to
+          share that visual style. Emulate the LOOK, never the LABEL.
+        """)
 
 
 def _build_refs_section(ref_labels: list[str] | None) -> str:
@@ -604,6 +660,10 @@ def _collect_album_refs(
                 f"appear on the {kind}."
             )
             refs.append((ref_path, label))
+            continue
+        photo_path = _existing_photo_path(script, "character", c.id)
+        if photo_path:
+            refs.append((photo_path, _photo_fallback_label("character", c.name)))
     for o in script.objects:
         ref_path = _existing_reference_path(script, "objects", o.id, o.reference_image)
         if ref_path:
@@ -612,6 +672,10 @@ def _collect_album_refs(
                 f"markings and silhouette EXACTLY if it appears on the {kind}."
             )
             refs.append((ref_path, label))
+            continue
+        photo_path = _existing_photo_path(script, "object", o.id)
+        if photo_path:
+            refs.append((photo_path, _photo_fallback_label("object", o.name)))
     return refs
 
 
@@ -629,6 +693,80 @@ def _existing_reference_path(
     if fallback.exists() and fallback.stat().st_size > 0:
         return fallback
     return None
+
+
+_PHOTO_DIR_BY_KIND: dict[str, str] = {
+    "character": "character_photos",
+    "location": "location_photos",
+    "object": "object_photos",
+}
+
+
+def _existing_photo_path(
+    script: BdGenScript,
+    kind: str,
+    entity_id: str,
+) -> Path | None:
+    """Locate a user-supplied photo for an entity that has no stylized ref yet.
+
+    Mirrors the per-kind on-disk layout defined in service.photos: photos live
+    under ``<project_dir>/<character|location|object>_photos/<id>.png``. When a
+    photo exists for an entity but its stylized reference image hasn't been
+    generated yet, callers fall back to the photo so the user's likeness
+    constraint remains binding on every image-generation call until the
+    stylized reference replaces it.
+    """
+    sub = _PHOTO_DIR_BY_KIND.get(kind)
+    if sub is None:
+        return None
+    p = script.project_dir() / sub / f"{entity_id}.png"
+    if p.exists() and p.stat().st_size > 0:
+        return p
+    return None
+
+
+def _photo_fallback_label(kind: str, entity_name: str) -> str:
+    """Build the input-image label used when a user photo replaces a missing ref.
+
+    The label tells the model the stylized reference sheet is not ready yet,
+    so this user-supplied photo IS the canonical, non-negotiable likeness
+    reference for the entity. The project's art style still wins over any
+    photographic quality of the image — only the likeness is preserved.
+    """
+    if kind == "character":
+        return (
+            f'USER-SUPPLIED PHOTO for character "{entity_name}" — NO stylized '
+            f"reference sheet exists yet for this character, so this photo IS "
+            f"the canonical, non-negotiable likeness reference. Treat it as "
+            f"mandatory: every appearance of this character in the output "
+            f"MUST visibly resemble the person in this photo (face shape, "
+            f"features, build, distinguishing traits). The project's art "
+            f"style still overrides the photographic look — render in the "
+            f"defined comic-book style, not in photographic realism.\n\n"
+            + PHOTO_REF_LABEL
+        )
+    if kind == "location":
+        return (
+            f'USER-SUPPLIED PHOTO for location "{entity_name}" — NO stylized '
+            f"reference sheet exists yet for this location, so this photo IS "
+            f"the canonical, non-negotiable setting reference. Every "
+            f"appearance of this location MUST visibly resemble the place in "
+            f"this photo (architecture, layout, landmarks). The project's "
+            f"art style still overrides the photographic look.\n\n"
+            + LOCATION_PHOTO_REF_LABEL
+        )
+    if kind == "object":
+        return (
+            f'USER-SUPPLIED PHOTO for object "{entity_name}" — NO stylized '
+            f"reference sheet exists yet for this object, so this photo IS "
+            f"the canonical, non-negotiable shape reference. Every "
+            f"appearance of this object MUST visibly resemble the item in "
+            f"this photo (shape, proportions, key markings, silhouette). "
+            f"The project's art style still overrides the photographic "
+            f"look.\n\n"
+            + OBJECT_PHOTO_REF_LABEL
+        )
+    return PHOTO_REF_LABEL
 
 
 def _call_image(
@@ -723,6 +861,9 @@ def _build_cover_prompt(
         - Typography integrated harmoniously with the illustration style
 
         """) + _build_refs_section(ref_labels) + "\n\n" + _style_enforcement_block(style)
+    attribution = _attribution_free_block(script)
+    if attribution:
+        base += "\n\n" + attribution
     return base
 
 
@@ -829,6 +970,9 @@ def _build_back_prompt(
           no fake ISBN digits, no fake publisher name, no placeholder phrases.
 
         """) + _build_refs_section(ref_labels) + "\n\n" + _style_enforcement_block(style)
+    attribution = _attribution_free_block(script)
+    if attribution:
+        base += "\n\n" + attribution
     return base
 
 

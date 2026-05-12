@@ -142,9 +142,19 @@ SETUP_SYSTEM_PROMPT = dedent("""\
     - Write narrative content (location/object names and descriptions, blurb) in the
       language specified by `metadata.language`.
     - Write all `reference_prompt` fields in English regardless of `metadata.language`.
-    - NEVER include the proper name of any real-world artist, illustrator, studio,
-      franchise or copyrighted character in any `reference_prompt`. Use generic
-      stylistic descriptors instead.
+    - DESCRIBE, NEVER NAME — in EVERY field you produce (reference_prompt,
+      scene_description, synopsis_blurb, tagline, title_placement, layout_notes,
+      character/location/object name and description), NEVER use the proper name
+      of any real-world artist, illustrator, studio, publisher, franchise, series,
+      brand, mascot or copyrighted character. If the input brief invokes such a
+      name as a stylistic inspiration (e.g. "in the style of <name>",
+      "<franchise>-like"), treat it as a CUE ONLY: translate it into precise
+      visual descriptors (line quality, palette, proportions, costumes,
+      decorative motifs, panel rhythm, color blocking technique) and use those
+      descriptors instead. Emulate the LOOK, never the LABEL — even when the
+      user has lifted the copyright safeguard, the generated content must still
+      describe its inspiration in pure visual terms rather than naming the
+      source.
     - Honor the AUTHORING RULES at the end of the user message regarding inventing
       additional characters, locations or objects.
     - Plan characters, locations and objects for the full story arc, not just for the
@@ -201,6 +211,14 @@ PAGE_SYSTEM_PROMPT = dedent("""\
     - Vary panel sizes and camera shots for visual rhythm.
     - Keep dialog lines short — they have to fit in speech bubbles.
     - Ensure narrative continuity: don't repeat or contradict prior pages.
+    - DESCRIBE, NEVER NAME — NEVER reference, in `scene_description`, `narration`,
+      `dialogs`, `sound_effects` or any other field, the proper name of a
+      real-world artist, illustrator, studio, publisher, franchise, series, brand,
+      mascot or copyrighted character. If the brief invokes such a name as a
+      stylistic inspiration, translate it into precise visual descriptors
+      (silhouette, costume, palette, motif, decor cues) and use those descriptors
+      instead. Emulate the LOOK, never the LABEL — even when the user has lifted
+      the copyright safeguard.
     - Output ONLY the JSON object for this page. No markdown fences, no commentary.
     """)
 
@@ -242,10 +260,11 @@ CHARACTER_REFINE_SYSTEM_PROMPT = dedent("""\
     You are revising a single character record for a comic book project.
 
     The user message contains a JSON wrapper with `metadata`, `style`,
-    `current_character`, and `user_feedback`. Treat it as INPUT CONTEXT only.
-    Apply the feedback to `current_character` and return the UPDATED character
-    record. You may rewrite `name`, `physical_description`, `outfit`, and
-    `reference_prompt` as needed; the `id` MUST stay unchanged.
+    `current_character`, `has_user_photo`, and `user_feedback`. Treat it as
+    INPUT CONTEXT only. Apply the feedback to `current_character` and return
+    the UPDATED character record. You may rewrite `name`,
+    `physical_description`, `outfit`, and `reference_prompt` as needed; the
+    `id` MUST stay unchanged.
 
     OUTPUT SHAPE — your response is a flat JSON object with EXACTLY these
     top-level keys, and nothing else:
@@ -271,7 +290,26 @@ CHARACTER_REFINE_SYSTEM_PROMPT = dedent("""\
     - Do NOT include any art style, color palette, line work, rendering technique,
       or stylization instructions in `reference_prompt` — visual style is injected
       separately at image-generation time.
-    - Never name a real-world artist, studio, franchise or copyrighted character.
+    - USER-PHOTO ANCHOR — when `has_user_photo` is true, the user has uploaded a
+      reference photograph of this character. That photo is the AUTHORITATIVE,
+      NON-OVERRIDABLE source of the character's physical likeness. You MUST NOT
+      alter, in `physical_description` or in any other field you produce, the
+      traits a photograph encodes: face shape, head proportions, eye spacing
+      and shape, nose, jawline, age range, build, hair type and silhouette,
+      skin tone, ethnicity and distinguishing features (glasses, beard,
+      freckles, moles, scars, dimples, piercings). You MAY refine costume,
+      accessories, color choices, personality, narrative role and any non-
+      photographic aspect. If `user_feedback` explicitly asks for a change
+      that would contradict the photo (e.g. "make them older", "change the
+      face", "different ethnicity"), IGNORE that specific part of the
+      feedback and keep the photo-anchored traits exactly as they are — the
+      user-supplied photo always wins over conflicting text feedback.
+    - DESCRIBE, NEVER NAME — never reference a real-world artist, illustrator,
+      studio, publisher, franchise, series, brand, mascot or copyrighted character
+      in any field. If the feedback invokes such a name, translate it into precise
+      visual descriptors (silhouette, costume, palette, motif) and use those
+      descriptors instead. This rule applies even when the user has lifted the
+      copyright safeguard — emulate the LOOK, never the LABEL.
     - Output ONLY the JSON object. No markdown fences, no commentary.
     """)
 
@@ -280,9 +318,9 @@ LOCATION_REFINE_SYSTEM_PROMPT = dedent("""\
     You are revising a single location record for a comic book project.
 
     The user message contains a JSON wrapper with `metadata`, `style`,
-    `current_location`, and `user_feedback`. Treat it as INPUT CONTEXT only.
-    Apply the feedback to `current_location` and return the UPDATED location
-    record. The `id` MUST stay unchanged.
+    `current_location`, `has_user_photo`, and `user_feedback`. Treat it as
+    INPUT CONTEXT only. Apply the feedback to `current_location` and return
+    the UPDATED location record. The `id` MUST stay unchanged.
 
     OUTPUT SHAPE — your response is a flat JSON object with EXACTLY these
     top-level keys, and nothing else:
@@ -304,7 +342,26 @@ LOCATION_REFINE_SYSTEM_PROMPT = dedent("""\
     - Do NOT include any art style, color palette, line work, rendering technique,
       or stylization instructions in `reference_prompt` — visual style is injected
       separately at image-generation time.
-    - Never name a real-world artist, studio, franchise or copyrighted character.
+    - USER-PHOTO ANCHOR — when `has_user_photo` is true, the user has uploaded a
+      reference photograph of this location. That photo is the AUTHORITATIVE,
+      NON-OVERRIDABLE source of the location's appearance. You MUST NOT alter,
+      in `description` or in any other field you produce, the traits a
+      photograph encodes: overall spatial layout, perspective, recognizable
+      landmarks (buildings, walls, doors, windows, terrain features), dominant
+      materials and characteristic structure. You MAY refine mood, lighting,
+      time of day, weather and any narrative aspect. If `user_feedback`
+      explicitly asks for a change that would contradict the photo (e.g.
+      "different architecture", "move the building elsewhere"), IGNORE that
+      specific part of the feedback and keep the photo-anchored traits
+      unchanged — the user-supplied photo always wins over conflicting text
+      feedback.
+    - DESCRIBE, NEVER NAME — never reference a real-world artist, illustrator,
+      studio, publisher, franchise, series, brand, landmark by trademark name,
+      or copyrighted property in any field. If the feedback invokes such a name,
+      translate it into precise visual descriptors (architecture, materials,
+      palette, atmosphere) and use those descriptors instead. This rule applies
+      even when the user has lifted the copyright safeguard — emulate the LOOK,
+      never the LABEL.
     - Output ONLY the JSON object. No markdown fences, no commentary.
     """)
 
@@ -314,9 +371,9 @@ OBJECT_REFINE_SYSTEM_PROMPT = dedent("""\
     book project.
 
     The user message contains a JSON wrapper with `metadata`, `style`,
-    `current_object`, and `user_feedback`. Treat it as INPUT CONTEXT only.
-    Apply the feedback to `current_object` and return the UPDATED object
-    record. The `id` MUST stay unchanged.
+    `current_object`, `has_user_photo`, and `user_feedback`. Treat it as
+    INPUT CONTEXT only. Apply the feedback to `current_object` and return
+    the UPDATED object record. The `id` MUST stay unchanged.
 
     OUTPUT SHAPE — your response is a flat JSON object with EXACTLY these
     top-level keys, and nothing else:
@@ -338,7 +395,24 @@ OBJECT_REFINE_SYSTEM_PROMPT = dedent("""\
     - Do NOT include any art style, color palette, line work, rendering technique,
       or stylization instructions in `reference_prompt` — visual style is injected
       separately at image-generation time.
-    - Never name a real-world artist, studio, franchise or copyrighted character.
+    - USER-PHOTO ANCHOR — when `has_user_photo` is true, the user has uploaded a
+      reference photograph of this object. That photo is the AUTHORITATIVE,
+      NON-OVERRIDABLE source of the object's appearance. You MUST NOT alter, in
+      `description` or in any other field you produce, the traits a photograph
+      encodes: overall shape, proportions, silhouette, distinctive structural
+      details, key markings and any feature that lets the reader recognise it
+      as the SAME object. You MAY refine narrative role, recurrence across the
+      story and any non-photographic aspect. If `user_feedback` explicitly
+      asks for a change that would contradict the photo (e.g. "different
+      shape", "round it off", "remove the logo"), IGNORE that specific part
+      of the feedback and keep the photo-anchored traits unchanged — the
+      user-supplied photo always wins over conflicting text feedback.
+    - DESCRIBE, NEVER NAME — never reference a real-world artist, illustrator,
+      studio, publisher, franchise, series, brand, mascot or copyrighted character
+      in any field. If the feedback invokes such a name, translate it into precise
+      visual descriptors (shape, markings, palette, materials) and use those
+      descriptors instead. This rule applies even when the user has lifted the
+      copyright safeguard — emulate the LOOK, never the LABEL.
     - Output ONLY the JSON object. No markdown fences, no commentary.
     """)
 
@@ -348,7 +422,9 @@ COVER_REFINE_SYSTEM_PROMPT = dedent("""\
     book script.
 
     The user has supplied a feedback note. Apply it to the cover record below
-    and return the updated `Cover` object as JSON.
+    and return the updated `Cover` object as JSON. The user message includes
+    a `photo_pinned_entities` map listing the character and object ids for
+    which the user has uploaded reference photographs.
 
     Fields:
     - `scene_description`: evocative illustration concept for the front cover
@@ -358,7 +434,24 @@ COVER_REFINE_SYSTEM_PROMPT = dedent("""\
 
     HARD CONSTRAINTS:
     - Write content in the language specified by `metadata.language`.
-    - Never name a real-world artist, studio, franchise or copyrighted character.
+    - USER-PHOTO ANCHOR — for every character id in
+      `photo_pinned_entities.characters` and every object id in
+      `photo_pinned_entities.objects`, the user has supplied an authoritative
+      reference photograph. Your `scene_description` MUST stay compatible with
+      those photos: do NOT describe physical traits (face, build, age, hair,
+      structure, shape, markings) that would contradict the photographic
+      likeness, and do NOT propose changes that would override what the photo
+      anchors. You may freely re-stage composition, pose, mood, lighting and
+      framing. If `user_feedback` explicitly asks for a change that would
+      contradict a photo-pinned entity, IGNORE that specific part and keep
+      the photo-anchored traits unchanged — the user-supplied photo always
+      wins over conflicting text feedback.
+    - DESCRIBE, NEVER NAME — never reference a real-world artist, illustrator,
+      studio, publisher, franchise, series, brand, mascot or copyrighted character
+      in any field. If the feedback invokes such a name, translate it into precise
+      visual descriptors and use those descriptors instead. This rule applies even
+      when the user has lifted the copyright safeguard — emulate the LOOK, never
+      the LABEL.
     - Output ONLY the JSON object. No markdown fences, no commentary.
     """)
 
@@ -368,7 +461,9 @@ BACK_COVER_REFINE_SYSTEM_PROMPT = dedent("""\
     book script.
 
     The user has supplied a feedback note. Apply it to the back cover record
-    below and return the updated `BackCover` object as JSON.
+    below and return the updated `BackCover` object as JSON. The user
+    message includes a `photo_pinned_entities` map listing the character and
+    object ids for which the user has uploaded reference photographs.
 
     Fields:
     - `synopsis_blurb`: 3-5 sentence marketing-tone presentation of the story
@@ -379,7 +474,22 @@ BACK_COVER_REFINE_SYSTEM_PROMPT = dedent("""\
 
     HARD CONSTRAINTS:
     - Write content in the language specified by `metadata.language`.
-    - Never name a real-world artist, studio, franchise or copyrighted character.
+    - USER-PHOTO ANCHOR — for every character/object id listed in
+      `photo_pinned_entities`, the user has supplied an authoritative
+      reference photograph. Your `scene_description` and `synopsis_blurb`
+      MUST stay compatible with those photos: do NOT describe physical traits
+      that would contradict the photographic likeness, and do NOT propose
+      changes that would override what the photo anchors. If `user_feedback`
+      explicitly asks for a change that would contradict a photo-pinned
+      entity, IGNORE that specific part and keep the photo-anchored traits
+      unchanged — the user-supplied photo always wins over conflicting text
+      feedback.
+    - DESCRIBE, NEVER NAME — never reference a real-world artist, illustrator,
+      studio, publisher, franchise, series, brand, mascot or copyrighted character
+      in any field. If the feedback invokes such a name, translate it into precise
+      visual descriptors and use those descriptors instead. This rule applies even
+      when the user has lifted the copyright safeguard — emulate the LOOK, never
+      the LABEL.
     - Output ONLY the JSON object. No markdown fences, no commentary.
     """)
 
@@ -399,6 +509,27 @@ PAGE_REFINE_SYSTEM_PROMPT = dedent("""\
     - The page's `layout` description MUST exactly match the number of panels.
     - Write narrative content in the language specified by `metadata.language`.
     - Keep dialog lines short.
+    - USER-PHOTO ANCHOR — the user message includes a `photo_pinned_entities`
+      map listing the character / location / object ids for which the user has
+      uploaded reference photographs. Those photographs are AUTHORITATIVE for
+      the entity's physical likeness. In `scene_description`, `narration` and
+      `dialogs`, NEVER describe physical traits (face, build, age, hair,
+      structure for characters; architecture, layout for locations; shape,
+      markings, silhouette for objects) that would contradict what the photo
+      anchors, and NEVER propose narrative actions that would visibly alter
+      photo-anchored traits ("he ages 30 years", "the building collapses
+      into a different shape"). You MAY freely change pose, action, mood,
+      lighting, framing and clothing accessories. If `user_feedback`
+      explicitly asks for a change that would contradict a photo-pinned
+      entity, IGNORE that specific part of the feedback and keep the
+      photo-anchored traits unchanged — the user-supplied photo always wins
+      over conflicting text feedback.
+    - DESCRIBE, NEVER NAME — never reference a real-world artist, illustrator,
+      studio, publisher, franchise, series, brand, mascot or copyrighted character
+      in any panel content. If the feedback invokes such a name, translate it
+      into precise visual descriptors (silhouette, costume, palette, motif) and
+      use those descriptors instead. This rule applies even when the user has
+      lifted the copyright safeguard — emulate the LOOK, never the LABEL.
     - Output ONLY the JSON object for this page. No markdown fences, no commentary.
     """)
 
@@ -1120,6 +1251,48 @@ def _try_unwrap_echoed_input(json_text: str, output_type: type[BaseModel]) -> Ba
 # --- Targeted regeneration (single character / location / page) ---
 
 
+_USER_PHOTO_DIR_BY_KIND: dict[str, str] = {
+    "character": "character_photos",
+    "location": "location_photos",
+    "object": "object_photos",
+}
+
+
+def _user_photo_exists(proj_dir: Path | None, kind: str, entity_id: str) -> bool:
+    """True iff the user uploaded a reference photo for that entity.
+
+    Mirrors service.photos on-disk layout (``<kind>_photos/<id>.png``). Used
+    by refines to know whether physical descriptors are pinned by a user
+    photo: when one exists, the LLM must not rewrite traits the photo
+    encodes — the photo always wins over text feedback.
+    """
+    if proj_dir is None:
+        return False
+    sub = _USER_PHOTO_DIR_BY_KIND.get(kind)
+    if sub is None:
+        return False
+    p = proj_dir / sub / f"{entity_id}.png"
+    return p.exists() and p.stat().st_size > 0
+
+
+def _photo_pinned_entities(
+    proj_dir: Path | None,
+    bd_script: BdGenScript,
+) -> dict[str, list[str]]:
+    """Return ``{"characters": [ids], "locations": [ids], "objects": [ids]}``
+    listing every entity for which the user has supplied a reference photo.
+    Refine prompts use this so the LLM knows which entities the user has
+    anchored visually and must not contradict in any field it rewrites.
+    """
+    if proj_dir is None:
+        return {"characters": [], "locations": [], "objects": []}
+    return {
+        "characters": [c.id for c in bd_script.characters if _user_photo_exists(proj_dir, "character", c.id)],
+        "locations": [l.id for l in bd_script.locations if _user_photo_exists(proj_dir, "location", l.id)],
+        "objects": [o.id for o in bd_script.objects if _user_photo_exists(proj_dir, "object", o.id)],
+    }
+
+
 def regenerate_character(
     bd_script: BdGenScript,
     character_id: str,
@@ -1146,6 +1319,7 @@ def regenerate_character(
             "metadata": bd_script.metadata.model_dump(mode="json"),
             "style": bd_script.style.model_dump(mode="json"),
             "current_character": char.model_dump(mode="json", exclude={"reference_image"}),
+            "has_user_photo": _user_photo_exists(stats_project_dir, "character", character_id),
             "user_feedback": feedback_text,
         },
         ensure_ascii=False,
@@ -1209,6 +1383,7 @@ def regenerate_location(
             "metadata": bd_script.metadata.model_dump(mode="json"),
             "style": bd_script.style.model_dump(mode="json"),
             "current_location": loc.model_dump(mode="json", exclude={"reference_image"}),
+            "has_user_photo": _user_photo_exists(stats_project_dir, "location", location_id),
             "user_feedback": feedback_text,
         },
         ensure_ascii=False,
@@ -1271,6 +1446,7 @@ def regenerate_object(
             "metadata": bd_script.metadata.model_dump(mode="json"),
             "style": bd_script.style.model_dump(mode="json"),
             "current_object": obj.model_dump(mode="json", exclude={"reference_image"}),
+            "has_user_photo": _user_photo_exists(stats_project_dir, "object", object_id),
             "user_feedback": feedback_text,
         },
         ensure_ascii=False,
@@ -1359,6 +1535,7 @@ def regenerate_page(
             "prior_pages": prior,
             "later_pages": later,
             "current_page": bd_script.pages[idx].model_dump(mode="json"),
+            "photo_pinned_entities": _photo_pinned_entities(stats_project_dir, bd_script),
             "user_feedback": feedback_text,
             "instruction": (
                 f"Rewrite ONLY page {page_number} (keep page_number={page_number}). "
@@ -1426,6 +1603,7 @@ def regenerate_cover(
             "metadata": bd_script.metadata.model_dump(mode="json"),
             "style": bd_script.style.model_dump(mode="json"),
             "current_cover": bd_script.cover.model_dump(mode="json"),
+            "photo_pinned_entities": _photo_pinned_entities(stats_project_dir, bd_script),
             "user_feedback": feedback_text,
         },
         ensure_ascii=False,
@@ -1482,6 +1660,7 @@ def regenerate_back_cover(
             "metadata": bd_script.metadata.model_dump(mode="json"),
             "style": bd_script.style.model_dump(mode="json"),
             "current_back_cover": bd_script.back_cover.model_dump(mode="json"),
+            "photo_pinned_entities": _photo_pinned_entities(stats_project_dir, bd_script),
             "user_feedback": feedback_text,
         },
         ensure_ascii=False,
