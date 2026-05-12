@@ -53,7 +53,7 @@ def cmd_references(args: argparse.Namespace) -> None:
     opts = _resolve_options(bd_script, args.input)
     feedback_store = FeedbackStore.load_or_empty(feedback_path_for(args.script))
     references_module.generate_references(
-        bd_script, opts.references, opts.image_model,
+        bd_script, opts.references, opts.reference_image_model(),
         script_path=args.script,
         feedback_store=feedback_store,
         force=args.force,
@@ -102,7 +102,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     )
     bd_script.save(opts.script_path)
     references_module.generate_references(
-        bd_script, opts.references, opts.image_model,
+        bd_script, opts.references, opts.reference_image_model(),
         script_path=opts.script_path,
         feedback_store=feedback_store,
         reporter=reporter,

@@ -125,8 +125,9 @@ def run_step_references(
                 if p.exists():
                     p.unlink()
     if quality_override:
-        opts.image_model.quality = quality_override
-    quality_used = opts.image_model.quality
+        opts.reference_image_model().quality = quality_override
+    reference_image_model = opts.reference_image_model()
+    quality_used = reference_image_model.quality
 
     target_paths: dict[str, Path] = {}
     for c in bd_script.characters:
@@ -146,7 +147,7 @@ def run_step_references(
         references_module.generate_references(
             bd_script,
             opts.references,
-            opts.image_model,
+            reference_image_model,
             script_path=script_path,
             feedback_store=feedback_store,
             reporter=reporter,

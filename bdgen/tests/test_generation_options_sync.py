@@ -7,6 +7,7 @@ from typing import Callable
 from bdgen.models import (
     BdGenInput,
     BdGenScript,
+    ImageModelConfig,
     Metadata,
     Story,
     Structure,
@@ -83,3 +84,55 @@ def test_legacy_xai_image_config_is_coerced_to_openai(tmp_path: Path) -> None:
     persisted_config = load_config("demo", output_root)
     assert persisted_config.generation_options.image_model.provider == "openai"
     assert persisted_config.generation_options.image_model.model == "gpt-image-2"
+
+
+def test_compose_model_change_keeps_dedicated_references_fresh(
+    tmp_path: Path,
+    make_png: Callable[[Path], None],
+) -> None:
+    output_root = tmp_path
+    project_root = output_root / "demo"
+    initial = _config(output_root, "openai", "gpt-image-2")
+    initial.generation_options.references.image_model = ImageModelConfig(
+        provider="openai", model="gpt-image-1", quality="medium"
+    )
+    save_config(initial, output_root)
+    make_minimal_script(project_root).save(project_root / "bdgen-script.json")
+    make_png(project_root / "references" / "characters" / "hero.png")
+    make_png(project_root / "pages" / "page_01.png")
+
+    updated = _config(output_root, "openai", "chatgpt-image-latest")
+    updated.generation_options.references.image_model = ImageModelConfig(
+        provider="openai", model="gpt-image-1", quality="medium"
+    )
+    detect_and_mark_stale("demo", updated, output_root)
+
+    stale = read_stale_index(project_root)
+    assert stale["references"] == []
+    assert stale["compose"] == ["page_1"]
+
+
+def test_dedicated_reference_model_change_only_marks_references_stale(
+    tmp_path: Path,
+    make_png: Callable[[Path], None],
+) -> None:
+    output_root = tmp_path
+    project_root = output_root / "demo"
+    initial = _config(output_root, "openai", "gpt-image-2")
+    initial.generation_options.references.image_model = ImageModelConfig(
+        provider="openai", model="gpt-image-1", quality="medium"
+    )
+    save_config(initial, output_root)
+    make_minimal_script(project_root).save(project_root / "bdgen-script.json")
+    make_png(project_root / "references" / "characters" / "hero.png")
+    make_png(project_root / "pages" / "page_01.png")
+
+    updated = _config(output_root, "openai", "gpt-image-2")
+    updated.generation_options.references.image_model = ImageModelConfig(
+        provider="openai", model="chatgpt-image-latest", quality="medium"
+    )
+    detect_and_mark_stale("demo", updated, output_root)
+
+    stale = read_stale_index(project_root)
+    assert stale["references"] == ["hero"]
+    assert stale["compose"] == []

@@ -10,10 +10,17 @@ from .constants import DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_PROVIDER
 
 def _coerce_openai_image_model(image_model) -> None:
     """Images are OpenAI-only; xAI remains available for script generation."""
+    if image_model is None:
+        return
     if image_model.provider == DEFAULT_IMAGE_PROVIDER:
         return
     image_model.provider = DEFAULT_IMAGE_PROVIDER
     image_model.model = DEFAULT_IMAGE_MODEL
+
+
+def _coerce_generation_image_models(options) -> None:
+    _coerce_openai_image_model(options.image_model)
+    _coerce_openai_image_model(options.references.image_model)
 
 
 def update_reference_prompts_for_style_change(
@@ -83,5 +90,5 @@ def _resolve_options(bd_script: BdGenScript, name: str, output_root: Path | None
             opts = bd_script.generation_options
         else:
             raise
-    _coerce_openai_image_model(opts.image_model)
+    _coerce_generation_image_models(opts)
     return opts

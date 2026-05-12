@@ -176,6 +176,15 @@ Lint/format:
 
 ## Recent Change Log
 
+### 2026-05-12
+
+- `bdgen/bdgen/models.py`: added optional `generation_options.references.image_model` plus `GenerationOptions.reference_image_model()` fallback to the main image model.
+- `bdgen/bdgen/cli.py`, `bdgen/bdgen/wizard.py`, `bdgen/bdgen/service/pipeline.py`: references generation now uses the dedicated references image model when configured; compose still uses `generation_options.image_model`.
+- `bdgen/bdgen/service/_helpers.py`, `config.py`, `stale_detection.py`: coerce both image model configs to OpenAI and mark stale references/compose images independently when their respective model changes.
+- `bdgen/web/src/components/ProjectForm.jsx`: added a form toggle and fields for a dedicated references image model and quality.
+- `bdgen/bdgen/server/static/`: rebuilt after the frontend change.
+- Verification: `uv run pytest tests/test_generation_options_sync.py` OK; frontend lint OK; targeted Prettier OK for `ProjectForm.jsx`; `npm run build` OK outside sandbox after the known Windows/esbuild permission issue.
+
 ### 2026-05-07 (4)
 
 - `bdgen/web/src/components/projectFormPresets.js`: new file with preset lists for genre, tone, setting, target audience, and the seven style fields used by the project form.

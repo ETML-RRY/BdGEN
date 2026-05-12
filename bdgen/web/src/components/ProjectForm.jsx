@@ -68,6 +68,7 @@ export const DEFAULT_CONFIG = {
     },
     references: {
       generate: true,
+      image_model: null,
       character_views: ["face_closeup", "full_body_front", "expressions_sheet"],
       location_view: "establishing_shot",
       use_as_input_for_panels: true,
@@ -181,6 +182,12 @@ function normalize(cfg) {
   }
   if (!out.generation_options.references) {
     out.generation_options.references = structuredClone(DEFAULT_CONFIG.generation_options.references);
+  }
+  if (
+    out.generation_options.references.image_model &&
+    out.generation_options.references.image_model.provider !== "openai"
+  ) {
+    out.generation_options.references.image_model = structuredClone(DEFAULT_CONFIG.generation_options.image_model);
   }
   if (!out.generation_options.upscale) {
     out.generation_options.upscale = structuredClone(DEFAULT_CONFIG.generation_options.upscale);
@@ -346,6 +353,26 @@ export default function ProjectForm({
       const modelConfig = next.generation_options[kind];
       modelConfig.provider = provider;
       modelConfig.model = optionsByProvider[provider]?.[0]?.value || "";
+      return next;
+    });
+  }
+
+  function setReferenceModelProvider(provider) {
+    setConfig((c) => {
+      const next = structuredClone(c);
+      const modelConfig = next.generation_options.references.image_model;
+      modelConfig.provider = provider;
+      modelConfig.model = IMAGE_MODEL_OPTIONS[provider]?.[0]?.value || "";
+      return next;
+    });
+  }
+
+  function setReferenceImageModelEnabled(enabled) {
+    setConfig((c) => {
+      const next = structuredClone(c);
+      next.generation_options.references.image_model = enabled
+        ? structuredClone(next.generation_options.references.image_model || next.generation_options.image_model)
+        : null;
       return next;
     });
   }
@@ -1350,10 +1377,7 @@ export default function ProjectForm({
             onChange={(v) => set("structure.include_back_cover", v)}
           />
         </Grid>
-        <Field
-          label="Format de page"
-          hint="Détermine le ratio de la planche et le gabarit imposé au modèle d'image."
-        >
+        <Field label="Format de page" hint="Détermine le ratio de la planche et le gabarit imposé au modèle d'image.">
           <select
             className="select"
             value={config.structure.page_format}
@@ -1424,6 +1448,45 @@ export default function ProjectForm({
               <option value="high">high</option>
             </select>
           </Field>
+          <div className="md:col-span-2">
+            <Toggle
+              label="Utiliser un modele dedie pour les references"
+              value={!!config.generation_options.references.image_model}
+              onChange={setReferenceImageModelEnabled}
+            />
+          </div>
+          {config.generation_options.references.image_model && (
+            <>
+              <Field label="References - fournisseur">
+                <select
+                  className="select"
+                  value={config.generation_options.references.image_model.provider}
+                  onChange={(e) => setReferenceModelProvider(e.target.value)}
+                >
+                  <option value="openai">OpenAI</option>
+                </select>
+              </Field>
+              <Field label="References - modele">
+                <ModelSelector
+                  provider={config.generation_options.references.image_model.provider}
+                  model={config.generation_options.references.image_model.model}
+                  optionsByProvider={IMAGE_MODEL_OPTIONS}
+                  onChange={(value) => set("generation_options.references.image_model.model", value)}
+                />
+              </Field>
+              <Field label="Qualite references">
+                <select
+                  className="select"
+                  value={config.generation_options.references.image_model.quality}
+                  onChange={(e) => set("generation_options.references.image_model.quality", e.target.value)}
+                >
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high</option>
+                </select>
+              </Field>
+            </>
+          )}
           <Field label="Format de sortie">
             <select
               className="select"
@@ -1923,141 +1986,136 @@ function StyleReferenceCard({ url, onPickImage, config, set }) {
   }, [hasStyleRef]);
   return (
     <div className="space-y-4">
-    <div className="flex items-start gap-4">
-      <div
-        className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0 cursor-pointer"
-        onClick={onPickImage}
-        title={url ? "Changer l'image de style" : "Choisir une image de style"}
-      >
-        {url ? (
-          <img src={url} alt="Référence de style" className="w-full h-full object-cover" />
-        ) : (
-          <span className="text-center px-1">Aucune image</span>
-        )}
-      </div>
-      <div className="flex-1 min-w-0 space-y-3">
-        <div>
-          <label className="label">Style artistique</label>
-          <ComboBox
-            value={config.style.art_style}
-            options={STYLE_ART_STYLE_PRESETS}
-            onChange={(v) => set("style.art_style", v)}
-            placeholder="ex. ligne claire, aquarelle douce"
-            required
-            disabled={hasStyleRef}
-          />
-          <p className="text-xs text-[var(--color-mute)] mt-1">
-            {hasStyleRef ? STYLE_REF_DISABLED_HINT : "Évitez de citer des artistes ou marques."}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)] inline-flex items-center gap-1 transition-colors"
-          onClick={() => setExpanded((v) => !v)}
+      <div className="flex items-start gap-4">
+        <div
+          className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0 cursor-pointer"
+          onClick={onPickImage}
+          title={url ? "Changer l'image de style" : "Choisir une image de style"}
         >
-          <FaChevronDown aria-hidden className={"transition-transform " + (expanded ? "rotate-180" : "")} />
-          {expanded ? "Masquer les détails" : "Détails du style"}
-        </button>
-        {expanded && (
-          <div className="space-y-3">
-            {hasStyleRef && (
-              <p className="text-xs text-[var(--color-mute)]">
-                Avec une image de référence de style, seuls les champs descriptifs
-                précis (palette, encrage, cadres, bulles, rendu des personnages)
-                restent actifs. Ils complètent l'image, ils ne la remplacent pas.
-              </p>
-            )}
-            <Grid cols={3}>
-              <Field label="Palette de couleurs">
-                <ComboBox
-                  value={config.style.color_palette || ""}
-                  options={STYLE_COLOR_PALETTE_PRESETS}
-                  onChange={(v) => set("style.color_palette", v)}
-                />
-              </Field>
-              <Field label="Encrage / traits">
-                <ComboBox
-                  value={config.style.line_work || ""}
-                  options={STYLE_LINE_WORK_PRESETS}
-                  onChange={(v) => set("style.line_work", v)}
-                />
-              </Field>
-              <Field label="Atmosphère">
-                <ComboBox
-                  value={config.style.mood || ""}
-                  options={STYLE_MOOD_PRESETS}
-                  onChange={(v) => set("style.mood", v)}
-                  disabled={hasStyleRef}
-                />
-                {hasStyleRef && (
-                  <p className="text-xs text-[var(--color-mute)] mt-1">{STYLE_REF_DISABLED_HINT}</p>
-                )}
-              </Field>
-            </Grid>
-            <Grid cols={3}>
-              <Field label="Tour des cases">
-                <ComboBox
-                  value={config.style.panel_borders || ""}
-                  options={STYLE_PANEL_BORDERS_PRESETS}
-                  onChange={(v) => set("style.panel_borders", v)}
-                  placeholder="ex. cadre noir épais légèrement irrégulier"
-                />
-              </Field>
-              <Field label="Dessin des bulles">
-                <ComboBox
-                  value={config.style.speech_bubbles || ""}
-                  options={STYLE_SPEECH_BUBBLES_PRESETS}
-                  onChange={(v) => set("style.speech_bubbles", v)}
-                  placeholder="ex. bulles blanches contour fin et rond"
-                />
-              </Field>
-              <Field label="Dessin des personnages">
-                <ComboBox
-                  value={config.style.character_rendering || ""}
-                  options={STYLE_CHARACTER_RENDERING_PRESETS}
-                  onChange={(v) => set("style.character_rendering", v)}
-                  placeholder="ex. visages ronds, yeux en points, peu d'ombres"
-                />
-              </Field>
-            </Grid>
+          {url ? (
+            <img src={url} alt="Référence de style" className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-center px-1">Aucune image</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0 space-y-3">
+          <div>
+            <label className="label">Style artistique</label>
+            <ComboBox
+              value={config.style.art_style}
+              options={STYLE_ART_STYLE_PRESETS}
+              onChange={(v) => set("style.art_style", v)}
+              placeholder="ex. ligne claire, aquarelle douce"
+              required
+              disabled={hasStyleRef}
+            />
+            <p className="text-xs text-[var(--color-mute)] mt-1">
+              {hasStyleRef ? STYLE_REF_DISABLED_HINT : "Évitez de citer des artistes ou marques."}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="text-xs text-[var(--color-mute)] hover:text-[var(--color-ink)] inline-flex items-center gap-1 transition-colors"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            <FaChevronDown aria-hidden className={"transition-transform " + (expanded ? "rotate-180" : "")} />
+            {expanded ? "Masquer les détails" : "Détails du style"}
+          </button>
+          {expanded && (
+            <div className="space-y-3">
+              {hasStyleRef && (
+                <p className="text-xs text-[var(--color-mute)]">
+                  Avec une image de référence de style, seuls les champs descriptifs précis (palette, encrage, cadres,
+                  bulles, rendu des personnages) restent actifs. Ils complètent l'image, ils ne la remplacent pas.
+                </p>
+              )}
+              <Grid cols={3}>
+                <Field label="Palette de couleurs">
+                  <ComboBox
+                    value={config.style.color_palette || ""}
+                    options={STYLE_COLOR_PALETTE_PRESETS}
+                    onChange={(v) => set("style.color_palette", v)}
+                  />
+                </Field>
+                <Field label="Encrage / traits">
+                  <ComboBox
+                    value={config.style.line_work || ""}
+                    options={STYLE_LINE_WORK_PRESETS}
+                    onChange={(v) => set("style.line_work", v)}
+                  />
+                </Field>
+                <Field label="Atmosphère">
+                  <ComboBox
+                    value={config.style.mood || ""}
+                    options={STYLE_MOOD_PRESETS}
+                    onChange={(v) => set("style.mood", v)}
+                    disabled={hasStyleRef}
+                  />
+                  {hasStyleRef && <p className="text-xs text-[var(--color-mute)] mt-1">{STYLE_REF_DISABLED_HINT}</p>}
+                </Field>
+              </Grid>
+              <Grid cols={3}>
+                <Field label="Tour des cases">
+                  <ComboBox
+                    value={config.style.panel_borders || ""}
+                    options={STYLE_PANEL_BORDERS_PRESETS}
+                    onChange={(v) => set("style.panel_borders", v)}
+                    placeholder="ex. cadre noir épais légèrement irrégulier"
+                  />
+                </Field>
+                <Field label="Dessin des bulles">
+                  <ComboBox
+                    value={config.style.speech_bubbles || ""}
+                    options={STYLE_SPEECH_BUBBLES_PRESETS}
+                    onChange={(v) => set("style.speech_bubbles", v)}
+                    placeholder="ex. bulles blanches contour fin et rond"
+                  />
+                </Field>
+                <Field label="Dessin des personnages">
+                  <ComboBox
+                    value={config.style.character_rendering || ""}
+                    options={STYLE_CHARACTER_RENDERING_PRESETS}
+                    onChange={(v) => set("style.character_rendering", v)}
+                    placeholder="ex. visages ronds, yeux en points, peu d'ombres"
+                  />
+                </Field>
+              </Grid>
+            </div>
+          )}
+        </div>
+      </div>
+      <div
+        className={
+          "rounded-lg border p-3 " +
+          (allowStyleCopy
+            ? "border-[var(--color-rose-500)] bg-[var(--color-rose-50)]/40"
+            : "border-[var(--color-line)] bg-[var(--color-paper-soft)]/40")
+        }
+      >
+        <Toggle
+          label="Lever la protection anti-plagiat (copier un style connu)"
+          value={allowStyleCopy}
+          onChange={(v) => set("allow_style_copy", v)}
+        />
+        <p className="text-xs text-[var(--color-mute)] mt-2">
+          Désactive la règle stricte de non-copie appliquée à l'image de référence de style. L'IA pourra alors imiter
+          fidèlement l'identité visuelle de la référence (personnages, costumes, motifs) pour reproduire un style connu.
+          N'a d'effet que si une image de référence de style est fournie.
+        </p>
+        {allowStyleCopy && (
+          <div
+            role="alert"
+            className="mt-3 rounded-md border border-[var(--color-rose-500)] bg-[var(--color-rose-50)] p-3 text-sm text-[var(--color-rose-700)]"
+          >
+            <p className="font-semibold">⚠️ Avertissement légal</p>
+            <p className="mt-1">
+              Le contenu généré peut reproduire des éléments protégés (personnages, œuvres, marques) et poser un
+              problème légal. Il est de votre seule responsabilité de vous assurer que vous disposez des droits
+              nécessaires pour utiliser et diffuser ce contenu.
+            </p>
           </div>
         )}
       </div>
-    </div>
-    <div
-      className={
-        "rounded-lg border p-3 " +
-        (allowStyleCopy
-          ? "border-[var(--color-rose-500)] bg-[var(--color-rose-50)]/40"
-          : "border-[var(--color-line)] bg-[var(--color-paper-soft)]/40")
-      }
-    >
-      <Toggle
-        label="Lever la protection anti-plagiat (copier un style connu)"
-        value={allowStyleCopy}
-        onChange={(v) => set("allow_style_copy", v)}
-      />
-      <p className="text-xs text-[var(--color-mute)] mt-2">
-        Désactive la règle stricte de non-copie appliquée à l'image de référence
-        de style. L'IA pourra alors imiter fidèlement l'identité visuelle de la
-        référence (personnages, costumes, motifs) pour reproduire un style
-        connu. N'a d'effet que si une image de référence de style est fournie.
-      </p>
-      {allowStyleCopy && (
-        <div
-          role="alert"
-          className="mt-3 rounded-md border border-[var(--color-rose-500)] bg-[var(--color-rose-50)] p-3 text-sm text-[var(--color-rose-700)]"
-        >
-          <p className="font-semibold">⚠️ Avertissement légal</p>
-          <p className="mt-1">
-            Le contenu généré peut reproduire des éléments protégés (personnages,
-            œuvres, marques) et poser un problème légal. Il est de votre seule
-            responsabilité de vous assurer que vous disposez des droits
-            nécessaires pour utiliser et diffuser ce contenu.
-          </p>
-        </div>
-      )}
-    </div>
     </div>
   );
 }

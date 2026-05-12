@@ -126,7 +126,7 @@ def _step_references(
 ) -> BdGenScript:
     print("\n== Étape 2/3 : Références ==")
     references_module.generate_references(
-        bd_script, opts.references, opts.image_model,
+        bd_script, opts.references, opts.reference_image_model(),
         script_path=script_path, feedback_store=feedback_store,
         reporter=StdoutReporter(),
         stats_project_dir=script_path.parent,
@@ -165,7 +165,7 @@ def _step_references(
                 if ref_path and ref_path.exists():
                     ref_path.unlink()
                 references_module.generate_references(
-                    bd_script, opts.references, opts.image_model,
+                    bd_script, opts.references, opts.reference_image_model(),
                     script_path=script_path, feedback_store=feedback_store,
                     reporter=StdoutReporter(),
                     stats_project_dir=script_path.parent,

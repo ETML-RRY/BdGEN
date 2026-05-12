@@ -158,6 +158,7 @@ class UpscaleOptions(BaseModel):
 class ReferencesOptions(BaseModel):
     generate: bool = True
     output_dir: Path | None = None
+    image_model: ImageModelConfig | None = None
     character_views: list[str] = Field(
         default_factory=lambda: ["face_closeup", "full_body_front", "expressions_sheet"]
     )
@@ -174,6 +175,9 @@ class GenerationOptions(BaseModel):
     output_format: Literal["pdf", "images", "html"] = "pdf"
     output_path: Path | None = None
     script_path: Path | None = None
+
+    def reference_image_model(self) -> ImageModelConfig:
+        return self.references.image_model or self.image_model
 
 
 class BdGenInput(BaseModel):

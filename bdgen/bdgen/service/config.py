@@ -8,7 +8,7 @@ import stat
 from pathlib import Path
 
 from ..models import BdGenInput, BdGenScript
-from ._helpers import _coerce_openai_image_model
+from ._helpers import _coerce_generation_image_models
 from .constants import PROJECT_CONFIG_NAME
 
 
@@ -20,7 +20,7 @@ def load_config(name: str, output_root: Path | None = None) -> BdGenInput:
     if not p.exists():
         raise FileNotFoundError(f"bdgen.json absent pour le projet « {name} »")
     config = BdGenInput.load(p)
-    _coerce_openai_image_model(config.generation_options.image_model)
+    _coerce_generation_image_models(config.generation_options)
     return config
 
 
@@ -32,7 +32,7 @@ def save_config(config: BdGenInput, output_root: Path | None = None) -> Path:
     """
     if not config.project:
         raise ValueError("config.project doit être défini.")
-    _coerce_openai_image_model(config.generation_options.image_model)
+    _coerce_generation_image_models(config.generation_options)
     config.output_root = output_root or config.output_root or Path("./output")
     proj_dir = config.output_root / config.project
     proj_dir.mkdir(parents=True, exist_ok=True)

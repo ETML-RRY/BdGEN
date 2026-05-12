@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..models import BdGenInput, BdGenScript
-from ._helpers import _coerce_openai_image_model, update_reference_prompts_for_style_change
+from ._helpers import _coerce_generation_image_models, update_reference_prompts_for_style_change
 from .constants import PROJECT_CONFIG_NAME
 from .indices import mark_stale
 
@@ -24,7 +24,7 @@ def detect_and_mark_stale(
     """
     from .lifecycle import get_project_dir
 
-    _coerce_openai_image_model(new_config.generation_options.image_model)
+    _coerce_generation_image_models(new_config.generation_options)
     proj_dir = get_project_dir(name, output_root)
     old_path = proj_dir / PROJECT_CONFIG_NAME
     if not old_path.exists():
@@ -33,6 +33,7 @@ def detect_and_mark_stale(
         old_cfg = BdGenInput.load(old_path)
     except Exception:
         return
+    _coerce_generation_image_models(old_cfg.generation_options)
 
     script_path = proj_dir / "bdgen-script.json"
     if not script_path.exists():
@@ -46,9 +47,12 @@ def detect_and_mark_stale(
     old_style = old_cfg.style.model_dump()
     new_style = new_config.style.model_dump()
     style_changed = old_style != new_style
-    old_image_model = old_cfg.generation_options.image_model.model_dump()
-    new_image_model = new_config.generation_options.image_model.model_dump()
-    image_model_changed = old_image_model != new_image_model
+    old_compose_model = old_cfg.generation_options.image_model.model_dump()
+    new_compose_model = new_config.generation_options.image_model.model_dump()
+    compose_model_changed = old_compose_model != new_compose_model
+    old_reference_model = old_cfg.generation_options.reference_image_model().model_dump()
+    new_reference_model = new_config.generation_options.reference_image_model().model_dump()
+    reference_model_changed = old_reference_model != new_reference_model
 
     if style_changed:
         ref_ids: list[str] = []
@@ -89,7 +93,7 @@ def detect_and_mark_stale(
         bd_script.save(script_path)
         return
 
-    if image_model_changed:
+    if reference_model_changed:
         ref_ids: list[str] = []
         for c in bd_script.characters:
             ref_png = proj_dir / "references" / "characters" / f"{c.id}.png"
@@ -106,6 +110,7 @@ def detect_and_mark_stale(
         if ref_ids:
             mark_stale(proj_dir, "references", ref_ids)
 
+    if compose_model_changed:
         compose_ids: list[str] = []
         if bd_script.cover is not None:
             cover_png = proj_dir / "pages" / "cover.png"
