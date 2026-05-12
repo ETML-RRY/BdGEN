@@ -156,6 +156,7 @@ def run_step_references(
             location_photos=location_photos,
             object_photos=object_photos,
             stats_project_dir=proj_dir,
+            allow_style_copy=bool(getattr(bd_script, "allow_style_copy", False)),
         )
     finally:
         # Even on partial completion (interruption), record what landed.

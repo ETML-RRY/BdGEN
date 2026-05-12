@@ -193,6 +193,13 @@ class BdGenInput(BaseModel):
     objects: list[ObjectInput] = Field(default_factory=list)
     structure: Structure
     generation_options: GenerationOptions
+    # When True, the strict non-copying rule attached to the style-reference
+    # image is lifted: the image generator is allowed to closely emulate the
+    # reference (characters, costumes, motifs) in order to reproduce a known
+    # visual style. Defaults to False — the safe, non-infringing behaviour.
+    # The user is solely responsible for any copyright implications when this
+    # flag is enabled.
+    allow_style_copy: bool = False
 
     @classmethod
     def load(cls, path: Path) -> "BdGenInput":
@@ -340,6 +347,10 @@ class BdGenScript(BaseModel):
     # when reloaded. New scripts inherit the value from their input Structure
     # via _build_skeleton.
     page_format: PageFormat = "portrait"
+    # Mirrors BdGenInput.allow_style_copy so the compose/references steps
+    # have everything they need on the script itself. Defaults to False so
+    # scripts written before the flag existed keep the safe behaviour.
+    allow_style_copy: bool = False
     generation_options: GenerationOptions | None = None
     characters: list[ScriptCharacter]
     locations: list[ScriptLocation]

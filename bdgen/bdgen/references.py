@@ -41,6 +41,7 @@ def generate_references(
     location_photos: dict[str, Path] | None = None,
     object_photos: dict[str, Path] | None = None,
     stats_project_dir: Path | None = None,
+    allow_style_copy: bool | None = None,
 ) -> BdGenScript:
     """Generate every character, location and object reference sheet.
 
@@ -55,6 +56,9 @@ def generate_references(
     """
     rep = _coerce_reporter(reporter)
     flag = _coerce_flag(interrupt)
+    # The flag lives on the script; allow callers to override it explicitly.
+    if allow_style_copy is None:
+        allow_style_copy = bool(getattr(script, "allow_style_copy", False))
     if not options.generate:
         rep.emit(ProgressEvent(
             step="references",
@@ -108,6 +112,7 @@ def generate_references(
                 client, image_model, prompt, target,
                 style_ref=style_ref,
                 character_photo=photo,
+                allow_style_copy=allow_style_copy,
             )
             record_event(
                 stats_project_dir,
@@ -170,6 +175,7 @@ def generate_references(
                 client, image_model, prompt, target,
                 style_ref=style_ref,
                 location_photo=photo,
+                allow_style_copy=allow_style_copy,
             )
             record_event(
                 stats_project_dir,
@@ -232,6 +238,7 @@ def generate_references(
                 client, image_model, prompt, target,
                 style_ref=style_ref,
                 object_photo=photo,
+                allow_style_copy=allow_style_copy,
             )
             record_event(
                 stats_project_dir,
@@ -360,7 +367,7 @@ def _client(image_model: ImageModelConfig) -> OpenAI:
     )
 
 
-STYLE_REF_LABEL = (
+_STYLE_REF_PREAMBLE = (
     "STYLE REFERENCE (this input image): this image is provided ONLY as a "
     "visual style reference. Study its drawing technique, line quality, "
     "coloring method, level of detail, body proportions, palette and overall "
@@ -377,7 +384,11 @@ STYLE_REF_LABEL = (
     "  when the reference is crude and raw.\n"
     "- Think of it as: if someone placed your output next to this reference, "
     "  they should believe the SAME ARTIST drew both. Same energy, same "
-    "  level of finish, same degree of anatomical distortion.\n\n"
+    "  level of finish, same degree of anatomical distortion."
+)
+
+
+_STYLE_REF_STRICT_NON_COPY = (
     "STRICT NON-COPYING RULE — MANDATORY, NO EXCEPTIONS (this is a copyright "
     "constraint, not a stylistic suggestion):\n"
     "- DO NOT reproduce, paraphrase, OCR, or recreate ANY text visible in "
@@ -399,6 +410,40 @@ STYLE_REF_LABEL = (
     "  but not WHAT was drawn. Output the project's own content rendered in "
     "  that learned style."
 )
+
+
+_STYLE_REF_COPY_ALLOWED = (
+    "STYLE COPY MODE — the user has explicitly authorized close emulation of "
+    "this reference, including its recognizable visual identity. Treat it as "
+    "both a STYLE TEACHER and a permitted source of visual inspiration:\n"
+    "- You MAY emulate the reference's character designs, costumes, props, "
+    "  settings, decorative motifs and color schemes in order to reproduce "
+    "  its known style faithfully.\n"
+    "- The project's own character sheets (the OTHER input images) remain "
+    "  authoritative for WHO appears in the BD — when the project provides "
+    "  a character sheet for a given character, that sheet wins. The style "
+    "  reference is used to shape HOW everything is drawn.\n"
+    "- Still do NOT transcribe verbatim any text visible in the reference "
+    "  (titles, logos, captions, brand names). Render text in the project's "
+    "  own language and content only. Other visual elements may be emulated."
+)
+
+
+def style_ref_label(allow_copy: bool = False) -> str:
+    """Build the label appended to the style-reference input image.
+
+    The default (``allow_copy=False``) returns the strict, non-infringing
+    instruction set. When ``allow_copy`` is True the strict non-copying
+    rule is replaced with a permissive variant that explicitly authorises
+    the model to emulate the reference's recognisable visual identity.
+    """
+    suffix = _STYLE_REF_COPY_ALLOWED if allow_copy else _STYLE_REF_STRICT_NON_COPY
+    return f"{_STYLE_REF_PREAMBLE}\n\n{suffix}"
+
+
+# Backwards-compatible constant: matches the strict (default) behaviour so
+# any caller that still imports the constant keeps the safe default.
+STYLE_REF_LABEL = style_ref_label(allow_copy=False)
 
 
 PHOTO_REF_LABEL = (
@@ -504,6 +549,7 @@ def _generate_image(
     character_photo: Path | None = None,
     location_photo: Path | None = None,
     object_photo: Path | None = None,
+    allow_style_copy: bool = False,
 ) -> dict:
     """Call images.generate() or images.edit() with optional input images.
 
@@ -518,7 +564,7 @@ def _generate_image(
     prompt_prefix_parts: list[str] = []
     if style_ref is not None and style_ref.exists() and style_ref.stat().st_size > 0:
         inputs.append((style_ref.name, style_ref.read_bytes(), "image/png"))
-        prompt_prefix_parts.append(STYLE_REF_LABEL)
+        prompt_prefix_parts.append(style_ref_label(allow_copy=allow_style_copy))
     if (
         character_photo is not None
         and character_photo.exists()

@@ -11,8 +11,7 @@ from PIL import Image
 from . import secret_store
 from .feedback import FeedbackStore, feedback_block
 from .image_rules import IMAGE_CONSTRAINTS
-from .references import STYLE_REF_LABEL as _STYLE_REF_LABEL
-from .references import _style_enforcement_block
+from .references import _style_enforcement_block, style_ref_label
 from .models import (
     BackCover,
     BdGenScript,
@@ -280,10 +279,12 @@ def compose_output(
 def _prepend_style_ref(
     refs_with_labels: list[tuple[Path, str]],
     style_ref: Path | None,
+    allow_style_copy: bool = False,
 ) -> list[tuple[Path, str]]:
     """Inject the style reference as the very first input image if provided."""
     if style_ref and style_ref.exists() and style_ref.stat().st_size > 0:
-        return [(style_ref, _STYLE_REF_LABEL)] + refs_with_labels
+        label = style_ref_label(allow_copy=allow_style_copy)
+        return [(style_ref, label)] + refs_with_labels
     return refs_with_labels
 
 
@@ -298,7 +299,8 @@ def _generate_page(
 ) -> dict:
     """Call gpt-image-2 with all relevant character/location refs as input images."""
     refs_with_labels = _prepend_style_ref(
-        _collect_refs(script, page), style_ref
+        _collect_refs(script, page), style_ref,
+        allow_style_copy=bool(getattr(script, "allow_style_copy", False)),
     )
     refs = [path for path, _ in refs_with_labels]
     labels = [label for _, label in refs_with_labels]
@@ -545,7 +547,8 @@ def _generate_cover(
     style_ref: Path | None = None,
 ) -> dict:
     refs_with_labels = _prepend_style_ref(
-        _collect_album_refs(script, "cover"), style_ref
+        _collect_album_refs(script, "cover"), style_ref,
+        allow_style_copy=bool(getattr(script, "allow_style_copy", False)),
     )
     refs = [p for p, _ in refs_with_labels]
     labels = [l for _, l in refs_with_labels]
@@ -570,7 +573,8 @@ def _generate_back(
     style_ref: Path | None = None,
 ) -> dict:
     refs_with_labels = _prepend_style_ref(
-        _collect_album_refs(script, "back"), style_ref
+        _collect_album_refs(script, "back"), style_ref,
+        allow_style_copy=bool(getattr(script, "allow_style_copy", False)),
     )
     refs = [p for p, _ in refs_with_labels]
     labels = [l for _, l in refs_with_labels]

@@ -53,6 +53,7 @@ export const DEFAULT_CONFIG = {
     allow_extra_locations: true,
     allow_extra_objects: true,
   },
+  allow_style_copy: false,
   generation_options: {
     script_model: {
       provider: "anthropic",
@@ -200,6 +201,7 @@ function normalize(cfg) {
     out.structure.allow_extra_objects = true;
   }
   if (typeof out.display_name !== "string") out.display_name = "";
+  if (typeof out.allow_style_copy !== "boolean") out.allow_style_copy = false;
   if (typeof out.generation_options.upscale.enabled !== "boolean") {
     out.generation_options.upscale.enabled = false;
   }
@@ -1897,7 +1899,9 @@ function ObjectPhotoField({ slot, onPick, onClear }) {
 
 function StyleReferenceCard({ url, onPickImage, config, set }) {
   const [expanded, setExpanded] = useState(false);
+  const allowStyleCopy = !!config.allow_style_copy;
   return (
+    <div className="space-y-4">
     <div className="flex items-start gap-4">
       <div
         className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0 cursor-pointer"
@@ -1984,6 +1988,41 @@ function StyleReferenceCard({ url, onPickImage, config, set }) {
           </div>
         )}
       </div>
+    </div>
+    <div
+      className={
+        "rounded-lg border p-3 " +
+        (allowStyleCopy
+          ? "border-[var(--color-rose-500)] bg-[var(--color-rose-50)]/40"
+          : "border-[var(--color-line)] bg-[var(--color-paper-soft)]/40")
+      }
+    >
+      <Toggle
+        label="Lever la protection anti-plagiat (copier un style connu)"
+        value={allowStyleCopy}
+        onChange={(v) => set("allow_style_copy", v)}
+      />
+      <p className="text-xs text-[var(--color-mute)] mt-2">
+        Désactive la règle stricte de non-copie appliquée à l'image de référence
+        de style. L'IA pourra alors imiter fidèlement l'identité visuelle de la
+        référence (personnages, costumes, motifs) pour reproduire un style
+        connu. N'a d'effet que si une image de référence de style est fournie.
+      </p>
+      {allowStyleCopy && (
+        <div
+          role="alert"
+          className="mt-3 rounded-md border border-[var(--color-rose-500)] bg-[var(--color-rose-50)] p-3 text-sm text-[var(--color-rose-700)]"
+        >
+          <p className="font-semibold">⚠️ Avertissement légal</p>
+          <p className="mt-1">
+            Le contenu généré peut reproduire des éléments protégés (personnages,
+            œuvres, marques) et poser un problème légal. Il est de votre seule
+            responsabilité de vous assurer que vous disposez des droits
+            nécessaires pour utiliser et diffuser ce contenu.
+          </p>
+        </div>
+      )}
+    </div>
     </div>
   );
 }
