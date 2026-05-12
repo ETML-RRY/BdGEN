@@ -31,6 +31,9 @@ from .progress import (
 from .stats import normalise_usage, record_event, start_timer, stop_timer
 
 REFERENCE_SIZE = "1024x1024"
+XAI_MAX_PROMPT_CHARS = 8000
+XAI_PROMPT_MARGIN = 200
+XAI_PROMPT_OMISSION = "\n\n[Prompt abridged for Grok's 8000-character image prompt limit.]\n\n"
 
 
 def generate_references(
@@ -615,21 +618,26 @@ def _generate_image(
     """
     inputs: list[tuple[str, bytes, str]] = []
     prompt_prefix_parts: list[str] = []
+    xai_prompt_prefix_parts: list[str] = []
     if style_ref is not None and style_ref.exists() and style_ref.stat().st_size > 0:
         inputs.append((style_ref.name, style_ref.read_bytes(), _image_mime_type(style_ref)))
         prompt_prefix_parts.append(style_ref_label(allow_copy=allow_style_copy))
+        xai_prompt_prefix_parts.append(_xai_style_ref_label(allow_copy=allow_style_copy))
     if character_photo is not None and character_photo.exists() and character_photo.stat().st_size > 0:
         inputs.append((character_photo.name, character_photo.read_bytes(), _image_mime_type(character_photo)))
         prompt_prefix_parts.append(PHOTO_REF_LABEL)
+        xai_prompt_prefix_parts.append(_XAI_PHOTO_REF_LABEL)
     if location_photo is not None and location_photo.exists() and location_photo.stat().st_size > 0:
         inputs.append((location_photo.name, location_photo.read_bytes(), _image_mime_type(location_photo)))
         prompt_prefix_parts.append(LOCATION_PHOTO_REF_LABEL)
+        xai_prompt_prefix_parts.append(_XAI_LOCATION_PHOTO_REF_LABEL)
     if object_photo is not None and object_photo.exists() and object_photo.stat().st_size > 0:
         inputs.append((object_photo.name, object_photo.read_bytes(), _image_mime_type(object_photo)))
         prompt_prefix_parts.append(OBJECT_PHOTO_REF_LABEL)
+        xai_prompt_prefix_parts.append(_XAI_OBJECT_PHOTO_REF_LABEL)
 
     if image_model.provider == "xai":
-        full_prompt = "\n\n".join(prompt_prefix_parts + [prompt]) if inputs else prompt
+        full_prompt = _build_xai_prompt(xai_prompt_prefix_parts, prompt)
         _generate_xai_image(image_model, full_prompt, target, inputs)
         return {
             "usage": {},
@@ -666,6 +674,70 @@ def _generate_image(
         "prompt": full_prompt,
         "input_images": len(inputs),
     }
+
+
+_XAI_STYLE_REF_STRICT_LABEL = (
+    "STYLE REFERENCE IMAGE: use the attached image only to learn drawing style, palette, line work, stylization, "
+    "finish level and visual mood. Do not copy its characters, text, logos, scene, setting, composition, brands, "
+    "specific objects or narrative content. Draw only the project's requested subject."
+)
+
+_XAI_STYLE_REF_COPY_ALLOWED_LABEL = (
+    "STYLE REFERENCE IMAGE: the user allows close visual emulation of this reference's style and recognizable visual "
+    "identity. Use it to shape the look, but do not render proper names, logos, watermarks, signatures, titles or "
+    "verbatim text from the reference."
+)
+
+_XAI_PHOTO_REF_LABEL = (
+    "PERSON PHOTO REFERENCE: use the attached photo only for likeness anchors: face shape, proportions, hair, age, "
+    "build and distinctive features. Keep the requested comic style and palette; do not copy photo realism, clothing, "
+    "pose, background or lighting."
+)
+
+_XAI_LOCATION_PHOTO_REF_LABEL = (
+    "LOCATION PHOTO REFERENCE: use the attached photo only for recognizable architecture, layout, materials and mood. "
+    "Render the location in the requested comic style, with no people copied from the photo and no verbatim signage."
+)
+
+_XAI_OBJECT_PHOTO_REF_LABEL = (
+    "OBJECT PHOTO REFERENCE: use the attached photo only for shape, proportions, silhouette, colors and key markings. "
+    "Render a stylized comic object on a neutral background; do not copy photo realism or surroundings."
+)
+
+
+def _xai_style_ref_label(allow_copy: bool) -> str:
+    return _XAI_STYLE_REF_COPY_ALLOWED_LABEL if allow_copy else _XAI_STYLE_REF_STRICT_LABEL
+
+
+def _build_xai_prompt(prefix_parts: list[str], prompt: str) -> str:
+    """Fit Grok image prompts under xAI's 8000-character limit.
+
+    The source prompt can be much longer because OpenAI accepts our full
+    reference labels and policy blocks. Grok rejects anything over 8000 chars,
+    so keep concise input-image labels and trim the main prompt from the middle:
+    the beginning usually names the subject, while the end carries style and
+    negative constraints appended by ``_augment_prompt``.
+    """
+    max_chars = XAI_MAX_PROMPT_CHARS - XAI_PROMPT_MARGIN
+    prefix = "\n\n".join(part for part in prefix_parts if part)
+    if prefix:
+        prompt_budget = max_chars - len(prefix) - 2
+        fitted = _trim_middle(prompt, max(0, prompt_budget))
+        return f"{prefix}\n\n{fitted}"[:max_chars]
+    return _trim_middle(prompt, max_chars)
+
+
+def _trim_middle(text: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    if max_chars <= len(XAI_PROMPT_OMISSION):
+        return text[:max_chars]
+    remaining = max_chars - len(XAI_PROMPT_OMISSION)
+    head_chars = max(1, int(remaining * 0.6))
+    tail_chars = max(1, remaining - head_chars)
+    return f"{text[:head_chars].rstrip()}{XAI_PROMPT_OMISSION}{text[-tail_chars:].lstrip()}"
 
 
 def _generate_xai_image(
