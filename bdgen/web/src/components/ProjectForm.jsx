@@ -56,7 +56,7 @@ export const DEFAULT_CONFIG = {
   generation_options: {
     script_model: {
       provider: "anthropic",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       temperature: 0.8,
     },
     image_model: {
@@ -86,16 +86,23 @@ export const DEFAULT_CONFIG = {
 
 const SCRIPT_MODEL_OPTIONS = {
   anthropic: [
-    { value: "claude-opus-4-1-20250805", label: "Claude Opus 4.1" },
-    { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
-    { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
-    { value: "claude-3-7-sonnet-20250219", label: "Claude Sonnet 3.7" },
-    { value: "claude-3-5-haiku-20241022", label: "Claude Haiku 3.5" },
+    { value: "claude-opus-4-7", label: "Claude Opus 4.7" },
+    { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
+    { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+    { value: "claude-opus-4-5", label: "Claude Opus 4.5" },
+    { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
+    { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
+    { value: "claude-opus-4-1", label: "Claude Opus 4.1" },
   ],
   openai: [
+    { value: "gpt-5.4", label: "GPT-5.4" },
+    { value: "gpt-5.4-mini", label: "GPT-5.4 mini" },
+    { value: "gpt-5.4-nano", label: "GPT-5.4 nano" },
+    { value: "gpt-5.3-chat-latest", label: "GPT-5.3 (chat latest)" },
     { value: "gpt-5.2", label: "GPT-5.2" },
     { value: "gpt-5.2-pro", label: "GPT-5.2 pro" },
     { value: "gpt-5.1", label: "GPT-5.1" },
+    { value: "gpt-5.1-codex-max", label: "GPT-5.1 Codex Max" },
     { value: "gpt-5-mini", label: "GPT-5 mini" },
     { value: "gpt-5-nano", label: "GPT-5 nano" },
     { value: "gpt-4.1", label: "GPT-4.1" },

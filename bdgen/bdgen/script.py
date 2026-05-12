@@ -897,6 +897,9 @@ def _call_anthropic(system: str, user: str, model_config: ScriptModelConfig, out
     _ANTHROPIC_THINKING_MODELS = (
         "claude-opus-4",
         "claude-sonnet-4-5",
+        "claude-sonnet-4-6",
+        "claude-sonnet-4-7",
+        "claude-haiku-4-5",
         "claude-3-7-sonnet",
     )
     supports_thinking = any(model_config.model.startswith(m) for m in _ANTHROPIC_THINKING_MODELS)

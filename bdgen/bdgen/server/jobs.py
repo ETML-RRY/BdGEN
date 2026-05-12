@@ -23,6 +23,7 @@ from ..progress import (
     ProgressReporter,
     StdoutReporter,
 )
+from .error_messages import format_user_error
 
 JobStep = Literal["script", "references", "compose", "upscale"]
 JobStatus = Literal["running", "completed", "interrupted", "failed"]
@@ -197,7 +198,7 @@ class JobManager:
                         self._current.finished_at = time.time()
                         self._current.last_message = "Génération interrompue."
             except Exception as e:
-                err = f"{type(e).__name__}: {e}"
+                err = format_user_error(e)
                 tb = traceback.format_exc()
                 print(tb)
                 terminal = {
