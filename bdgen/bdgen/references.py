@@ -1,10 +1,16 @@
 """Step 2: generate one reference sheet per character and per location."""
+
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 from openai import OpenAI
+from PIL import Image
 
 from . import secret_store
 from .feedback import FeedbackStore, feedback_block
@@ -60,11 +66,13 @@ def generate_references(
     if allow_style_copy is None:
         allow_style_copy = bool(getattr(script, "allow_style_copy", False))
     if not options.generate:
-        rep.emit(ProgressEvent(
-            step="references",
-            phase="skipped",
-            message="Génération des références désactivée dans les options.",
-        ))
+        rep.emit(
+            ProgressEvent(
+                step="references",
+                phase="skipped",
+                message="Génération des références désactivée dans les options.",
+            )
+        )
         return script
 
     char_dir = options.output_dir / "characters"
@@ -84,32 +92,41 @@ def generate_references(
         done += 1
         target = char_dir / f"{character.id}.png"
         if not force and _is_complete(target):
-            rep.emit(ProgressEvent(
-                step="references",
-                phase=f"character_{character.id}_skipped",
-                message=f"Personnage « {character.name} » déjà sur disque.",
-                current=done,
-                total=total,
-                artifact=str(target),
-                extra={"id": character.id, "kind": "character"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="references",
+                    phase=f"character_{character.id}_skipped",
+                    message=f"Personnage « {character.name} » déjà sur disque.",
+                    current=done,
+                    total=total,
+                    artifact=str(target),
+                    extra={"id": character.id, "kind": "character"},
+                )
+            )
         else:
-            rep.emit(ProgressEvent(
-                step="references",
-                phase=f"character_{character.id}",
-                message=f"Génération de la référence pour « {character.name} »…",
-                current=done,
-                total=total,
-                extra={"id": character.id, "kind": "character"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="references",
+                    phase=f"character_{character.id}",
+                    message=f"Génération de la référence pour « {character.name} »…",
+                    current=done,
+                    total=total,
+                    extra={"id": character.id, "kind": "character"},
+                )
+            )
             prompt = _augment_prompt(
-                character.reference_prompt, feedback_store, character.id,
+                character.reference_prompt,
+                feedback_store,
+                character.id,
                 style=script.style,
             )
             photo = (character_photos or {}).get(character.id)
             started_at, started = start_timer()
             image_stats = _generate_image(
-                client, image_model, prompt, target,
+                client,
+                image_model,
+                prompt,
+                target,
                 style_ref=style_ref,
                 character_photo=photo,
                 allow_style_copy=allow_style_copy,
@@ -129,15 +146,17 @@ def generate_references(
                 artifact=target,
                 extra={"quality": image_model.quality},
             )
-            rep.emit(ProgressEvent(
-                step="references",
-                phase=f"character_{character.id}_done",
-                message=f"Référence « {character.name} » générée.",
-                current=done,
-                total=total,
-                artifact=str(target),
-                extra={"id": character.id, "kind": "character"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="references",
+                    phase=f"character_{character.id}_done",
+                    message=f"Référence « {character.name} » générée.",
+                    current=done,
+                    total=total,
+                    artifact=str(target),
+                    extra={"id": character.id, "kind": "character"},
+                )
+            )
         character.reference_image = target
         if script_path is not None:
             script.save(script_path)
@@ -147,32 +166,41 @@ def generate_references(
         done += 1
         target = loc_dir / f"{location.id}.png"
         if not force and _is_complete(target):
-            rep.emit(ProgressEvent(
-                step="references",
-                phase=f"location_{location.id}_skipped",
-                message=f"Décor « {location.name} » déjà sur disque.",
-                current=done,
-                total=total,
-                artifact=str(target),
-                extra={"id": location.id, "kind": "location"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="references",
+                    phase=f"location_{location.id}_skipped",
+                    message=f"Décor « {location.name} » déjà sur disque.",
+                    current=done,
+                    total=total,
+                    artifact=str(target),
+                    extra={"id": location.id, "kind": "location"},
+                )
+            )
         else:
-            rep.emit(ProgressEvent(
-                step="references",
-                phase=f"location_{location.id}",
-                message=f"Génération de la référence pour le décor « {location.name} »…",
-                current=done,
-                total=total,
-                extra={"id": location.id, "kind": "location"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="references",
+                    phase=f"location_{location.id}",
+                    message=f"Génération de la référence pour le décor « {location.name} »…",
+                    current=done,
+                    total=total,
+                    extra={"id": location.id, "kind": "location"},
+                )
+            )
             prompt = _augment_prompt(
-                location.reference_prompt, feedback_store, location.id,
+                location.reference_prompt,
+                feedback_store,
+                location.id,
                 style=script.style,
             )
             photo = (location_photos or {}).get(location.id)
             started_at, started = start_timer()
             image_stats = _generate_image(
-                client, image_model, prompt, target,
+                client,
+                image_model,
+                prompt,
+                target,
                 style_ref=style_ref,
                 location_photo=photo,
                 allow_style_copy=allow_style_copy,
@@ -192,15 +220,17 @@ def generate_references(
                 artifact=target,
                 extra={"quality": image_model.quality},
             )
-            rep.emit(ProgressEvent(
-                step="references",
-                phase=f"location_{location.id}_done",
-                message=f"Référence « {location.name} » générée.",
-                current=done,
-                total=total,
-                artifact=str(target),
-                extra={"id": location.id, "kind": "location"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="references",
+                    phase=f"location_{location.id}_done",
+                    message=f"Référence « {location.name} » générée.",
+                    current=done,
+                    total=total,
+                    artifact=str(target),
+                    extra={"id": location.id, "kind": "location"},
+                )
+            )
         location.reference_image = target
         if script_path is not None:
             script.save(script_path)
@@ -210,32 +240,41 @@ def generate_references(
         done += 1
         target = obj_dir / f"{obj.id}.png"
         if not force and _is_complete(target):
-            rep.emit(ProgressEvent(
-                step="references",
-                phase=f"object_{obj.id}_skipped",
-                message=f"Objet « {obj.name} » déjà sur disque.",
-                current=done,
-                total=total,
-                artifact=str(target),
-                extra={"id": obj.id, "kind": "object"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="references",
+                    phase=f"object_{obj.id}_skipped",
+                    message=f"Objet « {obj.name} » déjà sur disque.",
+                    current=done,
+                    total=total,
+                    artifact=str(target),
+                    extra={"id": obj.id, "kind": "object"},
+                )
+            )
         else:
-            rep.emit(ProgressEvent(
-                step="references",
-                phase=f"object_{obj.id}",
-                message=f"Génération de la référence pour l'objet « {obj.name} »…",
-                current=done,
-                total=total,
-                extra={"id": obj.id, "kind": "object"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="references",
+                    phase=f"object_{obj.id}",
+                    message=f"Génération de la référence pour l'objet « {obj.name} »…",
+                    current=done,
+                    total=total,
+                    extra={"id": obj.id, "kind": "object"},
+                )
+            )
             prompt = _augment_prompt(
-                obj.reference_prompt, feedback_store, obj.id,
+                obj.reference_prompt,
+                feedback_store,
+                obj.id,
                 style=script.style,
             )
             photo = (object_photos or {}).get(obj.id)
             started_at, started = start_timer()
             image_stats = _generate_image(
-                client, image_model, prompt, target,
+                client,
+                image_model,
+                prompt,
+                target,
                 style_ref=style_ref,
                 object_photo=photo,
                 allow_style_copy=allow_style_copy,
@@ -255,26 +294,30 @@ def generate_references(
                 artifact=target,
                 extra={"quality": image_model.quality},
             )
-            rep.emit(ProgressEvent(
-                step="references",
-                phase=f"object_{obj.id}_done",
-                message=f"Référence « {obj.name} » générée.",
-                current=done,
-                total=total,
-                artifact=str(target),
-                extra={"id": obj.id, "kind": "object"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="references",
+                    phase=f"object_{obj.id}_done",
+                    message=f"Référence « {obj.name} » générée.",
+                    current=done,
+                    total=total,
+                    artifact=str(target),
+                    extra={"id": obj.id, "kind": "object"},
+                )
+            )
         obj.reference_image = target
         if script_path is not None:
             script.save(script_path)
 
-    rep.emit(ProgressEvent(
-        step="references",
-        phase="done",
-        message="Toutes les références sont prêtes.",
-        current=total,
-        total=total,
-    ))
+    rep.emit(
+        ProgressEvent(
+            step="references",
+            phase="done",
+            message="Toutes les références sont prêtes.",
+            current=total,
+            total=total,
+        )
+    )
     return script
 
 
@@ -288,7 +331,9 @@ _STYLE_RESET_BRIDGE = (
 
 
 def _augment_prompt(
-    prompt: str, feedback_store: FeedbackStore | None, target: str,
+    prompt: str,
+    feedback_store: FeedbackStore | None,
+    target: str,
     style: Style | None = None,
 ) -> str:
     parts = [prompt, IMAGE_CONSTRAINTS]
@@ -359,12 +404,12 @@ def _is_complete(path: Path) -> bool:
     return path.exists() and path.stat().st_size > 0
 
 
-def _client(image_model: ImageModelConfig) -> OpenAI:
+def _client(image_model: ImageModelConfig) -> OpenAI | None:
     if image_model.provider == "openai":
         return secret_store.openai_client()
-    raise NotImplementedError(
-        f"Provider '{image_model.provider}' is not yet supported."
-    )
+    if image_model.provider == "xai":
+        return None
+    raise NotImplementedError(f"Provider '{image_model.provider}' is not yet supported.")
 
 
 _STYLE_REF_PREAMBLE = (
@@ -549,7 +594,7 @@ OBJECT_PHOTO_REF_LABEL = (
 
 
 def _generate_image(
-    client: OpenAI,
+    client: OpenAI | None,
     image_model: ImageModelConfig,
     prompt: str,
     target: Path,
@@ -571,35 +616,29 @@ def _generate_image(
     inputs: list[tuple[str, bytes, str]] = []
     prompt_prefix_parts: list[str] = []
     if style_ref is not None and style_ref.exists() and style_ref.stat().st_size > 0:
-        inputs.append((style_ref.name, style_ref.read_bytes(), "image/png"))
+        inputs.append((style_ref.name, style_ref.read_bytes(), _image_mime_type(style_ref)))
         prompt_prefix_parts.append(style_ref_label(allow_copy=allow_style_copy))
-    if (
-        character_photo is not None
-        and character_photo.exists()
-        and character_photo.stat().st_size > 0
-    ):
-        inputs.append(
-            (character_photo.name, character_photo.read_bytes(), "image/png")
-        )
+    if character_photo is not None and character_photo.exists() and character_photo.stat().st_size > 0:
+        inputs.append((character_photo.name, character_photo.read_bytes(), _image_mime_type(character_photo)))
         prompt_prefix_parts.append(PHOTO_REF_LABEL)
-    if (
-        location_photo is not None
-        and location_photo.exists()
-        and location_photo.stat().st_size > 0
-    ):
-        inputs.append(
-            (location_photo.name, location_photo.read_bytes(), "image/png")
-        )
+    if location_photo is not None and location_photo.exists() and location_photo.stat().st_size > 0:
+        inputs.append((location_photo.name, location_photo.read_bytes(), _image_mime_type(location_photo)))
         prompt_prefix_parts.append(LOCATION_PHOTO_REF_LABEL)
-    if (
-        object_photo is not None
-        and object_photo.exists()
-        and object_photo.stat().st_size > 0
-    ):
-        inputs.append(
-            (object_photo.name, object_photo.read_bytes(), "image/png")
-        )
+    if object_photo is not None and object_photo.exists() and object_photo.stat().st_size > 0:
+        inputs.append((object_photo.name, object_photo.read_bytes(), _image_mime_type(object_photo)))
         prompt_prefix_parts.append(OBJECT_PHOTO_REF_LABEL)
+
+    if image_model.provider == "xai":
+        full_prompt = "\n\n".join(prompt_prefix_parts + [prompt]) if inputs else prompt
+        _generate_xai_image(image_model, full_prompt, target, inputs)
+        return {
+            "usage": {},
+            "prompt": full_prompt,
+            "input_images": len(inputs),
+        }
+
+    if client is None:
+        raise RuntimeError("OpenAI client missing for image generation.")
 
     if inputs:
         full_prompt = "\n\n".join(prompt_prefix_parts + [prompt])
@@ -627,3 +666,94 @@ def _generate_image(
         "prompt": full_prompt,
         "input_images": len(inputs),
     }
+
+
+def _generate_xai_image(
+    image_model: ImageModelConfig,
+    prompt: str,
+    target: Path,
+    inputs: list[tuple[str, bytes, str]],
+) -> None:
+    payload: dict[str, Any] = {
+        "model": image_model.model,
+        "prompt": prompt,
+        "response_format": "b64_json",
+    }
+    if image_model.quality == "high":
+        payload["resolution"] = "2k"
+    else:
+        payload["resolution"] = "1k"
+
+    if inputs:
+        payload["aspect_ratio"] = "1:1"
+        images = [
+            {
+                "type": "image_url",
+                "url": _data_uri(data, mime_type),
+            }
+            for _name, data, mime_type in inputs[:3]
+        ]
+        endpoint = "https://api.x.ai/v1/images/edits"
+        if len(images) == 1:
+            payload["image"] = images[0]
+        else:
+            payload["images"] = images
+    else:
+        endpoint = "https://api.x.ai/v1/images/generations"
+
+    response = _xai_image_request(endpoint, payload)
+    first = (response.get("data") or [{}])[0]
+    image_b64 = first.get("b64_json")
+    if image_b64:
+        image_bytes = base64.b64decode(image_b64)
+    elif first.get("url"):
+        with urlopen(first["url"], timeout=120) as image_response:
+            image_bytes = image_response.read()
+    else:
+        raise RuntimeError("xAI image response did not contain b64_json or url.")
+
+    _write_png(target, image_bytes)
+
+
+def _xai_image_request(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+    body = json.dumps(payload).encode("utf-8")
+    request = Request(
+        endpoint,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {secret_store.require_secret('XAI_API_KEY')}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=180) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"xAI image request failed ({exc.code}): {detail}") from exc
+
+
+def _data_uri(data: bytes, mime_type: str) -> str:
+    return f"data:{mime_type};base64,{base64.b64encode(data).decode('ascii')}"
+
+
+def _image_mime_type(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in {".jpg", ".jpeg"}:
+        return "image/jpeg"
+    if suffix == ".webp":
+        return "image/webp"
+    return "image/png"
+
+
+def _write_png(target: Path, image_bytes: bytes) -> None:
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    try:
+        from io import BytesIO
+
+        with Image.open(BytesIO(image_bytes)) as img:
+            img.save(tmp, format="PNG")
+    except Exception:
+        tmp.write_bytes(image_bytes)
+    tmp.replace(target)

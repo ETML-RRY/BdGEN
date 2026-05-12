@@ -7,6 +7,8 @@ from pathlib import Path
 from ..models import BdGenScript, Style
 from .constants import DEFAULT_IMAGE_MODEL, DEFAULT_IMAGE_PROVIDER
 
+REFERENCE_IMAGE_PROVIDERS = {DEFAULT_IMAGE_PROVIDER, "xai"}
+
 
 def _coerce_openai_image_model(image_model) -> None:
     """Images are OpenAI-only; xAI remains available for script generation."""
@@ -18,14 +20,22 @@ def _coerce_openai_image_model(image_model) -> None:
     image_model.model = DEFAULT_IMAGE_MODEL
 
 
+def _coerce_reference_image_model(image_model) -> None:
+    """Reference images can use OpenAI or xAI/Grok; compose remains OpenAI-only."""
+    if image_model is None:
+        return
+    if image_model.provider in REFERENCE_IMAGE_PROVIDERS:
+        return
+    image_model.provider = DEFAULT_IMAGE_PROVIDER
+    image_model.model = DEFAULT_IMAGE_MODEL
+
+
 def _coerce_generation_image_models(options) -> None:
     _coerce_openai_image_model(options.image_model)
-    _coerce_openai_image_model(options.references.image_model)
+    _coerce_reference_image_model(options.references.image_model)
 
 
-def update_reference_prompts_for_style_change(
-    bd_script: BdGenScript, old_style: Style, new_style: Style
-) -> bool:
+def update_reference_prompts_for_style_change(bd_script: BdGenScript, old_style: Style, new_style: Style) -> bool:
     """Replace old style values with new ones in every reference_prompt.
 
     The setup LLM is instructed to quote each style field verbatim inside

@@ -178,9 +178,15 @@ Lint/format:
 
 ### 2026-05-12
 
+- `bdgen/bdgen/references.py`: added xAI/Grok reference image generation via the JSON image generation/edit endpoints, including style/photo input support with data URIs and PNG normalization.
+- `bdgen/bdgen/service/_helpers.py`: compose image model remains OpenAI-only, while dedicated reference image models now preserve `provider: "xai"`.
+- `bdgen/web/src/components/ProjectForm.jsx`: dedicated reference image model selector now offers xAI/Grok with `grok-imagine-image-quality` and `grok-imagine-image`; rebuilt `bdgen/bdgen/server/static/`.
+- `bdgen/tests/test_generation_options_sync.py`: added coverage that xAI dedicated reference image config survives config load/save.
+- Verification: `uv run pytest tests/test_generation_options_sync.py` OK; Ruff check/format OK; frontend lint OK; targeted Prettier OK; `npm run build` OK.
+
 - `bdgen/bdgen/models.py`: added optional `generation_options.references.image_model` plus `GenerationOptions.reference_image_model()` fallback to the main image model.
 - `bdgen/bdgen/cli.py`, `bdgen/bdgen/wizard.py`, `bdgen/bdgen/service/pipeline.py`: references generation now uses the dedicated references image model when configured; compose still uses `generation_options.image_model`.
-- `bdgen/bdgen/service/_helpers.py`, `config.py`, `stale_detection.py`: coerce both image model configs to OpenAI and mark stale references/compose images independently when their respective model changes.
+- `bdgen/bdgen/service/_helpers.py`, `config.py`, `stale_detection.py`: main compose image config is coerced to OpenAI when needed; stale references/compose images are marked independently when their respective model changes.
 - `bdgen/web/src/components/ProjectForm.jsx`: added a form toggle and fields for a dedicated references image model and quality.
 - `bdgen/bdgen/server/static/`: rebuilt after the frontend change.
 - Verification: `uv run pytest tests/test_generation_options_sync.py` OK; frontend lint OK; targeted Prettier OK for `ProjectForm.jsx`; `npm run build` OK outside sandbox after the known Windows/esbuild permission issue.

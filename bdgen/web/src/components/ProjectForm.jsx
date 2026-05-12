@@ -126,6 +126,10 @@ const IMAGE_MODEL_OPTIONS = {
     { value: "gpt-image-1-mini", label: "GPT Image 1 mini" },
     { value: "chatgpt-image-latest", label: "ChatGPT image latest" },
   ],
+  xai: [
+    { value: "grok-imagine-image-quality", label: "Grok Imagine quality" },
+    { value: "grok-imagine-image", label: "Grok Imagine" },
+  ],
 };
 
 function blankCharacter(i) {
@@ -185,7 +189,7 @@ function normalize(cfg) {
   }
   if (
     out.generation_options.references.image_model &&
-    out.generation_options.references.image_model.provider !== "openai"
+    !["openai", "xai"].includes(out.generation_options.references.image_model.provider)
   ) {
     out.generation_options.references.image_model = structuredClone(DEFAULT_CONFIG.generation_options.image_model);
   }
@@ -1464,6 +1468,7 @@ export default function ProjectForm({
                   onChange={(e) => setReferenceModelProvider(e.target.value)}
                 >
                   <option value="openai">OpenAI</option>
+                  <option value="xai">xAI / Grok</option>
                 </select>
               </Field>
               <Field label="References - modele">

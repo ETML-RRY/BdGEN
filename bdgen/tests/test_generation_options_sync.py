@@ -86,6 +86,20 @@ def test_legacy_xai_image_config_is_coerced_to_openai(tmp_path: Path) -> None:
     assert persisted_config.generation_options.image_model.model == "gpt-image-2"
 
 
+def test_xai_dedicated_reference_image_config_is_preserved(tmp_path: Path) -> None:
+    output_root = tmp_path
+    config = _config(output_root, "openai", "gpt-image-2")
+    config.generation_options.references.image_model = ImageModelConfig(
+        provider="xai", model="grok-imagine-image-quality", quality="high"
+    )
+    save_config(config, output_root)
+
+    persisted_config = load_config("demo", output_root)
+    reference_model = persisted_config.generation_options.reference_image_model()
+    assert reference_model.provider == "xai"
+    assert reference_model.model == "grok-imagine-image-quality"
+
+
 def test_compose_model_change_keeps_dedicated_references_fresh(
     tmp_path: Path,
     make_png: Callable[[Path], None],
