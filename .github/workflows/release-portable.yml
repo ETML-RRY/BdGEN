@@ -332,7 +332,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           shopt -s nullglob
-          assets=(release-artifacts/*.exe release-artifacts/*.dmg release-artifacts/*.AppImage)
+          assets=(release-artifacts/*.exe release-artifacts/*.dmg release-artifacts/*.AppImage exemple.bdgen)
           if [ ${#assets[@]} -eq 0 ]; then
             echo "No release assets found." >&2
             exit 1
@@ -350,6 +350,7 @@ jobs:
           - Windows portable executable.
           - Unsigned macOS DMG.
           - Linux AppImage.
+          - Bundled example project archive (exemple.bdgen).
 
           Note: the macOS DMG is not signed or notarized yet, so Gatekeeper may warn on first launch.
           EOF

@@ -6,8 +6,10 @@ import re
 import shutil
 import time
 import unicodedata
+import os
 from pathlib import Path
 
+from .. import secret_store
 from ..models import BdGenScript, Style
 from . import ProjectSummary
 from ._helpers import update_reference_prompts_for_style_change
@@ -21,6 +23,8 @@ from .constants import (
     STALE_INDEX_NAME,
     STYLE_REF_NAME,
 )
+
+EXAMPLE_SEED_MARKER = "example-project.seeded"
 
 
 def projects_root(output_root: Path | None = None) -> Path:
@@ -56,6 +60,44 @@ def list_projects(output_root: Path | None = None) -> list[ProjectSummary]:
         except Exception:
             continue
     return out
+
+
+def seed_example_project(output_root: Path | None = None) -> str | None:
+    """Import the bundled example archive once for a fresh desktop install.
+
+    The archive path is provided by Electron through ``BDGEN_EXAMPLE_ARCHIVE``.
+    A marker in the local config root prevents re-importing the example if the
+    user deletes it later. Existing users who already have projects are marked
+    as seeded without adding the example retroactively.
+    """
+    archive_env = os.environ.get("BDGEN_EXAMPLE_ARCHIVE")
+    if not archive_env:
+        return None
+
+    archive_path = Path(archive_env).expanduser().resolve()
+    if not archive_path.is_file():
+        return None
+
+    marker_path = secret_store.config_root() / EXAMPLE_SEED_MARKER
+    if marker_path.exists():
+        return None
+
+    root = projects_root(output_root)
+    root.mkdir(parents=True, exist_ok=True)
+    if list_projects(root):
+        _write_example_seed_marker(marker_path, "skipped_existing_projects")
+        return None
+
+    from . import import_export
+
+    project_name = import_export.import_zip(archive_path.read_bytes(), root, overwrite=False)
+    _write_example_seed_marker(marker_path, f"imported:{project_name}")
+    return project_name
+
+
+def _write_example_seed_marker(marker_path: Path, status: str) -> None:
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    marker_path.write_text(f"{status}\n", encoding="utf-8")
 
 
 def delete_project(name: str, output_root: Path | None = None) -> None:

@@ -49,6 +49,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
     config_root.mkdir()
     monkeypatch.setenv("BDGEN_OUTPUT_ROOT", str(output_root))
     monkeypatch.setenv("BDGEN_CONFIG_ROOT", str(config_root))
+    monkeypatch.delenv("BDGEN_EXAMPLE_ARCHIVE", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     secret_store.lock_vault()
 

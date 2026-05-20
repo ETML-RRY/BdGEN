@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FiEdit2 } from "react-icons/fi";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
+import { SHOW_COHERENCE_CHECK } from "../featureFlags.js";
 import RefineDialog from "./RefineDialog.jsx";
 import ConfirmDeleteDialog from "./ConfirmDeleteDialog.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
@@ -12,7 +13,7 @@ const TABS = [
   { id: "objects", label: "Objets" },
   { id: "pages", label: "Planches" },
   { id: "covers", label: "Couvertures" },
-  { id: "coherence", label: "Cohérence" },
+  ...(SHOW_COHERENCE_CHECK ? [{ id: "coherence", label: "Cohérence" }] : []),
 ];
 
 const DIALOG_TYPES = ["speech", "thought", "shout", "whisper", "narration"];
@@ -37,7 +38,10 @@ export default function ScriptBrowser({
 }) {
   const [tab, setTab] = useState("characters");
   const script = project.script;
-  const coherence = coherenceProp || { dirty: false, issues: [], suggestions: [], flagged_pages: [] };
+  const coherence =
+    SHOW_COHERENCE_CHECK && coherenceProp
+      ? coherenceProp
+      : { dirty: false, issues: [], suggestions: [], flagged_pages: [] };
 
   const issueCount = coherence.issues?.length ?? 0;
   const isDirty = !!coherence.dirty;
@@ -86,14 +90,14 @@ export default function ScriptBrowser({
         {tab === "pages" && (
           <PagesBrowser
             script={script}
-            coherence={coherence}
+            coherence={SHOW_COHERENCE_CHECK ? coherence : null}
             onChanged={onChanged}
             onRegeneratePage={onRegeneratePage || (() => {})}
             readOnly={readOnly}
           />
         )}
         {tab === "covers" && <CoversView script={script} onChanged={onChanged} readOnly={readOnly} />}
-        {tab === "coherence" && (
+        {SHOW_COHERENCE_CHECK && tab === "coherence" && (
           <CoherenceTabContent
             coherence={coherence}
             checking={checking}

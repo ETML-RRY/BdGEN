@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import json
+import zipfile
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from tests.conftest import make_project_payload
+from bdgen.service import lifecycle
+from bdgen.service.constants import PROJECT_CONFIG_NAME
 
 
 def test_projects_list_is_empty_initially(client: TestClient) -> None:
@@ -10,6 +16,46 @@ def test_projects_list_is_empty_initially(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"projects": []}
+
+
+def test_seed_example_project_imports_archive_once_on_empty_root(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output_root = tmp_path / "output"
+    config_root = tmp_path / "config"
+    archive = tmp_path / "exemple.bdgen"
+    _write_example_archive(archive)
+    monkeypatch.setenv("BDGEN_CONFIG_ROOT", str(config_root))
+    monkeypatch.setenv("BDGEN_EXAMPLE_ARCHIVE", str(archive))
+
+    assert lifecycle.seed_example_project(output_root) == "exemple"
+    assert (output_root / "exemple" / PROJECT_CONFIG_NAME).exists()
+    assert (config_root / lifecycle.EXAMPLE_SEED_MARKER).exists()
+
+    lifecycle.delete_project("exemple", output_root)
+
+    assert lifecycle.seed_example_project(output_root) is None
+    assert not (output_root / "exemple").exists()
+
+
+def test_seed_example_project_skips_existing_user_projects(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    output_root = tmp_path / "output"
+    config_root = tmp_path / "config"
+    archive = tmp_path / "exemple.bdgen"
+    _write_example_archive(archive)
+    user_project = output_root / "demo"
+    user_project.mkdir(parents=True)
+    (user_project / PROJECT_CONFIG_NAME).write_text(json.dumps(make_project_payload("demo")), encoding="utf-8")
+    monkeypatch.setenv("BDGEN_CONFIG_ROOT", str(config_root))
+    monkeypatch.setenv("BDGEN_EXAMPLE_ARCHIVE", str(archive))
+
+    assert lifecycle.seed_example_project(output_root) is None
+    assert not (output_root / "exemple").exists()
+    assert (config_root / lifecycle.EXAMPLE_SEED_MARKER).read_text(encoding="utf-8") == "skipped_existing_projects\n"
 
 
 def test_create_project_then_appears_in_list(client: TestClient) -> None:
@@ -20,6 +66,12 @@ def test_create_project_then_appears_in_list(client: TestClient) -> None:
     listed = client.get("/api/projects").json()
     assert len(listed["projects"]) == 1
     assert listed["projects"][0]["name"] == "demo"
+
+
+def _write_example_archive(path: Path) -> None:
+    payload = make_project_payload("exemple")
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"exemple/{PROJECT_CONFIG_NAME}", json.dumps(payload))
 
 
 def test_create_project_with_invalid_payload_returns_400(client: TestClient) -> None:

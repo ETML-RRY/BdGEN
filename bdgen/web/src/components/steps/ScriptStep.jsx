@@ -6,6 +6,7 @@ import ProgressPanel from "../ProgressPanel.jsx";
 import RunningBanner from "../RunningBanner.jsx";
 import ScriptBrowser from "../ScriptBrowser.jsx";
 import ConfirmDialog from "../ConfirmDialog.jsx";
+import { SHOW_COHERENCE_CHECK } from "../../featureFlags.js";
 
 export default function ScriptStep({ project, onChanged }) {
   const { name } = useParams();
@@ -106,8 +107,8 @@ export default function ScriptStep({ project, onChanged }) {
             project={project}
             onChanged={onChanged}
             readOnly
-            coherence={project.coherence}
-            onRegeneratePage={regenerateFlaggedPage}
+            coherence={SHOW_COHERENCE_CHECK ? project.coherence : undefined}
+            onRegeneratePage={SHOW_COHERENCE_CHECK ? regenerateFlaggedPage : undefined}
           />
         )}
       </div>
@@ -138,12 +139,12 @@ export default function ScriptStep({ project, onChanged }) {
           project={project}
           onChanged={onChanged}
           readOnly={blocked}
-          coherence={coherence}
-          onRegeneratePage={regenerateFlaggedPage}
-          checking={checkingCoherence}
-          coherenceError={coherenceError}
-          onCheck={checkCoherence}
-          onApplySuggestion={applySuggestion}
+          coherence={SHOW_COHERENCE_CHECK ? coherence : undefined}
+          onRegeneratePage={SHOW_COHERENCE_CHECK ? regenerateFlaggedPage : undefined}
+          checking={SHOW_COHERENCE_CHECK ? checkingCoherence : false}
+          coherenceError={SHOW_COHERENCE_CHECK ? coherenceError : null}
+          onCheck={SHOW_COHERENCE_CHECK ? checkCoherence : null}
+          onApplySuggestion={SHOW_COHERENCE_CHECK ? applySuggestion : null}
         />
         <div className="flex items-center justify-between">
           <button

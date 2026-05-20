@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -54,6 +55,7 @@ from .jobs import JobManager
 
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 def _output_root() -> Path:
@@ -64,6 +66,10 @@ def _output_root() -> Path:
 async def _lifespan(app: FastAPI):
     app.state.jobs = JobManager()
     app.state.jobs.attach_loop(asyncio.get_running_loop())
+    try:
+        lifecycle.seed_example_project(_output_root())
+    except Exception:
+        logger.exception("Unable to seed bundled example project.")
     yield
 
 

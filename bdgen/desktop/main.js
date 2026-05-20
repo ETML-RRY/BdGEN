@@ -59,6 +59,10 @@ async function startBackend({ port, appData, outputRoot }) {
     BDGEN_CONFIG_ROOT: appData,
     BDGEN_OUTPUT_ROOT: outputRoot,
   };
+  const exampleArchive = resolveExampleArchive();
+  if (exampleArchive) {
+    env.BDGEN_EXAMPLE_ARCHIVE = exampleArchive;
+  }
 
   backend = spawn(exe.command, exe.args, {
     cwd: exe.cwd || undefined,
@@ -100,6 +104,14 @@ function resolveBackendExecutable() {
     args: ["-m", "bdgen.server"],
     cwd: path.resolve(__dirname, ".."),
   };
+}
+
+function resolveExampleArchive() {
+  const candidates = [
+    path.join(process.resourcesPath || path.join(__dirname, ".."), "examples", "exemple.bdgen"),
+    path.resolve(__dirname, "..", "..", "exemple.bdgen"),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate));
 }
 
 function resolveWindowIcon() {
