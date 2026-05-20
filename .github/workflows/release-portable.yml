@@ -184,18 +184,17 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Create git tag
         if: needs.version.outputs.tag_exists == 'false'
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.version.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag "$TAG"
-          git -c http.https://github.com/.extraheader="AUTHORIZATION: bearer $GH_TOKEN" push origin "$TAG"
+          git push origin "refs/tags/$TAG"
 
   build-desktop:
     name: Build ${{ matrix.label }}
