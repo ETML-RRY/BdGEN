@@ -12,21 +12,48 @@ import OnboardingWizard, {
   INITIAL_ONBOARDING_KEY,
   dismissOnboarding,
   hasDismissedOnboarding,
+  hasDismissedOnboardingPreference,
 } from "./components/OnboardingWizard.jsx";
 
 export default function App() {
   const [secretsStatus, setSecretsStatus] = useState(null);
+  const isDesktop = Boolean(window.bdgenDesktop);
+  const [onboardingLoaded, setOnboardingLoaded] = useState(() => !window.bdgenDesktop?.getPreference);
   const [showInitialOnboarding, setShowInitialOnboarding] = useState(
     () => !hasDismissedOnboarding(INITIAL_ONBOARDING_KEY),
   );
   const [showAppOnboarding, setShowAppOnboarding] = useState(() => !hasDismissedOnboarding(APP_ONBOARDING_KEY));
-  const isDesktop = Boolean(window.bdgenDesktop);
 
   useEffect(() => {
     api
       .secretsStatus()
       .then(setSecretsStatus)
       .catch(() => setSecretsStatus({ error: true }));
+  }, []);
+
+  useEffect(() => {
+    if (!window.bdgenDesktop?.getPreference) return;
+
+    let active = true;
+    Promise.all([
+      hasDismissedOnboardingPreference(INITIAL_ONBOARDING_KEY),
+      hasDismissedOnboardingPreference(APP_ONBOARDING_KEY),
+    ])
+      .then(([initialDismissed, appDismissed]) => {
+        if (!active) return;
+        if (initialDismissed) setShowInitialOnboarding(false);
+        if (appDismissed) setShowAppOnboarding(false);
+      })
+      .catch(() => {
+        // Keep the localStorage fallback if the desktop preference bridge is unavailable.
+      })
+      .finally(() => {
+        if (active) setOnboardingLoaded(true);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const providers = secretsStatus?.providers || {};
@@ -39,19 +66,19 @@ export default function App() {
 
   function dismissInitialOnboarding(remember = false) {
     if (remember) {
-      dismissOnboarding(INITIAL_ONBOARDING_KEY);
+      void dismissOnboarding(INITIAL_ONBOARDING_KEY);
     }
     setShowInitialOnboarding(false);
   }
 
   function dismissAppOnboarding(remember = false) {
     if (remember) {
-      dismissOnboarding(APP_ONBOARDING_KEY);
+      void dismissOnboarding(APP_ONBOARDING_KEY);
     }
     setShowAppOnboarding(false);
   }
 
-  if (!secretsStatus) {
+  if (!secretsStatus || !onboardingLoaded) {
     return (
       <div className="min-h-full flex items-center justify-center text-sm text-[var(--color-mute)]">Chargement...</div>
     );

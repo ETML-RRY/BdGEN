@@ -2,7 +2,7 @@
 
 Operational reference for future work on BdGEN. Keep this file concise and update it after every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-07 (4)
+Last updated: 2026-05-20
 
 ## Update Rule
 
@@ -16,7 +16,7 @@ Last updated: 2026-05-07 (4)
 - Backend package: `bdgen/bdgen/`
 - Frontend app: `bdgen/web/`
 - Electron app: `bdgen/desktop/`
-- Static frontend served by backend: `bdgen/bdgen/server/static/`
+- Generated static frontend served by backend: `bdgen/bdgen/server/static/`
 - Build outputs: `build/backend/`, `build/portable/`, `build/mac/`, `build/linux/`
 - Main docs: `README.md`, `doc/project_reference.md`, `next_steps.md`
 - Root assets: `bd_gen_logo.png`, `bd_gen_logo.svg`, `bd_gen_logo.ico`
@@ -67,7 +67,7 @@ Backend conventions:
 
 Frontend conventions:
 
-- Rebuild `bdgen/bdgen/server/static/` after user-visible frontend changes.
+- Rebuild `bdgen/bdgen/server/static/` locally after user-visible frontend changes when you need to run the backend-served UI; the generated folder is ignored by Git.
 - Onboarding wizard dismissal is session-only unless the user checks "Ne plus afficher ce guide au lancement".
 - The script browser owns manual edit, add/delete, coherence, and integrity UI.
 - Generated static assets are hashed; do not hand-edit bundled JS/CSS except for emergency investigation.
@@ -175,6 +175,15 @@ Lint/format:
 - If a frontend build fails with esbuild `spawn EPERM` on Windows, rerun the build outside the sandbox.
 
 ## Recent Change Log
+
+### 2026-05-20
+
+- `.gitignore`, `bdgen/bdgen/server/static/`: stopped tracking generated backend-served frontend assets and corrected the ignored path from `bdgen/server/static/` to `bdgen/bdgen/server/static/`. Local generated files remain on disk.
+- `bdgen/desktop/main.js`, `bdgen/desktop/preload.js`: added a small Electron preferences bridge stored in `userData/preferences.json` for stable app-level preferences.
+- `bdgen/web/src/App.jsx`, `bdgen/web/src/components/OnboardingWizard.jsx`: onboarding dismissal now reads Electron preferences before rendering and writes both Electron preferences and `localStorage`; this fixes desktop launches where the random localhost port changes the browser storage origin.
+- `bdgen/web/src/components/OnboardingWizard.test.jsx`: added coverage for localStorage fallback, Electron preference reads, and dismissal writes.
+- `bdgen/bdgen/server/static/`: rebuilt after the frontend change.
+- Verification: targeted onboarding Vitest OK; frontend lint OK; desktop lint OK; targeted Prettier OK; `npm run build` OK.
 
 ### 2026-05-12
 

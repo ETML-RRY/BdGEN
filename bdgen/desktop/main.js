@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
+const fsp = require("fs/promises");
 const net = require("net");
 const path = require("path");
 
@@ -219,6 +220,45 @@ function registerWindowControls() {
   ipcMain.handle("app:openExternal", (_event, url) => {
     return openExternalUrl(url);
   });
+
+  ipcMain.handle("preferences:get", async (_event, key) => {
+    if (!isAllowedPreferenceKey(key)) return null;
+    const preferences = await readPreferences();
+    return preferences[key] ?? null;
+  });
+
+  ipcMain.handle("preferences:set", async (_event, key, value) => {
+    if (!isAllowedPreferenceKey(key)) return false;
+    const preferences = await readPreferences();
+    preferences[key] = value;
+    await writePreferences(preferences);
+    return true;
+  });
+}
+
+function preferencesPath() {
+  return path.join(app.getPath("userData"), "preferences.json");
+}
+
+function isAllowedPreferenceKey(key) {
+  return typeof key === "string" && key.startsWith("bdgen.");
+}
+
+async function readPreferences() {
+  try {
+    const data = await fsp.readFile(preferencesPath(), "utf8");
+    const parsed = JSON.parse(data);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch (err) {
+    if (err.code === "ENOENT") return {};
+    console.warn(`[preferences] could not read preferences: ${err.message}`);
+    return {};
+  }
+}
+
+async function writePreferences(preferences) {
+  await fsp.mkdir(path.dirname(preferencesPath()), { recursive: true });
+  await fsp.writeFile(preferencesPath(), `${JSON.stringify(preferences, null, 2)}\n`, "utf8");
 }
 
 app.on("before-quit", () => {

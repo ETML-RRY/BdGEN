@@ -50,9 +50,17 @@ export function hasDismissedOnboarding(key) {
   return window.localStorage.getItem(key) === "true";
 }
 
+export async function hasDismissedOnboardingPreference(key) {
+  if (typeof window === "undefined") return true;
+  if (hasDismissedOnboarding(key)) return true;
+  if (!window.bdgenDesktop?.getPreference) return false;
+  return (await window.bdgenDesktop.getPreference(key)) === true;
+}
+
 export function dismissOnboarding(key) {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") return Promise.resolve();
   window.localStorage.setItem(key, "true");
+  return (window.bdgenDesktop?.setPreference?.(key, true) ?? Promise.resolve()).catch(() => {});
 }
 
 export default function OnboardingWizard({ kind = "initial", onDone, onSkip, embedded = false }) {
