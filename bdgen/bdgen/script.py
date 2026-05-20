@@ -44,6 +44,9 @@ RETRY_BACKOFF_BASE_SECONDS = 2
 ANTHROPIC_DEFAULT_INPUT_TOKENS_PER_MINUTE = 30_000
 ANTHROPIC_TOKEN_ESTIMATE_CHARS_PER_TOKEN = 4
 ANTHROPIC_TOKEN_ESTIMATE_SAFETY_TOKENS = 1_000
+ANTHROPIC_DEFAULT_TIMEOUT_SECONDS = 1_800
+ANTHROPIC_DEFAULT_EFFORT = "medium"
+ANTHROPIC_EFFORT_LEVELS = {"low", "medium", "high", "max", "xhigh"}
 
 _ANTHROPIC_THROTTLE_LOCK = threading.Lock()
 _ANTHROPIC_THROTTLE_STATE = {
@@ -1026,23 +1029,15 @@ def _call_anthropic(system: str, user: str, model_config: ScriptModelConfig, out
         state["last_render"] = 0.0
         render(force=True)
 
-    _ANTHROPIC_THINKING_MODELS = (
-        "claude-opus-4",
-        "claude-sonnet-4-5",
-        "claude-sonnet-4-6",
-        "claude-sonnet-4-7",
-        "claude-haiku-4-5",
-        "claude-3-7-sonnet",
-    )
-    supports_thinking = any(model_config.model.startswith(m) for m in _ANTHROPIC_THINKING_MODELS)
     extra_kwargs: dict = {}
-    if supports_thinking:
+    if _anthropic_supports_adaptive_thinking(model_config.model):
         extra_kwargs["thinking"] = {"type": "adaptive"}
-        extra_kwargs["output_config"] = {"effort": "high"}
+        extra_kwargs["output_config"] = {"effort": _anthropic_effort(model_config.effort)}
 
     _wait_for_anthropic_input_budget(system, user)
+    stream_client = client.with_options(timeout=_anthropic_timeout_seconds())
     try:
-        with client.messages.stream(
+        with stream_client.messages.stream(
             model=model_config.model,
             max_tokens=_anthropic_max_tokens(output_type),
             **extra_kwargs,
@@ -1140,6 +1135,34 @@ def _anthropic_input_tokens_per_minute() -> int:
         return max(0, int(raw))
     except ValueError:
         return ANTHROPIC_DEFAULT_INPUT_TOKENS_PER_MINUTE
+
+
+def _anthropic_timeout_seconds() -> float:
+    raw = os.environ.get("BDGEN_ANTHROPIC_TIMEOUT_SECONDS")
+    if raw is None:
+        return float(ANTHROPIC_DEFAULT_TIMEOUT_SECONDS)
+    try:
+        return max(60.0, float(raw))
+    except ValueError:
+        return float(ANTHROPIC_DEFAULT_TIMEOUT_SECONDS)
+
+
+def _anthropic_effort(configured: str | None = None) -> str:
+    raw = (configured or os.environ.get("BDGEN_ANTHROPIC_EFFORT", ANTHROPIC_DEFAULT_EFFORT)).strip().lower()
+    if raw in ANTHROPIC_EFFORT_LEVELS:
+        return raw
+    return ANTHROPIC_DEFAULT_EFFORT
+
+
+def _anthropic_supports_adaptive_thinking(model: str) -> bool:
+    return model.startswith(
+        (
+            "claude-mythos-preview",
+            "claude-opus-4-6",
+            "claude-opus-4-7",
+            "claude-sonnet-4-6",
+        )
+    )
 
 
 def _estimate_anthropic_input_tokens(system: str, user: str) -> int:

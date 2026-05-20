@@ -214,7 +214,7 @@ function AppNav({ compact = false }) {
         Accueil
       </NavLink>
       <NavLink to="/settings/secrets" className={linkClass}>
-        Cles API
+        Clés API
       </NavLink>
     </nav>
   );

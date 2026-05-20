@@ -178,12 +178,14 @@ Lint/format:
 
 ### 2026-05-20
 
+- `bdgen/bdgen/models.py`, `bdgen/bdgen/script.py`, `bdgen/web/src/components/ProjectForm.jsx`: script model configs now persist per-project `effort` for compatible Claude adaptive-thinking models. The project form's generation-model section is split into Scénario, Images finales, Références visuelles, Sortie, and Upscale subsections; image quality variants use French labels and the dedicated references model no longer visually blends with the output-format selector.
+- `bdgen/bdgen/script.py`, `bdgen/tests/test_anthropic_rate_limit.py`: Anthropic script generation now uses a configurable 30-minute timeout (`BDGEN_ANTHROPIC_TIMEOUT_SECONDS`) and defaults adaptive-thinking effort to `medium` (`BDGEN_ANTHROPIC_EFFORT`) for lower-latency Sonnet 4.6 page generation. Adaptive thinking is only enabled for documented adaptive-capable models. Targeted tests cover timeout, effort, model gating, and stream kwargs.
 - `.gitignore`, `bdgen/bdgen/server/static/`: stopped tracking generated backend-served frontend assets and corrected the ignored path from `bdgen/server/static/` to `bdgen/bdgen/server/static/`. Local generated files remain on disk.
 - `bdgen/desktop/main.js`, `bdgen/desktop/preload.js`: added a small Electron preferences bridge stored in `userData/preferences.json` for stable app-level preferences.
 - `bdgen/web/src/App.jsx`, `bdgen/web/src/components/OnboardingWizard.jsx`: onboarding dismissal now reads Electron preferences before rendering and writes both Electron preferences and `localStorage`; this fixes desktop launches where the random localhost port changes the browser storage origin.
 - `bdgen/web/src/components/OnboardingWizard.test.jsx`: added coverage for localStorage fallback, Electron preference reads, and dismissal writes.
 - `bdgen/bdgen/server/static/`: rebuilt after the frontend change.
-- Verification: targeted onboarding Vitest OK; frontend lint OK; desktop lint OK; targeted Prettier OK; `npm run build` OK.
+- Verification: targeted onboarding and Anthropic tests OK; frontend lint OK; desktop lint OK; targeted Prettier/Ruff OK; `npm run build` OK.
 
 ### 2026-05-12
 

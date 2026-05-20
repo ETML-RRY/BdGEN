@@ -59,6 +59,7 @@ export const DEFAULT_CONFIG = {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
       temperature: 0.8,
+      effort: "medium",
     },
     image_model: {
       provider: "openai",
@@ -132,6 +133,39 @@ const IMAGE_MODEL_OPTIONS = {
   ],
 };
 
+const QUALITY_OPTIONS = [
+  { value: "low", label: "Économique" },
+  { value: "medium", label: "Standard" },
+  { value: "high", label: "Haute qualité" },
+];
+
+const SCRIPT_EFFORT_OPTIONS = [
+  { value: "low", label: "Rapide" },
+  { value: "medium", label: "Équilibré" },
+  { value: "high", label: "Approfondi" },
+  { value: "max", label: "Maximum" },
+];
+
+function supportsScriptEffort(provider, model) {
+  return (
+    provider === "anthropic" &&
+    (model.startsWith("claude-mythos-preview") ||
+      model.startsWith("claude-opus-4-6") ||
+      model.startsWith("claude-opus-4-7") ||
+      model.startsWith("claude-sonnet-4-6"))
+  );
+}
+
+function normaliseScriptEffort(modelConfig) {
+  if (supportsScriptEffort(modelConfig.provider, modelConfig.model)) {
+    if (!SCRIPT_EFFORT_OPTIONS.some((option) => option.value === modelConfig.effort)) {
+      modelConfig.effort = DEFAULT_CONFIG.generation_options.script_model.effort;
+    }
+    return;
+  }
+  delete modelConfig.effort;
+}
+
 function blankCharacter(i) {
   return {
     id: `perso_${i}`,
@@ -177,6 +211,7 @@ function normalize(cfg) {
   if (!out.generation_options.script_model) {
     out.generation_options.script_model = structuredClone(DEFAULT_CONFIG.generation_options.script_model);
   }
+  normaliseScriptEffort(out.generation_options.script_model);
   if (!out.generation_options.image_model) {
     out.generation_options.image_model = structuredClone(DEFAULT_CONFIG.generation_options.image_model);
   }
@@ -357,6 +392,17 @@ export default function ProjectForm({
       const modelConfig = next.generation_options[kind];
       modelConfig.provider = provider;
       modelConfig.model = optionsByProvider[provider]?.[0]?.value || "";
+      if (kind === "script_model") normaliseScriptEffort(modelConfig);
+      return next;
+    });
+  }
+
+  function setScriptModel(model) {
+    setConfig((c) => {
+      const next = structuredClone(c);
+      const modelConfig = next.generation_options.script_model;
+      modelConfig.model = model;
+      normaliseScriptEffort(modelConfig);
       return next;
     });
   }
@@ -796,6 +842,7 @@ export default function ProjectForm({
       Number(out.structure.panels_per_page_range[1]),
     ];
     out.generation_options.script_model.temperature = Number(out.generation_options.script_model.temperature);
+    normaliseScriptEffort(out.generation_options.script_model);
     out.generation_options.upscale.target_megapixels = Number(out.generation_options.upscale.target_megapixels);
     out.generation_options.upscale.scale_factor = Number(out.generation_options.upscale.scale_factor);
     out.generation_options.upscale.output_quality = Number(out.generation_options.upscale.output_quality);
@@ -1404,64 +1451,86 @@ export default function ProjectForm({
       </Section>
 
       <Section title="Modèles de génération">
-        <Grid cols={2}>
-          <Field label="LLM scénario — fournisseur">
-            <select
-              className="select"
-              value={config.generation_options.script_model.provider}
-              onChange={(e) => setModelProvider("script_model", e.target.value, SCRIPT_MODEL_OPTIONS)}
-            >
-              <option value="anthropic">Anthropic</option>
-              <option value="openai">OpenAI</option>
-              <option value="xai">xAI</option>
-            </select>
-          </Field>
-          <Field label="LLM scénario — modèle">
-            <ModelSelector
-              provider={config.generation_options.script_model.provider}
-              model={config.generation_options.script_model.model}
-              optionsByProvider={SCRIPT_MODEL_OPTIONS}
-              onChange={(value) => set("generation_options.script_model.model", value)}
-            />
-          </Field>
-          <Field label="Image — fournisseur">
-            <select
-              className="select"
-              value={config.generation_options.image_model.provider}
-              onChange={(e) => setModelProvider("image_model", e.target.value, IMAGE_MODEL_OPTIONS)}
-            >
-              <option value="openai">OpenAI</option>
-            </select>
-          </Field>
-          <Field label="Image — modèle">
-            <ModelSelector
-              provider={config.generation_options.image_model.provider}
-              model={config.generation_options.image_model.model}
-              optionsByProvider={IMAGE_MODEL_OPTIONS}
-              onChange={(value) => set("generation_options.image_model.model", value)}
-            />
-          </Field>
-          <Field label="Qualité image">
-            <select
-              className="select"
-              value={config.generation_options.image_model.quality}
-              onChange={(e) => set("generation_options.image_model.quality", e.target.value)}
-            >
-              <option value="low">low</option>
-              <option value="medium">medium</option>
-              <option value="high">high</option>
-            </select>
-          </Field>
-          <div className="md:col-span-2">
-            <Toggle
-              label="Utiliser un modele dedie pour les references"
-              value={!!config.generation_options.references.image_model}
-              onChange={setReferenceImageModelEnabled}
-            />
-          </div>
+        <Subsection title="Scénario">
+          <Grid cols={2}>
+            <Field label="Fournisseur du scénario">
+              <select
+                className="select"
+                value={config.generation_options.script_model.provider}
+                onChange={(e) => setModelProvider("script_model", e.target.value, SCRIPT_MODEL_OPTIONS)}
+              >
+                <option value="anthropic">Anthropic</option>
+                <option value="openai">OpenAI</option>
+                <option value="xai">xAI</option>
+              </select>
+            </Field>
+            <Field label="Modèle du scénario">
+              <ModelSelector
+                provider={config.generation_options.script_model.provider}
+                model={config.generation_options.script_model.model}
+                optionsByProvider={SCRIPT_MODEL_OPTIONS}
+                onChange={setScriptModel}
+              />
+            </Field>
+            {supportsScriptEffort(
+              config.generation_options.script_model.provider,
+              config.generation_options.script_model.model,
+            ) && (
+              <Field
+                label="Effort de raisonnement"
+                hint="Variante de vitesse/profondeur pour les modèles Claude compatibles."
+              >
+                <OptionSelect
+                  value={
+                    config.generation_options.script_model.effort ||
+                    DEFAULT_CONFIG.generation_options.script_model.effort
+                  }
+                  options={SCRIPT_EFFORT_OPTIONS}
+                  onChange={(value) => set("generation_options.script_model.effort", value)}
+                />
+              </Field>
+            )}
+          </Grid>
+        </Subsection>
+
+        <Subsection title="Images finales">
+          <Grid cols={2}>
+            <Field label="Fournisseur des images finales">
+              <select
+                className="select"
+                value={config.generation_options.image_model.provider}
+                onChange={(e) => setModelProvider("image_model", e.target.value, IMAGE_MODEL_OPTIONS)}
+              >
+                <option value="openai">OpenAI</option>
+              </select>
+            </Field>
+            <Field label="Modèle des images finales">
+              <ModelSelector
+                provider={config.generation_options.image_model.provider}
+                model={config.generation_options.image_model.model}
+                optionsByProvider={IMAGE_MODEL_OPTIONS}
+                onChange={(value) => set("generation_options.image_model.model", value)}
+              />
+            </Field>
+            <Field label="Qualité des images finales">
+              <OptionSelect
+                value={config.generation_options.image_model.quality}
+                options={QUALITY_OPTIONS}
+                onChange={(value) => set("generation_options.image_model.quality", value)}
+              />
+            </Field>
+          </Grid>
+        </Subsection>
+
+        <Subsection title="Références visuelles">
+          <Toggle
+            label="Utiliser un modèle dédié pour les références"
+            value={!!config.generation_options.references.image_model}
+            onChange={setReferenceImageModelEnabled}
+          />
           {config.generation_options.references.image_model && (
-            <>
-              <Field label="References - fournisseur">
+            <Grid cols={2}>
+              <Field label="Fournisseur des références">
                 <select
                   className="select"
                   value={config.generation_options.references.image_model.provider}
@@ -1471,7 +1540,7 @@ export default function ProjectForm({
                   <option value="xai">xAI / Grok</option>
                 </select>
               </Field>
-              <Field label="References - modele">
+              <Field label="Modèle des références">
                 <ModelSelector
                   provider={config.generation_options.references.image_model.provider}
                   model={config.generation_options.references.image_model.model}
@@ -1479,30 +1548,31 @@ export default function ProjectForm({
                   onChange={(value) => set("generation_options.references.image_model.model", value)}
                 />
               </Field>
-              <Field label="Qualite references">
-                <select
-                  className="select"
+              <Field label="Qualité des références">
+                <OptionSelect
                   value={config.generation_options.references.image_model.quality}
-                  onChange={(e) => set("generation_options.references.image_model.quality", e.target.value)}
-                >
-                  <option value="low">low</option>
-                  <option value="medium">medium</option>
-                  <option value="high">high</option>
-                </select>
+                  options={QUALITY_OPTIONS}
+                  onChange={(value) => set("generation_options.references.image_model.quality", value)}
+                />
               </Field>
-            </>
+            </Grid>
           )}
-          <Field label="Format de sortie">
-            <select
-              className="select"
-              value={config.generation_options.output_format}
-              onChange={(e) => set("generation_options.output_format", e.target.value)}
-            >
-              <option value="pdf">PDF</option>
-              <option value="images">Images</option>
-            </select>
-          </Field>
-        </Grid>
+        </Subsection>
+
+        <Subsection title="Sortie">
+          <Grid cols={2}>
+            <Field label="Format de sortie">
+              <select
+                className="select"
+                value={config.generation_options.output_format}
+                onChange={(e) => set("generation_options.output_format", e.target.value)}
+              >
+                <option value="pdf">PDF</option>
+                <option value="images">Images</option>
+              </select>
+            </Field>
+          </Grid>
+        </Subsection>
 
         <Subsection title="Upscale (Pruna via Replicate)">
           <Grid cols={2}>
@@ -1756,6 +1826,18 @@ function ComboBox({ value, options, onChange, placeholder, required = false, dis
   );
 }
 
+function OptionSelect({ value, options, onChange }) {
+  return (
+    <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function ModelSelector({ provider, model, optionsByProvider, onChange }) {
   const options = optionsByProvider[provider] || [];
   const known = options.some((option) => option.value === model);
@@ -1779,14 +1861,14 @@ function ModelSelector({ provider, model, optionsByProvider, onChange }) {
             {option.label}
           </option>
         ))}
-        <option value="__custom__">Modele personnalise...</option>
+        <option value="__custom__">Modèle personnalisé…</option>
       </select>
       {selectValue === "__custom__" && (
         <input
           className="input"
           value={model}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Nom exact du modele"
+          placeholder="Nom exact du modèle"
         />
       )}
     </div>

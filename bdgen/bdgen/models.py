@@ -1,4 +1,5 @@
 """Pydantic models for bdgen.json (input) and bdgen-script.json (LLM output)."""
+
 from __future__ import annotations
 
 import json
@@ -49,6 +50,7 @@ def _portable_path(value: Path | str | None, base_dir: Path) -> str | None:
 
 # --- Shared ---
 
+
 class Metadata(BaseModel):
     title: str
     author: str
@@ -68,6 +70,7 @@ class Style(BaseModel):
 
 
 # --- Input (bdgen.json) ---
+
 
 class Story(BaseModel):
     synopsis: str
@@ -92,6 +95,7 @@ class LocationInput(BaseModel):
     The LLM copies these verbatim during the setup phase and adds the
     English ``reference_prompt`` needed by the image generator.
     """
+
     id: str
     name: str
     description: str
@@ -105,6 +109,7 @@ class ObjectInput(BaseModel):
     and adds the English ``reference_prompt`` used to generate a stylized
     caricature in the project's art style.
     """
+
     id: str
     name: str
     description: str
@@ -134,6 +139,7 @@ class ScriptModelConfig(BaseModel):
     provider: str = "openai"
     model: str
     temperature: float = 0.8
+    effort: str | None = None
 
 
 class ImageModelConfig(BaseModel):
@@ -159,9 +165,7 @@ class ReferencesOptions(BaseModel):
     generate: bool = True
     output_dir: Path | None = None
     image_model: ImageModelConfig | None = None
-    character_views: list[str] = Field(
-        default_factory=lambda: ["face_closeup", "full_body_front", "expressions_sheet"]
-    )
+    character_views: list[str] = Field(default_factory=lambda: ["face_closeup", "full_body_front", "expressions_sheet"])
     location_view: str = "establishing_shot"
     use_as_input_for_panels: bool = True
 
@@ -246,27 +250,20 @@ class BdGenInput(BaseModel):
         config_dir = config_path.parent
         payload["output_root"] = _portable_path(self.output_root, config_dir)
         generation_options = payload.get("generation_options", {})
-        generation_options["script_path"] = _portable_path(
-            self.generation_options.script_path, config_dir
-        )
-        generation_options["output_path"] = _portable_path(
-            self.generation_options.output_path, config_dir
-        )
+        generation_options["script_path"] = _portable_path(self.generation_options.script_path, config_dir)
+        generation_options["output_path"] = _portable_path(self.generation_options.output_path, config_dir)
         references = generation_options.get("references", {})
-        references["output_dir"] = _portable_path(
-            self.generation_options.references.output_dir, config_dir
-        )
+        references["output_dir"] = _portable_path(self.generation_options.references.output_dir, config_dir)
         generation_options["references"] = references
         upscale = generation_options.get("upscale", {})
-        upscale["output_dir"] = _portable_path(
-            self.generation_options.upscale.output_dir, config_dir
-        )
+        upscale["output_dir"] = _portable_path(self.generation_options.upscale.output_dir, config_dir)
         generation_options["upscale"] = upscale
         payload["generation_options"] = generation_options
         return payload
 
 
 # --- Output (bdgen-script.json) ---
+
 
 class ScriptCharacter(BaseModel):
     id: str
@@ -287,6 +284,7 @@ class ScriptLocation(BaseModel):
 
 class ScriptObject(BaseModel):
     """Recurring object / product / reference featured in the BD."""
+
     id: str
     name: str
     description: str
@@ -412,21 +410,13 @@ class BdGenScript(BaseModel):
         source["input_file"] = _portable_path(self.source.input_file, project_dir)
         payload["source"] = source
         generation_options = payload.get("generation_options", {})
-        generation_options["script_path"] = _portable_path(
-            self.generation_options.script_path, project_dir
-        )
-        generation_options["output_path"] = _portable_path(
-            self.generation_options.output_path, project_dir
-        )
+        generation_options["script_path"] = _portable_path(self.generation_options.script_path, project_dir)
+        generation_options["output_path"] = _portable_path(self.generation_options.output_path, project_dir)
         references = generation_options.get("references", {})
-        references["output_dir"] = _portable_path(
-            self.generation_options.references.output_dir, project_dir
-        )
+        references["output_dir"] = _portable_path(self.generation_options.references.output_dir, project_dir)
         generation_options["references"] = references
         upscale = generation_options.get("upscale", {})
-        upscale["output_dir"] = _portable_path(
-            self.generation_options.upscale.output_dir, project_dir
-        )
+        upscale["output_dir"] = _portable_path(self.generation_options.upscale.output_dir, project_dir)
         generation_options["upscale"] = upscale
         payload["generation_options"] = generation_options
         for items_key, items in (
@@ -436,9 +426,7 @@ class BdGenScript(BaseModel):
         ):
             serialised_items = payload.get(items_key, [])
             for item_payload, item in zip(serialised_items, items, strict=False):
-                item_payload["reference_image"] = _portable_path(
-                    item.reference_image, project_dir
-                )
+                item_payload["reference_image"] = _portable_path(item.reference_image, project_dir)
         return payload
 
     def character_by_id(self, cid: str) -> ScriptCharacter | None:
