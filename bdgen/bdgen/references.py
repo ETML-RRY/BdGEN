@@ -677,31 +677,34 @@ def _generate_image(
 
 
 _XAI_STYLE_REF_STRICT_LABEL = (
-    "STYLE REFERENCE IMAGE: use the attached image only to learn drawing style, palette, line work, stylization, "
-    "finish level and visual mood. Do not copy its characters, text, logos, scene, setting, composition, brands, "
-    "specific objects or narrative content. Draw only the project's requested subject."
+    "INPUT IMAGE 1 IS A STYLE REFERENCE. You must visibly use it for drawing style, palette, line work, stylization, "
+    "finish level and visual mood. It is not optional. Do not copy its characters, text, logos, scene, setting, "
+    "composition, brands, specific objects or narrative content. Draw only the project's requested subject."
 )
 
 _XAI_STYLE_REF_COPY_ALLOWED_LABEL = (
-    "STYLE REFERENCE IMAGE: the user allows close visual emulation of this reference's style and recognizable visual "
-    "identity. Use it to shape the look, but do not render proper names, logos, watermarks, signatures, titles or "
-    "verbatim text from the reference."
+    "INPUT IMAGE 1 IS A STYLE REFERENCE. The user allows close visual emulation of this reference's style and "
+    "recognizable visual identity. You must visibly use it to shape the look. Do not render proper names, logos, "
+    "watermarks, signatures, titles or verbatim text from the reference."
 )
 
 _XAI_PHOTO_REF_LABEL = (
-    "PERSON PHOTO REFERENCE: use the attached photo only for likeness anchors: face shape, proportions, hair, age, "
-    "build and distinctive features. Keep the requested comic style and palette; do not copy photo realism, clothing, "
-    "pose, background or lighting."
+    "PERSON PHOTO REFERENCE: one attached input image is the user's person photo. Preserve the person's likeness: face "
+    "shape, proportions, hair, age, build and distinctive features. The generated character should be recognizably the "
+    "same person after stylization. Keep the requested comic style and palette; do not copy photo realism, clothing, "
+    "pose, background or lighting unless explicitly requested."
 )
 
 _XAI_LOCATION_PHOTO_REF_LABEL = (
-    "LOCATION PHOTO REFERENCE: use the attached photo only for recognizable architecture, layout, materials and mood. "
-    "Render the location in the requested comic style, with no people copied from the photo and no verbatim signage."
+    "LOCATION PHOTO REFERENCE: one attached input image is the user's place photo. Preserve recognizable architecture, "
+    "layout, materials, key landmarks and mood so the generated setting reads as the same place after stylization. "
+    "Render it in the requested comic style, with no people copied from the photo and no verbatim signage."
 )
 
 _XAI_OBJECT_PHOTO_REF_LABEL = (
-    "OBJECT PHOTO REFERENCE: use the attached photo only for shape, proportions, silhouette, colors and key markings. "
-    "Render a stylized comic object on a neutral background; do not copy photo realism or surroundings."
+    "OBJECT PHOTO REFERENCE: one attached input image is the user's object photo. Preserve shape, proportions, "
+    "silhouette, color zones and key markings so the generated object is recognizably the same object after "
+    "stylization. Render it as a comic object on a neutral background; do not copy photo realism or surroundings."
 )
 
 

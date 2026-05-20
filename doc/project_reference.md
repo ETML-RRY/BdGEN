@@ -179,7 +179,8 @@ Lint/format:
 ### 2026-05-12
 
 - `bdgen/bdgen/references.py`, `bdgen/tests/test_references_xai_prompt.py`: Grok/xAI reference prompts now use compact input-image instructions and are trimmed below xAI's 8000-character prompt limit while preserving the subject opening and final style/negative constraints.
-- Verification: `uv run pytest tests/test_references_xai_prompt.py tests/test_generation_options_sync.py` OK; Ruff check/format OK for touched backend files.
+- `bdgen/bdgen/references.py`, `bdgen/tests/test_references_xai_prompt.py`: reinforced Grok input-image instructions so user photos/style refs are treated as required visual anchors; added coverage that xAI image inputs use `/images/edits` with base64 data URIs.
+- Verification: `uv run pytest tests/test_references_xai_prompt.py tests/test_generation_options_sync.py` OK; latest targeted check `uv run pytest tests/test_references_xai_prompt.py` OK; Ruff check/format OK for touched backend files.
 
 - `bdgen/bdgen/references.py`: added xAI/Grok reference image generation via the JSON image generation/edit endpoints, including style/photo input support with data URIs and PNG normalization.
 - `bdgen/bdgen/service/_helpers.py`: compose image model remains OpenAI-only, while dedicated reference image models now preserve `provider: "xai"`.
