@@ -8,6 +8,9 @@
 ![macOS](https://img.shields.io/badge/macOS-DMG_unsigned-000000)
 ![Linux](https://img.shields.io/badge/Linux-AppImage-fcc624)
 
+> [!WARNING]
+> BdGEN is still experimental. The workflow between the different AI providers still needs optimization and may consume too many tokens in some cases. Start with small test projects, monitor API usage closely, and avoid using expensive models blindly until the orchestration has been refined.
+
 BdGEN is an application for generating comic books from a project description. It combines a Python/FastAPI backend, a React interface, and an Electron desktop application.
 
 The project can be used in two main ways:
