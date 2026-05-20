@@ -9,13 +9,14 @@ import ReferencesStep from "../components/steps/ReferencesStep.jsx";
 import ComposeStep from "../components/steps/ComposeStep.jsx";
 import UpscaleStep from "../components/steps/UpscaleStep.jsx";
 import DuplicateProjectDialog from "../components/DuplicateProjectDialog.jsx";
+import { SHOW_UPSCALE } from "../featureFlags.js";
 
 export const STEPS = [
   { id: "preparation", label: "Préparation" },
   { id: "script", label: "Écriture" },
   { id: "references", label: "Références" },
   { id: "compose", label: "Planches" },
-  { id: "upscale", label: "Upscale", optional: true },
+  ...(SHOW_UPSCALE ? [{ id: "upscale", label: "Upscale", optional: true }] : []),
 ];
 
 export default function Wizard() {
@@ -162,7 +163,13 @@ export default function Wizard() {
           />
           <Route
             path="upscale"
-            element={<UpscaleStep project={project} onChanged={reload} />}
+            element={
+              SHOW_UPSCALE ? (
+                <UpscaleStep project={project} onChanged={reload} />
+              ) : (
+                <Navigate to="../compose" replace />
+              )
+            }
           />
           <Route path="*" element={<Navigate to="preparation" replace />} />
         </Routes>

@@ -3,6 +3,7 @@ import { FaPlus, FaTrash, FaUpload, FaPalette, FaChevronDown } from "react-icons
 import { api } from "../api.js";
 import StyleFromImageDialog from "./StyleFromImageDialog.jsx";
 import ReferencesBundlePanel from "./ReferencesBundlePanel.jsx";
+import { SHOW_UPSCALE } from "../featureFlags.js";
 import {
   STORY_GENRE_PRESETS,
   STORY_TONE_PRESETS,
@@ -1574,83 +1575,85 @@ export default function ProjectForm({
           </Grid>
         </Subsection>
 
-        <Subsection title="Upscale (Pruna via Replicate)">
-          <Grid cols={2}>
-            <Toggle
-              label="Activer l'étape d'upscale"
-              value={config.generation_options.upscale.enabled}
-              onChange={(v) => set("generation_options.upscale.enabled", v)}
-            />
-            <Field label="Mode d'agrandissement" hint="Choisissez une cible en mégapixels ou un facteur multiplicatif.">
-              <select
-                className="select"
-                value={config.generation_options.upscale.mode}
-                onChange={(e) => set("generation_options.upscale.mode", e.target.value)}
-              >
-                <option value="target">Taille cible (MP)</option>
-                <option value="factor">Facteur ×N</option>
-              </select>
-            </Field>
-          </Grid>
+        {SHOW_UPSCALE && (
+          <Subsection title="Upscale (Pruna via Replicate)">
+            <Grid cols={2}>
+              <Toggle
+                label="Activer l'étape d'upscale"
+                value={config.generation_options.upscale.enabled}
+                onChange={(v) => set("generation_options.upscale.enabled", v)}
+              />
+              <Field label="Mode d'agrandissement" hint="Choisissez une cible en mégapixels ou un facteur multiplicatif.">
+                <select
+                  className="select"
+                  value={config.generation_options.upscale.mode}
+                  onChange={(e) => set("generation_options.upscale.mode", e.target.value)}
+                >
+                  <option value="target">Taille cible (MP)</option>
+                  <option value="factor">Facteur ×N</option>
+                </select>
+              </Field>
+            </Grid>
 
-          <Grid cols={2}>
-            <Field label="Mégapixels cibles" hint="Utilisé en mode “taille cible”. Exemple : 4 MP.">
-              <input
-                type="number"
-                min={1}
-                max={8}
-                step={1}
-                className="input"
-                value={config.generation_options.upscale.target_megapixels}
-                onChange={(e) => set("generation_options.upscale.target_megapixels", e.target.value)}
-                disabled={config.generation_options.upscale.mode !== "target"}
-              />
-            </Field>
-            <Field
-              label="Facteur d'agrandissement"
-              hint="Utilisé en mode “facteur”. Exemple : 2 = largeur et hauteur ×2."
-            >
-              <input
-                type="number"
-                min={1}
-                max={8}
-                step={0.1}
-                className="input"
-                value={config.generation_options.upscale.scale_factor}
-                onChange={(e) => set("generation_options.upscale.scale_factor", e.target.value)}
-                disabled={config.generation_options.upscale.mode !== "factor"}
-              />
-            </Field>
-            <Field label="Format de sortie upscalé">
-              <select
-                className="select"
-                value={config.generation_options.upscale.output_format}
-                onChange={(e) => set("generation_options.upscale.output_format", e.target.value)}
+            <Grid cols={2}>
+              <Field label="Mégapixels cibles" hint="Utilisé en mode “taille cible”. Exemple : 4 MP.">
+                <input
+                  type="number"
+                  min={1}
+                  max={8}
+                  step={1}
+                  className="input"
+                  value={config.generation_options.upscale.target_megapixels}
+                  onChange={(e) => set("generation_options.upscale.target_megapixels", e.target.value)}
+                  disabled={config.generation_options.upscale.mode !== "target"}
+                />
+              </Field>
+              <Field
+                label="Facteur d'agrandissement"
+                hint="Utilisé en mode “facteur”. Exemple : 2 = largeur et hauteur ×2."
               >
-                <option value="png">PNG</option>
-                <option value="jpg">JPEG</option>
-                <option value="webp">WebP</option>
-              </select>
-            </Field>
-            <Field label="Qualité fichier" hint="Appliquée aux formats JPEG et WebP. Ignorée pour PNG.">
-              <input
-                type="number"
-                min={1}
-                max={100}
-                step={1}
-                className="input"
-                value={config.generation_options.upscale.output_quality}
-                onChange={(e) => set("generation_options.upscale.output_quality", e.target.value)}
-                disabled={config.generation_options.upscale.output_format === "png"}
-              />
-            </Field>
-          </Grid>
+                <input
+                  type="number"
+                  min={1}
+                  max={8}
+                  step={0.1}
+                  className="input"
+                  value={config.generation_options.upscale.scale_factor}
+                  onChange={(e) => set("generation_options.upscale.scale_factor", e.target.value)}
+                  disabled={config.generation_options.upscale.mode !== "factor"}
+                />
+              </Field>
+              <Field label="Format de sortie upscalé">
+                <select
+                  className="select"
+                  value={config.generation_options.upscale.output_format}
+                  onChange={(e) => set("generation_options.upscale.output_format", e.target.value)}
+                >
+                  <option value="png">PNG</option>
+                  <option value="jpg">JPEG</option>
+                  <option value="webp">WebP</option>
+                </select>
+              </Field>
+              <Field label="Qualité fichier" hint="Appliquée aux formats JPEG et WebP. Ignorée pour PNG.">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  step={1}
+                  className="input"
+                  value={config.generation_options.upscale.output_quality}
+                  onChange={(e) => set("generation_options.upscale.output_quality", e.target.value)}
+                  disabled={config.generation_options.upscale.output_format === "png"}
+                />
+              </Field>
+            </Grid>
 
-          <p className="text-xs text-[var(--color-mute)]">
-            Utilise le modèle Pruna P-Image-Upscale via l'API Replicate. Coût : ~$0.005/image (1-4 MP) ou ~$0.01/image
-            (5-8 MP). Nécessite <code>REPLICATE_API_TOKEN</code> dans le <code>.env</code> du serveur.
-          </p>
-        </Subsection>
+            <p className="text-xs text-[var(--color-mute)]">
+              Utilise le modèle Pruna P-Image-Upscale via l'API Replicate. Coût : ~$0.005/image (1-4 MP) ou ~$0.01/image
+              (5-8 MP). Nécessite <code>REPLICATE_API_TOKEN</code> dans le <code>.env</code> du serveur.
+            </p>
+          </Subsection>
+        )}
       </Section>
 
       {error && (

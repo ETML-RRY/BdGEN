@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { FaArrowRight, FaCheck, FaCoins, FaKey, FaLock, FaWandMagicSparkles, FaXmark } from "react-icons/fa6";
+import { SHOW_UPSCALE } from "../featureFlags.js";
 
 export const INITIAL_ONBOARDING_KEY = "bdgen.initialOnboarding.dismissed";
 export const APP_ONBOARDING_KEY = "bdgen.appOnboarding.dismissed";
@@ -18,7 +19,9 @@ const INITIAL_STEPS = [
   {
     icon: FaCoins,
     title: "Comprendre le budget",
-    body: "Une BD consomme des appels texte et image. Le coût varie selon les modèles, le nombre de pages, les essais et l’upscale ; prévoyez d’abord un petit projet de test et suivez les statistiques de coût dans BdGEN.",
+    body: SHOW_UPSCALE
+      ? "Une BD consomme des appels texte et image. Le coût varie selon les modèles, le nombre de pages, les essais et l’upscale ; prévoyez d’abord un petit projet de test et suivez les statistiques de coût dans BdGEN."
+      : "Une BD consomme des appels texte et image. Le coût varie selon les modèles, le nombre de pages et les essais ; prévoyez d’abord un petit projet de test et suivez les statistiques de coût dans BdGEN.",
   },
 ];
 
@@ -41,7 +44,9 @@ const APP_STEPS = [
   {
     icon: FaCoins,
     title: "4. Composer la BD",
-    body: "Les planches, la couverture et le PDF sont générés à partir du script et des références. L’upscale reste optionnel pour améliorer la définition.",
+    body: SHOW_UPSCALE
+      ? "Les planches, la couverture et le PDF sont générés à partir du script et des références. L’upscale reste optionnel pour améliorer la définition."
+      : "Les planches, la couverture et le PDF sont générés à partir du script et des références.",
   },
 ];
 

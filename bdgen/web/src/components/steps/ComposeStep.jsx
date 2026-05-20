@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import ImageStep from "../ImageStep.jsx";
+import { SHOW_UPSCALE } from "../../featureFlags.js";
 
 export default function ComposeStep({ project, onChanged }) {
   const navigate = useNavigate();
@@ -28,8 +29,12 @@ export default function ComposeStep({ project, onChanged }) {
         items={items}
         layout="portrait"
         supportsQuality
-        onContinue={() => navigate(`/projects/${encodeURIComponent(name)}/upscale`)}
-        continueLabel="Continuer vers l'upscale →"
+        onContinue={
+          SHOW_UPSCALE
+            ? () => navigate(`/projects/${encodeURIComponent(name)}/upscale`)
+            : undefined
+        }
+        continueLabel={SHOW_UPSCALE ? "Continuer vers l'upscale →" : undefined}
       />
       {project.pdf_url && (
         <div className="card p-6 bg-[var(--color-mint-100)] border-[var(--color-mint-200)] flex items-center justify-between">

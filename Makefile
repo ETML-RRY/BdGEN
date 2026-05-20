@@ -8,11 +8,12 @@ BACKEND_BIN := $(BACKEND_DIST)/bdgen-server
 PORTABLE_DIST := $(BUILD_DIR)/portable
 MAC_DIST := $(BUILD_DIR)/mac
 LINUX_DIST := $(BUILD_DIR)/linux
+ROOT_DIR := $(CURDIR)
 
 # Keep Python dependencies in the workspace-level virtual environment.
 # This avoids uv trying to repair/remove the stale bdgen/.venv environment while
 # the IDE has the root .venv active.
-export UV_PROJECT_ENVIRONMENT := ../.venv
+export UV_PROJECT_ENVIRONMENT := $(ROOT_DIR)/.venv
 
 .PHONY: help build portable macos linux sync frontend backend backend-windows backend-unix desktop desktop-windows desktop-macos desktop-linux lint lint-backend lint-frontend lint-desktop format format-backend format-frontend format-desktop format-check format-check-backend format-check-frontend format-check-desktop test test-backend test-frontend test-cov dev-desktop clean
 
@@ -120,7 +121,7 @@ test-cov:
 	cd $(APP_DIR) && uv run pytest --cov --cov-report=term-missing --cov-report=html
 
 dev-desktop: frontend
-	cd $(DESKTOP_DIR) && npm install && npm run dev
+	cd $(DESKTOP_DIR) && npm install && BDGEN_BACKEND_CMD=uv BDGEN_BACKEND_ARGS="--directory .. run python -m bdgen.server" npm run dev
 
 clean:
 	powershell -NoProfile -Command "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue '$(BUILD_DIR)','$(APP_DIR)/build','$(APP_DIR)/dist','$(DESKTOP_DIR)/build','$(DESKTOP_DIR)/dist','dist'"
