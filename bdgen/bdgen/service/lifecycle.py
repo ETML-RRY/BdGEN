@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from .. import secret_store
+from .. import trace
 from .. import versioning
 from ..models import BdGenScript, Style
 from . import ProjectSummary
@@ -239,59 +240,64 @@ def restyle_project(
     if not proj_dir.is_dir():
         raise FileNotFoundError(f"Projet inconnu : {name}")
 
-    config = load_config(name, output_root)
-    # Re-validate the incoming style by routing it through the Pydantic model.
-    merged = config.style.model_dump()
-    merged.update({k: v for k, v in new_style.items() if v is not None})
-    config.style = Style.model_validate(merged)
-    save_config(config, output_root)
+    with trace.project_session(proj_dir), trace.node(
+        "restyle_project", "flow",
+        inputs={"project": name, "style_keys": sorted(k for k, v in new_style.items() if v is not None)},
+    ) as tn:
+        config = load_config(name, output_root)
+        # Re-validate the incoming style by routing it through the Pydantic model.
+        merged = config.style.model_dump()
+        merged.update({k: v for k, v in new_style.items() if v is not None})
+        config.style = Style.model_validate(merged)
+        save_config(config, output_root)
 
-    deleted: dict[str, int | bool] = {
-        "references": 0,
-        "pages": 0,
-        "pdf": False,
-        "quality_index": False,
-    }
+        deleted: dict[str, int | bool] = {
+            "references": 0,
+            "pages": 0,
+            "pdf": False,
+            "quality_index": False,
+        }
 
-    script_path = proj_dir / "bdgen-script.json"
-    if script_path.exists():
-        bd_script = BdGenScript.load(script_path)
-        old_style = bd_script.style.model_copy(deep=True)
-        bd_script.style = config.style
-        update_reference_prompts_for_style_change(bd_script, old_style, config.style)
-        for c in bd_script.characters:
-            c.reference_image = None
-        for l in bd_script.locations:
-            l.reference_image = None
-        for o in bd_script.objects:
-            o.reference_image = None
-        bd_script.save(script_path)
+        script_path = proj_dir / "bdgen-script.json"
+        if script_path.exists():
+            bd_script = BdGenScript.load(script_path)
+            old_style = bd_script.style.model_copy(deep=True)
+            bd_script.style = config.style
+            update_reference_prompts_for_style_change(bd_script, old_style, config.style)
+            for c in bd_script.characters:
+                c.reference_image = None
+            for l in bd_script.locations:
+                l.reference_image = None
+            for o in bd_script.objects:
+                o.reference_image = None
+            bd_script.save(script_path)
 
-    for sub in ("references", "pages"):
-        d = proj_dir / sub
-        if d.is_dir():
-            pngs = [p for p in d.rglob("*.png") if p.is_file()]
-            # Archive each PNG before the directory is wiped — without this,
-            # the user has no way to recover the pre-restyle artefacts.
-            for png in pngs:
-                versioning.archive_before_write(png, kind="restyle")
-            count = len(pngs)
-            shutil.rmtree(d, onerror=_force_writable_and_retry)
-            deleted[sub] = count
+        for sub in ("references", "pages"):
+            d = proj_dir / sub
+            if d.is_dir():
+                pngs = [p for p in d.rglob("*.png") if p.is_file()]
+                # Archive each PNG before the directory is wiped — without this,
+                # the user has no way to recover the pre-restyle artefacts.
+                for png in pngs:
+                    versioning.archive_before_write(png, kind="restyle")
+                count = len(pngs)
+                shutil.rmtree(d, onerror=_force_writable_and_retry)
+                deleted[sub] = count
 
-    pdf = proj_dir / f"{name}.pdf"
-    if pdf.exists():
-        versioning.archive_before_write(pdf, kind="restyle")
-        pdf.unlink()
-        deleted["pdf"] = True
+        pdf = proj_dir / f"{name}.pdf"
+        if pdf.exists():
+            versioning.archive_before_write(pdf, kind="restyle")
+            pdf.unlink()
+            deleted["pdf"] = True
 
-    qidx = proj_dir / QUALITY_INDEX_NAME
-    if qidx.exists():
-        qidx.unlink()
-        deleted["quality_index"] = True
+        qidx = proj_dir / QUALITY_INDEX_NAME
+        if qidx.exists():
+            qidx.unlink()
+            deleted["quality_index"] = True
 
-    sidx = proj_dir / STALE_INDEX_NAME
-    if sidx.exists():
-        sidx.unlink()
+        sidx = proj_dir / STALE_INDEX_NAME
+        if sidx.exists():
+            sidx.unlink()
 
-    return deleted
+        tn.set_outputs(deleted)
+        return deleted

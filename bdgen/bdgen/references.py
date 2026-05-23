@@ -70,15 +70,22 @@ def generate_references(
     # The flag lives on the script; allow callers to override it explicitly.
     if allow_style_copy is None:
         allow_style_copy = bool(getattr(script, "allow_style_copy", False))
-    _trace_token = trace.push_project_dir(stats_project_dir)
-    try:
+    with trace.project_session(stats_project_dir), trace.node(
+        "generate_references", "flow",
+        inputs={
+            "project": script.project,
+            "characters": len(script.characters),
+            "locations": len(script.locations),
+            "objects": len(script.objects),
+            "force": force,
+            "image_model": f"{image_model.provider}/{image_model.model}",
+        },
+    ):
         return _generate_references_traced(
             script, options, image_model, script_path, feedback_store, force,
             rep, flag, style_ref, character_photos, location_photos, object_photos,
             stats_project_dir, allow_style_copy,
         )
-    finally:
-        trace.pop_project_dir(_trace_token)
 
 
 def _generate_references_traced(

@@ -1379,54 +1379,58 @@ def regenerate_character(
     char = bd_script.character_by_id(character_id)
     if char is None:
         raise RuntimeError(f"Personnage inconnu : {character_id}")
-    rep.emit(
-        ProgressEvent(
-            step="script",
-            phase=f"refine_character_{character_id}",
-            message=f"Retouche du personnage « {char.name} »…",
+    with trace.project_session(stats_project_dir), trace.node(
+        f"refine_character:{character_id}", "flow",
+        inputs={"character_id": character_id, "feedback_chars": len(feedback_text)},
+    ):
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase=f"refine_character_{character_id}",
+                message=f"Retouche du personnage « {char.name} »…",
+            )
         )
-    )
-    user_prompt = json.dumps(
-        {
-            "metadata": bd_script.metadata.model_dump(mode="json"),
-            "style": bd_script.style.model_dump(mode="json"),
-            "current_character": char.model_dump(mode="json", exclude={"reference_image"}),
-            "has_user_photo": _user_photo_exists(stats_project_dir, "character", character_id),
-            "user_feedback": feedback_text,
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    result = _call_llm(
-        CHARACTER_REFINE_SYSTEM_PROMPT,
-        user_prompt,
-        bd_script.generation_options.script_model,
-        _DraftCharacter,
-    )
-    draft = result.value
-    _record_llm_stats(
-        stats_project_dir,
-        step="script",
-        target_id=character_id,
-        target_kind="character",
-        operation="refine_character",
-        model_config=bd_script.generation_options.script_model,
-        result=result,
-    )
-    if draft.id != character_id:
-        draft.id = character_id  # never let the model rename
-    char.physical_description = draft.physical_description
-    char.outfit = draft.outfit
-    char.reference_prompt = draft.reference_prompt
-    char.name = draft.name
-    rep.emit(
-        ProgressEvent(
-            step="script",
-            phase=f"refine_character_{character_id}_done",
-            message=f"Personnage « {char.name} » mis à jour.",
+        user_prompt = json.dumps(
+            {
+                "metadata": bd_script.metadata.model_dump(mode="json"),
+                "style": bd_script.style.model_dump(mode="json"),
+                "current_character": char.model_dump(mode="json", exclude={"reference_image"}),
+                "has_user_photo": _user_photo_exists(stats_project_dir, "character", character_id),
+                "user_feedback": feedback_text,
+            },
+            ensure_ascii=False,
+            indent=2,
         )
-    )
-    return char
+        result = _call_llm(
+            CHARACTER_REFINE_SYSTEM_PROMPT,
+            user_prompt,
+            bd_script.generation_options.script_model,
+            _DraftCharacter,
+        )
+        draft = result.value
+        _record_llm_stats(
+            stats_project_dir,
+            step="script",
+            target_id=character_id,
+            target_kind="character",
+            operation="refine_character",
+            model_config=bd_script.generation_options.script_model,
+            result=result,
+        )
+        if draft.id != character_id:
+            draft.id = character_id  # never let the model rename
+        char.physical_description = draft.physical_description
+        char.outfit = draft.outfit
+        char.reference_prompt = draft.reference_prompt
+        char.name = draft.name
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase=f"refine_character_{character_id}_done",
+                message=f"Personnage « {char.name} » mis à jour.",
+            )
+        )
+        return char
 
 
 def regenerate_location(
@@ -1443,53 +1447,57 @@ def regenerate_location(
     loc = bd_script.location_by_id(location_id)
     if loc is None:
         raise RuntimeError(f"Décor inconnu : {location_id}")
-    rep.emit(
-        ProgressEvent(
-            step="script",
-            phase=f"refine_location_{location_id}",
-            message=f"Retouche du décor « {loc.name} »…",
+    with trace.project_session(stats_project_dir), trace.node(
+        f"refine_location:{location_id}", "flow",
+        inputs={"location_id": location_id, "feedback_chars": len(feedback_text)},
+    ):
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase=f"refine_location_{location_id}",
+                message=f"Retouche du décor « {loc.name} »…",
+            )
         )
-    )
-    user_prompt = json.dumps(
-        {
-            "metadata": bd_script.metadata.model_dump(mode="json"),
-            "style": bd_script.style.model_dump(mode="json"),
-            "current_location": loc.model_dump(mode="json", exclude={"reference_image"}),
-            "has_user_photo": _user_photo_exists(stats_project_dir, "location", location_id),
-            "user_feedback": feedback_text,
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    result = _call_llm(
-        LOCATION_REFINE_SYSTEM_PROMPT,
-        user_prompt,
-        bd_script.generation_options.script_model,
-        _DraftLocation,
-    )
-    draft = result.value
-    _record_llm_stats(
-        stats_project_dir,
-        step="script",
-        target_id=location_id,
-        target_kind="location",
-        operation="refine_location",
-        model_config=bd_script.generation_options.script_model,
-        result=result,
-    )
-    if draft.id != location_id:
-        draft.id = location_id
-    loc.name = draft.name
-    loc.description = draft.description
-    loc.reference_prompt = draft.reference_prompt
-    rep.emit(
-        ProgressEvent(
-            step="script",
-            phase=f"refine_location_{location_id}_done",
-            message=f"Décor « {loc.name} » mis à jour.",
+        user_prompt = json.dumps(
+            {
+                "metadata": bd_script.metadata.model_dump(mode="json"),
+                "style": bd_script.style.model_dump(mode="json"),
+                "current_location": loc.model_dump(mode="json", exclude={"reference_image"}),
+                "has_user_photo": _user_photo_exists(stats_project_dir, "location", location_id),
+                "user_feedback": feedback_text,
+            },
+            ensure_ascii=False,
+            indent=2,
         )
-    )
-    return loc
+        result = _call_llm(
+            LOCATION_REFINE_SYSTEM_PROMPT,
+            user_prompt,
+            bd_script.generation_options.script_model,
+            _DraftLocation,
+        )
+        draft = result.value
+        _record_llm_stats(
+            stats_project_dir,
+            step="script",
+            target_id=location_id,
+            target_kind="location",
+            operation="refine_location",
+            model_config=bd_script.generation_options.script_model,
+            result=result,
+        )
+        if draft.id != location_id:
+            draft.id = location_id
+        loc.name = draft.name
+        loc.description = draft.description
+        loc.reference_prompt = draft.reference_prompt
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase=f"refine_location_{location_id}_done",
+                message=f"Décor « {loc.name} » mis à jour.",
+            )
+        )
+        return loc
 
 
 def regenerate_object(
@@ -1506,53 +1514,57 @@ def regenerate_object(
     obj = bd_script.object_by_id(object_id)
     if obj is None:
         raise RuntimeError(f"Objet inconnu : {object_id}")
-    rep.emit(
-        ProgressEvent(
-            step="script",
-            phase=f"refine_object_{object_id}",
-            message=f"Retouche de l'objet « {obj.name} »…",
+    with trace.project_session(stats_project_dir), trace.node(
+        f"refine_object:{object_id}", "flow",
+        inputs={"object_id": object_id, "feedback_chars": len(feedback_text)},
+    ):
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase=f"refine_object_{object_id}",
+                message=f"Retouche de l'objet « {obj.name} »…",
+            )
         )
-    )
-    user_prompt = json.dumps(
-        {
-            "metadata": bd_script.metadata.model_dump(mode="json"),
-            "style": bd_script.style.model_dump(mode="json"),
-            "current_object": obj.model_dump(mode="json", exclude={"reference_image"}),
-            "has_user_photo": _user_photo_exists(stats_project_dir, "object", object_id),
-            "user_feedback": feedback_text,
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    result = _call_llm(
-        OBJECT_REFINE_SYSTEM_PROMPT,
-        user_prompt,
-        bd_script.generation_options.script_model,
-        _DraftObject,
-    )
-    draft = result.value
-    _record_llm_stats(
-        stats_project_dir,
-        step="script",
-        target_id=object_id,
-        target_kind="object",
-        operation="refine_object",
-        model_config=bd_script.generation_options.script_model,
-        result=result,
-    )
-    if draft.id != object_id:
-        draft.id = object_id
-    obj.name = draft.name
-    obj.description = draft.description
-    obj.reference_prompt = draft.reference_prompt
-    rep.emit(
-        ProgressEvent(
-            step="script",
-            phase=f"refine_object_{object_id}_done",
-            message=f"Objet « {obj.name} » mis à jour.",
+        user_prompt = json.dumps(
+            {
+                "metadata": bd_script.metadata.model_dump(mode="json"),
+                "style": bd_script.style.model_dump(mode="json"),
+                "current_object": obj.model_dump(mode="json", exclude={"reference_image"}),
+                "has_user_photo": _user_photo_exists(stats_project_dir, "object", object_id),
+                "user_feedback": feedback_text,
+            },
+            ensure_ascii=False,
+            indent=2,
         )
-    )
-    return obj
+        result = _call_llm(
+            OBJECT_REFINE_SYSTEM_PROMPT,
+            user_prompt,
+            bd_script.generation_options.script_model,
+            _DraftObject,
+        )
+        draft = result.value
+        _record_llm_stats(
+            stats_project_dir,
+            step="script",
+            target_id=object_id,
+            target_kind="object",
+            operation="refine_object",
+            model_config=bd_script.generation_options.script_model,
+            result=result,
+        )
+        if draft.id != object_id:
+            draft.id = object_id
+        obj.name = draft.name
+        obj.description = draft.description
+        obj.reference_prompt = draft.reference_prompt
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase=f"refine_object_{object_id}_done",
+                message=f"Objet « {obj.name} » mis à jour.",
+            )
+        )
+        return obj
 
 
 def regenerate_page(
@@ -1572,6 +1584,21 @@ def regenerate_page(
     )
     if idx is None:
         raise RuntimeError(f"Planche inconnue : {page_number}")
+    with trace.project_session(stats_project_dir), trace.node(
+        f"refine_page:{page_number}", "flow",
+        inputs={"page_number": page_number, "feedback_chars": len(feedback_text)},
+    ):
+        return _regenerate_page_impl(bd_script, page_number, feedback_text, rep, idx, stats_project_dir)
+
+
+def _regenerate_page_impl(
+    bd_script: BdGenScript,
+    page_number: int,
+    feedback_text: str,
+    rep: ProgressReporter,
+    idx: int,
+    stats_project_dir: Path | None,
+) -> Page:
     rep.emit(
         ProgressEvent(
             step="script",
@@ -1663,49 +1690,53 @@ def regenerate_cover(
         raise RuntimeError("Le script n'a pas de generation_options ; impossible de retoucher.")
     if bd_script.cover is None:
         raise RuntimeError("Ce projet n'a pas de couverture à retoucher.")
-    rep.emit(
-        ProgressEvent(
-            step="script",
-            phase="refine_cover",
-            message="Retouche de la couverture…",
+    with trace.project_session(stats_project_dir), trace.node(
+        "refine_cover", "flow",
+        inputs={"feedback_chars": len(feedback_text)},
+    ):
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase="refine_cover",
+                message="Retouche de la couverture…",
+            )
         )
-    )
-    user_prompt = json.dumps(
-        {
-            "metadata": bd_script.metadata.model_dump(mode="json"),
-            "style": bd_script.style.model_dump(mode="json"),
-            "current_cover": bd_script.cover.model_dump(mode="json"),
-            "photo_pinned_entities": _photo_pinned_entities(stats_project_dir, bd_script),
-            "user_feedback": feedback_text,
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    result = _call_llm(
-        COVER_REFINE_SYSTEM_PROMPT,
-        user_prompt,
-        bd_script.generation_options.script_model,
-        Cover,
-    )
-    draft = result.value
-    _record_llm_stats(
-        stats_project_dir,
-        step="script",
-        target_id="cover",
-        target_kind="cover",
-        operation="refine_cover",
-        model_config=bd_script.generation_options.script_model,
-        result=result,
-    )
-    bd_script.cover = draft
-    rep.emit(
-        ProgressEvent(
-            step="script",
-            phase="refine_cover_done",
-            message="Couverture mise à jour.",
+        user_prompt = json.dumps(
+            {
+                "metadata": bd_script.metadata.model_dump(mode="json"),
+                "style": bd_script.style.model_dump(mode="json"),
+                "current_cover": bd_script.cover.model_dump(mode="json"),
+                "photo_pinned_entities": _photo_pinned_entities(stats_project_dir, bd_script),
+                "user_feedback": feedback_text,
+            },
+            ensure_ascii=False,
+            indent=2,
         )
-    )
-    return draft
+        result = _call_llm(
+            COVER_REFINE_SYSTEM_PROMPT,
+            user_prompt,
+            bd_script.generation_options.script_model,
+            Cover,
+        )
+        draft = result.value
+        _record_llm_stats(
+            stats_project_dir,
+            step="script",
+            target_id="cover",
+            target_kind="cover",
+            operation="refine_cover",
+            model_config=bd_script.generation_options.script_model,
+            result=result,
+        )
+        bd_script.cover = draft
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase="refine_cover_done",
+                message="Couverture mise à jour.",
+            )
+        )
+        return draft
 
 
 def regenerate_back_cover(
@@ -1720,49 +1751,53 @@ def regenerate_back_cover(
         raise RuntimeError("Le script n'a pas de generation_options ; impossible de retoucher.")
     if bd_script.back_cover is None:
         raise RuntimeError("Ce projet n'a pas de 4ᵉ de couverture à retoucher.")
-    rep.emit(
-        ProgressEvent(
-            step="script",
-            phase="refine_back_cover",
-            message="Retouche de la 4ᵉ de couverture…",
+    with trace.project_session(stats_project_dir), trace.node(
+        "refine_back_cover", "flow",
+        inputs={"feedback_chars": len(feedback_text)},
+    ):
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase="refine_back_cover",
+                message="Retouche de la 4ᵉ de couverture…",
+            )
         )
-    )
-    user_prompt = json.dumps(
-        {
-            "metadata": bd_script.metadata.model_dump(mode="json"),
-            "style": bd_script.style.model_dump(mode="json"),
-            "current_back_cover": bd_script.back_cover.model_dump(mode="json"),
-            "photo_pinned_entities": _photo_pinned_entities(stats_project_dir, bd_script),
-            "user_feedback": feedback_text,
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    result = _call_llm(
-        BACK_COVER_REFINE_SYSTEM_PROMPT,
-        user_prompt,
-        bd_script.generation_options.script_model,
-        BackCover,
-    )
-    draft = result.value
-    _record_llm_stats(
-        stats_project_dir,
-        step="script",
-        target_id="back",
-        target_kind="back_cover",
-        operation="refine_back_cover",
-        model_config=bd_script.generation_options.script_model,
-        result=result,
-    )
-    bd_script.back_cover = draft
-    rep.emit(
-        ProgressEvent(
-            step="script",
-            phase="refine_back_cover_done",
-            message="4ᵉ de couverture mise à jour.",
+        user_prompt = json.dumps(
+            {
+                "metadata": bd_script.metadata.model_dump(mode="json"),
+                "style": bd_script.style.model_dump(mode="json"),
+                "current_back_cover": bd_script.back_cover.model_dump(mode="json"),
+                "photo_pinned_entities": _photo_pinned_entities(stats_project_dir, bd_script),
+                "user_feedback": feedback_text,
+            },
+            ensure_ascii=False,
+            indent=2,
         )
-    )
-    return draft
+        result = _call_llm(
+            BACK_COVER_REFINE_SYSTEM_PROMPT,
+            user_prompt,
+            bd_script.generation_options.script_model,
+            BackCover,
+        )
+        draft = result.value
+        _record_llm_stats(
+            stats_project_dir,
+            step="script",
+            target_id="back",
+            target_kind="back_cover",
+            operation="refine_back_cover",
+            model_config=bd_script.generation_options.script_model,
+            result=result,
+        )
+        bd_script.back_cover = draft
+        rep.emit(
+            ProgressEvent(
+                step="script",
+                phase="refine_back_cover_done",
+                message="4ᵉ de couverture mise à jour.",
+            )
+        )
+        return draft
 
 
 def truncate_pages_from(bd_script: BdGenScript, page_number: int) -> int:

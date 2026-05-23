@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../api.js";
 
 // Detail view for the node selected in TraceGraph. Shows the full prompt,
 // system prompt, model/usage, inputs and outputs. When a `compareNode` is
@@ -89,21 +90,29 @@ export default function TraceNodeDrawer({ node, compareNode, projectName, onClos
   );
 }
 
-// Build a same-origin URL to download a project file via the existing
-// /api/projects/{name}/files/{path:path} endpoint. Absolute paths recorded
-// by the tracer are converted to relative paths by splitting on the
-// `/{projectName}/` marker — this matches the on-disk layout
-// (output_root / project_name / ...).
-function projectFileUrl(absPath, projectName) {
+// Convert an absolute path recorded by the tracer into a project-relative
+// path by splitting on the `/{projectName}/` marker — this matches the
+// on-disk layout (output_root / project_name / ...).
+function projectRelPath(absPath, projectName) {
   if (!absPath || !projectName) return null;
   const path = typeof absPath === "string" ? absPath : absPath.path;
   if (!path) return null;
   const marker = `/${projectName}/`;
   const idx = path.indexOf(marker);
   if (idx === -1) return null;
-  const rel = path.substring(idx + marker.length);
-  const encoded = rel.split("/").map(encodeURIComponent).join("/");
+  return path.substring(idx + marker.length);
+}
+
+// Same-origin URL to download a project-relative file via the existing
+// /api/projects/{name}/files/{path:path} endpoint.
+function fileUrl(projectName, relPath) {
+  if (!relPath || !projectName) return null;
+  const encoded = relPath.split("/").map(encodeURIComponent).join("/");
   return `/api/projects/${encodeURIComponent(projectName)}/files/${encoded}`;
+}
+
+function projectFileUrl(absPath, projectName) {
+  return fileUrl(projectName, projectRelPath(absPath, projectName));
 }
 
 function isImagePath(value) {
@@ -127,8 +136,58 @@ function isPathRef(value) {
 function ArtifactPreview({ node, projectName }) {
   const art = node.outputs?.artifact;
   if (!isImagePath(art)) return null;
-  const url = projectFileUrl(art, projectName);
+  return <ArtifactPreviewBody art={art} projectName={projectName} />;
+}
+
+// The artefact on disk may have been overwritten since this node ran. We
+// look up the per-file version history via /api/projects/{name}/versions and
+// match the node's recorded sha256_12 against either the current file or one
+// of the archived versions. The matched version is selected by default and
+// flagged with a "produite par ce nœud" badge; the user can still switch to
+// any other version via the dropdown.
+function ArtifactPreviewBody({ art, projectName }) {
+  const relPath = projectRelPath(art, projectName);
+  const nodeSha12 = typeof art === "object" ? art.sha256_12 || null : null;
+  const { loading, current, versions, error } = useArtifactVersions(projectName, relPath);
+
+  const options = useMemo(() => {
+    const out = [];
+    if (current) {
+      out.push({
+        label: "Actuelle",
+        relPath: current.relpath || relPath,
+        sha256: current.sha256,
+      });
+    }
+    for (const v of versions) {
+      out.push({
+        label: `${formatVersionId(v.version_id)} · ${v.kind || "regen"}`,
+        relPath: v.relpath,
+        sha256: v.sha256,
+      });
+    }
+    return out;
+  }, [current, versions, relPath]);
+
+  const matchingIdx = useMemo(() => {
+    if (!nodeSha12) return -1;
+    return options.findIndex((o) => o.sha256 && o.sha256.startsWith(nodeSha12));
+  }, [options, nodeSha12]);
+
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  useEffect(() => {
+    setSelectedIdx(matchingIdx >= 0 ? matchingIdx : 0);
+  }, [matchingIdx]);
+
+  const selected = options[selectedIdx] || null;
+  const fallbackUrl = projectFileUrl(art, projectName);
+  const url = selected ? fileUrl(projectName, selected.relPath) : fallbackUrl;
   if (!url) return null;
+
+  const showSelector = !loading && !error && options.length > 1;
+  const isMatchSelected = matchingIdx >= 0 && selectedIdx === matchingIdx;
+  const archiveMissing = !loading && !error && nodeSha12 && matchingIdx < 0;
+
   return (
     <div className="px-3 pt-3 flex flex-col items-center">
       <a href={url} target="_blank" rel="noopener noreferrer" title="Ouvrir en grand">
@@ -141,8 +200,104 @@ function ArtifactPreview({ node, projectName }) {
       <p className="text-[10px] text-[var(--color-mute)] mt-1 font-mono">
         {basename(art)}
       </p>
+      {loading && (
+        <p className="text-[9px] text-[var(--color-mute)] mt-1">Chargement des versions…</p>
+      )}
+      {error && (
+        <p className="text-[9px] text-[var(--color-rose-500)] mt-1">{error}</p>
+      )}
+      {showSelector && (
+        <div className="mt-2 flex items-center gap-2 flex-wrap justify-center">
+          <select
+            className="form-control text-[10px] py-0.5"
+            value={selectedIdx}
+            onChange={(e) => setSelectedIdx(Number(e.target.value))}
+          >
+            {options.map((o, i) => (
+              <option key={i} value={i}>
+                {o.label}
+                {i === matchingIdx ? "  ← ce nœud" : ""}
+              </option>
+            ))}
+          </select>
+          {isMatchSelected && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-mint-100)] text-[var(--color-mint-700)]">
+              produite par ce nœud
+            </span>
+          )}
+        </div>
+      )}
+      {archiveMissing && (
+        <span
+          className="mt-2 text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-peach-100)] text-[var(--color-ink-soft)]"
+          title={`sha256 ${nodeSha12} non retrouvé dans l'historique`}
+        >
+          archive non retrouvée — affichage de la version actuelle
+        </span>
+      )}
     </div>
   );
+}
+
+function useArtifactVersions(projectName, relPath) {
+  const [state, setState] = useState({
+    loading: true,
+    current: null,
+    versions: [],
+    error: null,
+  });
+  useEffect(() => {
+    if (!projectName || !relPath) {
+      setState({ loading: false, current: null, versions: [], error: null });
+      return undefined;
+    }
+    let cancelled = false;
+    setState((s) => ({ ...s, loading: true, error: null }));
+    api
+      .listVersions(projectName, relPath)
+      .then((res) => {
+        if (cancelled) return;
+        setState({
+          loading: false,
+          current: res?.current || null,
+          versions: res?.versions || [],
+          error: null,
+        });
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        if (e.status === 404) {
+          setState({ loading: false, current: null, versions: [], error: null });
+        } else {
+          setState({ loading: false, current: null, versions: [], error: e.message });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectName, relPath]);
+  return state;
+}
+
+// Same compact format as VersionPicker: "2026-05-22T14-30-15-123Z" →
+// "22 mai 14:30:15". Kept local to avoid coupling TraceNodeDrawer to the
+// VersionPicker module — the trace UI doesn't share its controlled-state API.
+function formatVersionId(versionId) {
+  try {
+    const iso = versionId
+      .replace(/-(\d{2})-(\d{2})-(\d{3})Z$/, ":$1:$2.$3Z")
+      .replace(/T(\d{2})-/, "T$1:");
+    const d = new Date(iso);
+    return d.toLocaleString("fr-FR", {
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return versionId;
+  }
 }
 
 function DiffBadge({ primary, compare }) {
