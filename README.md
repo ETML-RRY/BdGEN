@@ -18,6 +18,40 @@ The project can be used in two main ways:
 - **Web mode**: the local server is started manually, then the interface is opened in a browser.
 - **Desktop package mode**: a standalone Electron package starts the application and its embedded local server.
 
+## Showcase
+
+Same script, five visual identities. Each sample below was produced from the same short story about Harold — a writer whose drawings finally come to life — and re-rendered through a different art direction. They illustrate the range of styles BdGEN can drive from a single project description.
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_01.png"><img src="doc/samples/sample_01.png" alt="Noir style sample" /></a><br/>
+      <sub><b>Noir</b> — high-contrast monochrome with yellow sound effects</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_02.png"><img src="doc/samples/sample_02.png" alt="Golden vintage style sample" /></a><br/>
+      <sub><b>Golden Vintage</b> — warm sepia tones, classic ink &amp; wash</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_03.png"><img src="doc/samples/sample_03.png" alt="Fantasy illuminated style sample" /></a><br/>
+      <sub><b>Illuminated Fantasy</b> — saturated colors and magical aura</sub>
+    </td>
+  </tr>
+  <tr>
+    <td></td>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_04.png"><img src="doc/samples/sample_04.png" alt="Watercolor style sample" /></a><br/>
+      <sub><b>Watercolor</b> — soft European-comic pastels and pencil work</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_05.png"><img src="doc/samples/sample_05.png" alt="Vaporwave style sample" /></a><br/>
+      <sub><b>Vaporwave</b> — neon purples and synthwave atmosphere</sub>
+    </td>
+  </tr>
+</table>
+
+> Click any thumbnail to open the full-resolution page.
+
 ## Requirements
 
 - Python 3.12+
