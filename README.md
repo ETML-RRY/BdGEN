@@ -38,7 +38,6 @@ Same script, five visual identities. Each sample below was produced from the sam
     </td>
   </tr>
   <tr>
-    <td></td>
     <td align="center" width="33%">
       <a href="doc/samples/sample_04.png"><img src="doc/samples/sample_04.png" alt="Watercolor style sample" /></a><br/>
       <sub><b>Watercolor</b> — soft European-comic pastels and pencil work</sub>
@@ -46,6 +45,10 @@ Same script, five visual identities. Each sample below was produced from the sam
     <td align="center" width="33%">
       <a href="doc/samples/sample_05.png"><img src="doc/samples/sample_05.png" alt="Vaporwave style sample" /></a><br/>
       <sub><b>Vaporwave</b> — neon purples and synthwave atmosphere</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_06.png"><img src="doc/samples/sample_06.png" alt="Animated cartoon style sample" /></a><br/>
+      <sub><b>Animated Cartoon</b> — clean line art with selective color accents</sub>
     </td>
   </tr>
 </table>
