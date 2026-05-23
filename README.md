@@ -20,7 +20,7 @@ The project can be used in two main ways:
 
 ## Showcase
 
-Same script, five visual identities. Each sample below was produced from the same short story about Harold — a writer whose drawings finally come to life — and re-rendered through a different art direction. They illustrate the range of styles BdGEN can drive from a single project description.
+Same script, six visual identities. Each sample below was produced from the same short story about Harold — a writer whose drawings finally come to life — and re-rendered through a different art direction. They illustrate the range of styles BdGEN can drive from a single project description.
 
 <table>
   <tr>
