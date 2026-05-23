@@ -23,7 +23,9 @@ from openai import OpenAI
 from pydantic import BaseModel, Field
 
 from . import secret_store
+from . import trace as trace_module
 from .models import CharacterInput, LocationInput, ObjectInput, Style
+from .stats import normalise_usage as _normalise_usage
 
 
 SUPPORTED_MIME_TYPES = {
@@ -408,20 +410,25 @@ def extract(
         f"ou lieu protégé. Descripteurs génériques uniquement."
     )
 
-    completion = client.chat.completions.parse(
-        model=model or DEFAULT_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": user_text},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            },
-        ],
-        response_format=_ExtractionDraft,
-    )
+    with trace_module.node("style_extract", "llm_call") as _tn:
+        _tn.set_model("openai", model or DEFAULT_MODEL)
+        _tn.set_prompt(user_text)
+        _tn.set_extra(system_prompt=SYSTEM_PROMPT, image_bytes=len(image_bytes))
+        completion = client.chat.completions.parse(
+            model=model or DEFAULT_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_text},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                },
+            ],
+            response_format=_ExtractionDraft,
+        )
+        _tn.set_usage(_normalise_usage(getattr(completion, "usage", None)))
     msg = completion.choices[0].message
     if msg.parsed is None:
         raise RuntimeError(
@@ -549,20 +556,25 @@ def extract_character(
         f"d'une personne identifiable."
     )
 
-    completion = client.chat.completions.parse(
-        model=model or DEFAULT_MODEL,
-        messages=[
-            {"role": "system", "content": CHARACTER_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": user_text},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            },
-        ],
-        response_format=CharacterFromPhotoResult,
-    )
+    with trace_module.node("style_extract_character", "llm_call") as _tn:
+        _tn.set_model("openai", model or DEFAULT_MODEL)
+        _tn.set_prompt(user_text)
+        _tn.set_extra(system_prompt=CHARACTER_SYSTEM_PROMPT, image_bytes=len(image_bytes))
+        completion = client.chat.completions.parse(
+            model=model or DEFAULT_MODEL,
+            messages=[
+                {"role": "system", "content": CHARACTER_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_text},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                },
+            ],
+            response_format=CharacterFromPhotoResult,
+        )
+        _tn.set_usage(_normalise_usage(getattr(completion, "usage", None)))
     msg = completion.choices[0].message
     if msg.parsed is None:
         raise RuntimeError(
@@ -648,20 +660,25 @@ def extract_object(
         f"Rappel : pas de marque ou logo qui ne serait pas visible sur l'objet."
     )
 
-    completion = client.chat.completions.parse(
-        model=model or DEFAULT_MODEL,
-        messages=[
-            {"role": "system", "content": OBJECT_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": user_text},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            },
-        ],
-        response_format=ObjectFromPhotoResult,
-    )
+    with trace_module.node("style_extract_object", "llm_call") as _tn:
+        _tn.set_model("openai", model or DEFAULT_MODEL)
+        _tn.set_prompt(user_text)
+        _tn.set_extra(system_prompt=OBJECT_SYSTEM_PROMPT, image_bytes=len(image_bytes))
+        completion = client.chat.completions.parse(
+            model=model or DEFAULT_MODEL,
+            messages=[
+                {"role": "system", "content": OBJECT_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_text},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                },
+            ],
+            response_format=ObjectFromPhotoResult,
+        )
+        _tn.set_usage(_normalise_usage(getattr(completion, "usage", None)))
     msg = completion.choices[0].message
     if msg.parsed is None:
         raise RuntimeError(
@@ -745,20 +762,25 @@ def extract_location(
         f"Rappel : décris uniquement le décor, pas les personnes présentes."
     )
 
-    completion = client.chat.completions.parse(
-        model=model or DEFAULT_MODEL,
-        messages=[
-            {"role": "system", "content": LOCATION_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": user_text},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            },
-        ],
-        response_format=LocationFromPhotoResult,
-    )
+    with trace_module.node("style_extract_location", "llm_call") as _tn:
+        _tn.set_model("openai", model or DEFAULT_MODEL)
+        _tn.set_prompt(user_text)
+        _tn.set_extra(system_prompt=LOCATION_SYSTEM_PROMPT, image_bytes=len(image_bytes))
+        completion = client.chat.completions.parse(
+            model=model or DEFAULT_MODEL,
+            messages=[
+                {"role": "system", "content": LOCATION_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_text},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                },
+            ],
+            response_format=LocationFromPhotoResult,
+        )
+        _tn.set_usage(_normalise_usage(getattr(completion, "usage", None)))
     msg = completion.choices[0].message
     if msg.parsed is None:
         raise RuntimeError(

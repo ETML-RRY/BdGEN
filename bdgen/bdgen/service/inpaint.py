@@ -9,6 +9,7 @@ from typing import Literal
 
 from .. import secret_store
 from .. import stats as stats_module
+from .. import versioning
 from ..feedback import FeedbackStore, feedback_path_for
 from ..models import BdGenScript, image_size_for_format
 from ._helpers import _resolve_options
@@ -118,6 +119,7 @@ def inpaint_image(
     result_bytes = base64.b64decode(result.data[0].b64_json)
     tmp = image_path.with_suffix(image_path.suffix + ".tmp")
     tmp.write_bytes(result_bytes)
+    versioning.archive_before_write(image_path, kind="inpaint", extra={"prompt": prompt[:200]})
     tmp.replace(image_path)
     return image_path
 

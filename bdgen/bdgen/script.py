@@ -38,6 +38,7 @@ from .progress import (
     _coerce_reporter,
 )
 from .stats import TimedCall, normalise_usage, record_event, start_timer, stop_timer
+from . import trace
 
 MAX_ATTEMPTS = 3
 RETRY_BACKOFF_BASE_SECONDS = 2
@@ -573,6 +574,36 @@ def generate_script(
     )
     label = f"{model_cfg.provider}/{model_cfg.model}"
 
+    with trace.project_session(stats_project_dir), trace.node(
+        "generate_script", "flow",
+        inputs={
+            "project": config.project,
+            "target_pages": target_pages,
+            "preview_pages": preview_pages,
+            "provider": model_cfg.provider,
+            "model": model_cfg.model,
+            "has_feedback": bool(feedback),
+        },
+    ):
+        return _generate_script_impl(
+            config, input_path, feedback, preview_pages, target_pages,
+            script_path, rep, flag, model_cfg, label, stats_project_dir,
+        )
+
+
+def _generate_script_impl(
+    config: BdGenInput,
+    input_path: Path,
+    feedback: list[str] | None,
+    preview_pages: int | None,
+    target_pages: int,
+    script_path: Path | None,
+    rep: ProgressReporter,
+    flag: InterruptFlag,
+    model_cfg: ScriptModelConfig,
+    label: str,
+    stats_project_dir: Path | None,
+) -> BdGenScript:
     bd_script = _try_resume(script_path, config, target_pages, rep)
 
     if bd_script is None:
@@ -589,6 +620,7 @@ def generate_script(
             _build_setup_prompt(config, feedback, preview_pages, target_pages),
             model_cfg,
             _LLMSetupDraft,
+            trace_name="call_llm:setup",
         )
         setup = setup_result.value
         _record_llm_stats(
@@ -633,6 +665,7 @@ def generate_script(
             _build_page_prompt(config, bd_script, page_n, target_pages, feedback, preview_pages),
             model_cfg,
             Page,
+            trace_name=f"call_llm:page_{page_n}",
         )
         page_draft = page_result.value
         _record_llm_stats(
@@ -891,7 +924,13 @@ def _build_page_prompt(
 # --- LLM dispatch with retries ---
 
 
-def _call_llm(system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]) -> _LLMCallResult:
+def _call_llm(
+    system: str,
+    user: str,
+    model_config: ScriptModelConfig,
+    output_type: type[T],
+    trace_name: str = "call_llm",
+) -> _LLMCallResult:
     """Dispatch to the configured provider, with bounded retries on parse failure.
 
     Per-call retries (rather than per-script) mean a single page failure only
@@ -899,50 +938,60 @@ def _call_llm(system: str, user: str, model_config: ScriptModelConfig, output_ty
     """
     last_error: RuntimeError | None = None
     started_at, started = start_timer()
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        try:
-            if model_config.provider == "openai":
-                value, usage = _call_openai(system, user, model_config, output_type)
-                timer = stop_timer(started_at, started)
-                return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
-            if model_config.provider == "xai":
-                value, usage = _call_xai(system, user, model_config, output_type)
-                timer = stop_timer(started_at, started)
-                return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
-            if model_config.provider == "anthropic":
-                value, usage = _call_anthropic(system, user, model_config, output_type)
-                timer = stop_timer(started_at, started)
-                return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
-            raise NotImplementedError(f"Provider '{model_config.provider}' is not yet supported.")
-        except _RetryableRateLimit as e:
-            last_error = e
-            short_reason = str(e).split("\n", 1)[0]
-            if attempt < MAX_ATTEMPTS:
-                wait = e.retry_after_seconds
-                if wait is None:
+    with trace.node(trace_name, "llm_call") as tn:
+        tn.set_model(model_config.provider, model_config.model)
+        tn.set_prompt(user)
+        tn.set_extra(system_prompt=system, output_type=output_type.__name__)
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                if model_config.provider == "openai":
+                    value, usage = _call_openai(system, user, model_config, output_type)
+                    timer = stop_timer(started_at, started)
+                    tn.set_usage(usage)
+                    tn.set_outputs({"value_type": type(value).__name__, "attempts": attempt})
+                    return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
+                if model_config.provider == "xai":
+                    value, usage = _call_xai(system, user, model_config, output_type)
+                    timer = stop_timer(started_at, started)
+                    tn.set_usage(usage)
+                    tn.set_outputs({"value_type": type(value).__name__, "attempts": attempt})
+                    return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
+                if model_config.provider == "anthropic":
+                    value, usage = _call_anthropic(system, user, model_config, output_type)
+                    timer = stop_timer(started_at, started)
+                    tn.set_usage(usage)
+                    tn.set_outputs({"value_type": type(value).__name__, "attempts": attempt})
+                    return _LLMCallResult(value, usage, timer.elapsed_seconds, timer.started_at)
+                raise NotImplementedError(f"Provider '{model_config.provider}' is not yet supported.")
+            except _RetryableRateLimit as e:
+                last_error = e
+                short_reason = str(e).split("\n", 1)[0]
+                if attempt < MAX_ATTEMPTS:
+                    wait = e.retry_after_seconds
+                    if wait is None:
+                        wait = RETRY_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+                    wait = max(1.0, float(wait))
+                    print(
+                        f"  Claude rate limit on attempt {attempt}/{MAX_ATTEMPTS}: {short_reason}\n"
+                        f"  Waiting {wait:.0f}s before retry..."
+                    )
+                    time.sleep(wait)
+                else:
+                    print(f"  All {MAX_ATTEMPTS} attempts failed.")
+                    raise
+            except RuntimeError as e:
+                last_error = e
+                short_reason = str(e).split("\n", 1)[0]
+                if attempt < MAX_ATTEMPTS:
                     wait = RETRY_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
-                wait = max(1.0, float(wait))
-                print(
-                    f"  Claude rate limit on attempt {attempt}/{MAX_ATTEMPTS}: {short_reason}\n"
-                    f"  Waiting {wait:.0f}s before retry..."
-                )
-                time.sleep(wait)
-            else:
-                print(f"  All {MAX_ATTEMPTS} attempts failed.")
-                raise
-        except RuntimeError as e:
-            last_error = e
-            short_reason = str(e).split("\n", 1)[0]
-            if attempt < MAX_ATTEMPTS:
-                wait = RETRY_BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
-                print(f"  Attempt {attempt}/{MAX_ATTEMPTS} failed: {short_reason}\n  Retrying in {wait}s...")
-                time.sleep(wait)
-            else:
-                print(f"  All {MAX_ATTEMPTS} attempts failed.")
-                raise
+                    print(f"  Attempt {attempt}/{MAX_ATTEMPTS} failed: {short_reason}\n  Retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    print(f"  All {MAX_ATTEMPTS} attempts failed.")
+                    raise
 
-    assert last_error is not None
-    raise last_error
+        assert last_error is not None
+        raise last_error
 
 
 def _call_openai(system: str, user: str, model_config: ScriptModelConfig, output_type: type[T]) -> tuple[T, dict]:

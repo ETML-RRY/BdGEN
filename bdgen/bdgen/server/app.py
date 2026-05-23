@@ -32,7 +32,9 @@ from pydantic import BaseModel
 
 from .. import secret_store
 from .. import style_from_image as style_module
+from .. import trace as trace_module
 from .. import upscale as upscale_module
+from .. import versioning as versioning_module
 from ..service import (
     cascades,
     coherence,
@@ -367,6 +369,35 @@ def _register_api(app: FastAPI) -> None:
             raise HTTPException(404, "Projet inconnu.")
         return svc_state.project_statistics(name, _output_root())
 
+    # --- Developer-only trace endpoints (BDGEN_DEBUG=1) ---------------------
+    # Returns 404 when debug mode is off so prod surfaces no extra attack
+    # surface and the frontend can't accidentally enable the panel.
+
+    @app.get("/api/debug/enabled")
+    def get_debug_enabled() -> dict:
+        return {"enabled": trace_module.enabled()}
+
+    @app.get("/api/projects/{name}/traces")
+    def list_project_traces(name: str) -> dict:
+        if not trace_module.enabled():
+            raise HTTPException(404, "Trace endpoints disabled.")
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        project_dir = _output_root() / name
+        return {"sessions": trace_module.list_sessions(project_dir)}
+
+    @app.get("/api/projects/{name}/traces/{session_id}")
+    def get_project_trace(name: str, session_id: str) -> dict:
+        if not trace_module.enabled():
+            raise HTTPException(404, "Trace endpoints disabled.")
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        project_dir = _output_root() / name
+        nodes = trace_module.session_nodes(project_dir, session_id)
+        if not nodes:
+            raise HTTPException(404, "Session inconnue.")
+        return {"session_id": session_id, "nodes": nodes}
+
     @app.post("/api/projects")
     def create_project(payload: dict = Body(...)) -> dict:
         try:
@@ -468,6 +499,51 @@ def _register_api(app: FastAPI) -> None:
         if not target.exists() or not target.is_file():
             raise HTTPException(404, "Fichier introuvable.")
         return FileResponse(target)
+
+    # --- Per-file version history -------------------------------------------
+    # Every overwrite of a generated artefact archives the previous content
+    # under <parent>/.versions/<filename>/<ISO-ts>.<ext> via
+    # bdgen.versioning.archive_before_write. These endpoints expose that
+    # history to the UI.
+
+    def _resolve_within_project(name: str, path: str) -> tuple[Path, Path]:
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
+        target = (proj_dir / path).resolve()
+        try:
+            target.relative_to(proj_dir.resolve())
+        except ValueError:
+            raise HTTPException(400, "Chemin invalide.")
+        return proj_dir, target
+
+    @app.get("/api/projects/{name}/versions/{path:path}")
+    def list_file_versions(name: str, path: str) -> dict:
+        proj_dir, target = _resolve_within_project(name, path)
+        versions = versioning_module.list_versions(target)
+        for v in versions:
+            archived = versioning_module.archived_path(target, v["filename"])
+            v["relpath"] = str(archived.resolve().relative_to(proj_dir.resolve()))
+        current = versioning_module.current_info(target)
+        if current is not None:
+            current["relpath"] = path
+        return {
+            "current": current,
+            "versions": versions,
+        }
+
+    @app.post("/api/projects/{name}/versions/{path:path}/restore")
+    def restore_file_version(name: str, path: str, payload: dict = Body(...)) -> dict:
+        _, target = _resolve_within_project(name, path)
+        version_id = (payload or {}).get("version_id")
+        if not isinstance(version_id, str) or not version_id:
+            raise HTTPException(400, "Champ 'version_id' obligatoire.")
+        try:
+            return versioning_module.restore_version(target, version_id)
+        except FileNotFoundError as e:
+            raise HTTPException(404, str(e))
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
     # --- Import / export ---
 

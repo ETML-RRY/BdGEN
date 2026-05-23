@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from .. import secret_store
+from .. import versioning
 from ..models import BdGenScript, Style
 from . import ProjectSummary
 from ._helpers import update_reference_prompts_for_style_change
@@ -269,12 +270,18 @@ def restyle_project(
     for sub in ("references", "pages"):
         d = proj_dir / sub
         if d.is_dir():
-            count = sum(1 for p in d.rglob("*.png") if p.is_file())
+            pngs = [p for p in d.rglob("*.png") if p.is_file()]
+            # Archive each PNG before the directory is wiped — without this,
+            # the user has no way to recover the pre-restyle artefacts.
+            for png in pngs:
+                versioning.archive_before_write(png, kind="restyle")
+            count = len(pngs)
             shutil.rmtree(d, onerror=_force_writable_and_retry)
             deleted[sub] = count
 
     pdf = proj_dir / f"{name}.pdf"
     if pdf.exists():
+        versioning.archive_before_write(pdf, kind="restyle")
         pdf.unlink()
         deleted["pdf"] = True
 

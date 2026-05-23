@@ -35,6 +35,8 @@ from .progress import (
     _coerce_reporter,
 )
 from .stats import normalise_usage, record_event, start_timer, stop_timer
+from . import trace
+from . import versioning
 
 
 # Human-readable publication spec injected into image prompts. Drives the
@@ -103,6 +105,34 @@ def compose_output(
     """
     rep = _coerce_reporter(reporter)
     flag = _coerce_flag(interrupt)
+    with trace.project_session(stats_project_dir), trace.node(
+        "compose_output", "flow",
+        inputs={
+            "project": script.project,
+            "pages": len(script.pages),
+            "has_cover": script.cover is not None,
+            "has_back": script.back_cover is not None,
+            "force": force,
+            "image_model": f"{options.image_model.provider}/{options.image_model.model}",
+        },
+    ):
+        return _compose_output_impl(
+            script, options, pages_dir, feedback_store, force,
+            rep, flag, style_ref, stats_project_dir,
+        )
+
+
+def _compose_output_impl(
+    script: BdGenScript,
+    options: GenerationOptions,
+    pages_dir: Path,
+    feedback_store: FeedbackStore | None,
+    force: bool,
+    rep: ProgressReporter,
+    flag: InterruptFlag,
+    style_ref: Path | None,
+    stats_project_dir: Path | None,
+) -> Path:
     pages_dir.mkdir(parents=True, exist_ok=True)
     options.output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -318,6 +348,7 @@ def _generate_page(
     return _call_image(
         client, image_model, prompt, target, refs,
         size=image_size_for_format(script.page_format),
+        trace_name=f"compose_page_{page.page_number}",
     )
 
 
@@ -616,6 +647,7 @@ def _generate_cover(
     return _call_image(
         client, image_model, prompt, target, refs,
         size=image_size_for_format(script.page_format),
+        trace_name="compose_cover",
     )
 
 
@@ -642,6 +674,7 @@ def _generate_back(
     return _call_image(
         client, image_model, prompt, target, refs,
         size=image_size_for_format(script.page_format),
+        trace_name="compose_back",
     )
 
 
@@ -776,37 +809,46 @@ def _call_image(
     target: Path,
     refs: list[Path],
     size: str,
+    trace_name: str = "call_image",
 ) -> dict:
-    if refs:
-        files = [(p.name, p.read_bytes(), "image/png") for p in refs]
-        edit_kwargs = dict(
-            model=image_model.model,
-            image=files,
-            prompt=prompt,
-            size=size,
-            quality=image_model.quality,
-        )
-        # `input_fidelity` is a gpt-image-1 knob; gpt-image-2 rejects it with
-        # 400 invalid_input_fidelity_model. Only opt in on the older model.
-        if image_model.model == "gpt-image-1":
-            edit_kwargs["input_fidelity"] = "high"
-        result = client.images.edit(**edit_kwargs)
-    else:
-        result = client.images.generate(
-            model=image_model.model,
-            prompt=prompt,
-            size=size,
-            quality=image_model.quality,
-        )
-    image_b64 = result.data[0].b64_json
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_bytes(base64.b64decode(image_b64))
-    tmp.replace(target)
-    return {
-        "usage": normalise_usage(getattr(result, "usage", None)),
-        "prompt": prompt,
-        "input_images": len(refs),
-    }
+    with trace.node(trace_name, "image_call", inputs={"refs": refs, "size": size}) as tn:
+        tn.set_model("openai", image_model.model)
+        tn.set_prompt(prompt)
+        tn.set_extra(quality=image_model.quality)
+        if refs:
+            files = [(p.name, p.read_bytes(), "image/png") for p in refs]
+            edit_kwargs = dict(
+                model=image_model.model,
+                image=files,
+                prompt=prompt,
+                size=size,
+                quality=image_model.quality,
+            )
+            # `input_fidelity` is a gpt-image-1 knob; gpt-image-2 rejects it with
+            # 400 invalid_input_fidelity_model. Only opt in on the older model.
+            if image_model.model == "gpt-image-1":
+                edit_kwargs["input_fidelity"] = "high"
+            result = client.images.edit(**edit_kwargs)
+        else:
+            result = client.images.generate(
+                model=image_model.model,
+                prompt=prompt,
+                size=size,
+                quality=image_model.quality,
+            )
+        image_b64 = result.data[0].b64_json
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        tmp.write_bytes(base64.b64decode(image_b64))
+        versioning.archive_before_write(target, kind="regen")
+        tmp.replace(target)
+        usage = normalise_usage(getattr(result, "usage", None))
+        tn.set_usage(usage)
+        tn.set_outputs({"artifact": target, "input_images": len(refs)})
+        return {
+            "usage": usage,
+            "prompt": prompt,
+            "input_images": len(refs),
+        }
 
 
 def _build_cover_prompt(

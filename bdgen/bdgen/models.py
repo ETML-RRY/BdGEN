@@ -393,9 +393,15 @@ class BdGenScript(BaseModel):
         for obj in self.objects:
             obj.reference_image = _resolve_path(obj.reference_image, proj_dir)
 
-    def save(self, path: Path) -> None:
+    def save(self, path: Path, *, kind: str = "regen") -> None:
+        from . import versioning  # local import to avoid a circular dependency
+
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
+        # Archive the previous content before overwriting. Dedup avoids one
+        # archive entry per save when the script hasn't actually changed
+        # (common after a no-op edit).
+        versioning.archive_before_write(p, kind=kind, dedup=True)
         p.write_text(
             json.dumps(self.to_portable_dict(p), ensure_ascii=False, indent=2),
             encoding="utf-8",
