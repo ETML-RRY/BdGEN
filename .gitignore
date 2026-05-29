@@ -18,7 +18,7 @@ wheels/
 # Web frontend
 bdgen/web/node_modules/
 bdgen/web/dist/
-bdgen/bdgen/server/static/
+bdgen/server/static/
 
 bdgen/desktop/node_modules/
 
