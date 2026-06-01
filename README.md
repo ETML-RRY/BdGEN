@@ -218,6 +218,45 @@ BdGEN follows four main steps:
 | Pages      | Composes final pages, the cover, and the back cover              | `pages/`, final PDF |
 | Upscale    | Optional, enlarges the final images                              | `pages_upscaled/`   |
 
+## Debug Mode and Trace Analysis
+
+The pipeline includes an optional execution trace that records each prompt-building step, LLM call, and image call as a JSONL timeline. It is gated behind the `BDGEN_DEBUG` environment variable and adds no overhead when unset.
+
+### Enable Debug Mode
+
+Set `BDGEN_DEBUG=1` before starting the server:
+
+```bash
+# Linux / macOS
+BDGEN_DEBUG=1 uv run python -m bdgen.server
+
+# Windows PowerShell
+$env:BDGEN_DEBUG = "1"
+uv run python -m bdgen.server
+```
+
+You can also add `BDGEN_DEBUG=1` to `bdgen/.env`. Accepted truthy values: `1`, `true`, `yes`, `on`.
+
+When debug mode is active, the backend exposes `/api/debug/enabled` and the React frontend reveals a **Trace** tab in the wizard, next to the existing project tabs. In production builds the gate stays closed and the tab is hidden.
+
+### Trace Tab
+
+For each project, the Trace tab lists every session captured during generation. A session corresponds to one process lifetime per project.
+
+- **Session A** selects the timeline to display as a dagre-laid-out graph.
+- **Session B** (optional) overlays a second run on top of the first — modified nodes get a purple border, making it easy to spot which prompt or call drifted between two runs.
+- Clicking a node opens a modal with the resolved prompt, model parameters, response, and timing.
+
+### Trace Files
+
+Traces are written next to the project output:
+
+```text
+<project_dir>/.bdgen-trace/timeline.jsonl
+```
+
+One node per line, grouped by `session_id`. Delete the `.bdgen-trace/` folder to discard captured sessions.
+
 ## Useful Commands
 
 From the repository root:
