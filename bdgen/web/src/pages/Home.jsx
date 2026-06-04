@@ -6,6 +6,7 @@ import StateChip from "../components/StateChip.jsx";
 import RunningBanner from "../components/RunningBanner.jsx";
 import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog.jsx";
 import DuplicateProjectDialog from "../components/DuplicateProjectDialog.jsx";
+import ImportProjectDialog from "../components/ImportProjectDialog.jsx";
 
 const STATE_LABELS = {
   preparation: "Préparation",
@@ -22,6 +23,7 @@ export default function Home() {
   const [duplicating, setDuplicating] = useState(null);
   const [duplicateTarget, setDuplicateTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [importFile, setImportFile] = useState(null);
   const fileRef = useRef(null);
   const navigate = useNavigate();
 
@@ -60,6 +62,17 @@ export default function Home() {
     }
   }
 
+  async function onConfirmImport({ newTitle, newProject }) {
+    if (!importFile) return;
+    try {
+      const { name } = await api.importProject(importFile, { newTitle, newProject });
+      navigate(`/projects/${encodeURIComponent(name)}`);
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  }
+
   function onAskDelete(e, project) {
     e.preventDefault();
     e.stopPropagation();
@@ -79,15 +92,13 @@ export default function Home() {
     return () => clearInterval(t);
   }, []);
 
-  async function onImport(e) {
+  function onImport(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    try {
-      const { name } = await api.importProject(file);
-      navigate(`/projects/${encodeURIComponent(name)}`);
-    } catch (err) {
-      setError(err.message);
-    }
+    setError(null);
+    setImportFile(file);
+    // Reset input so the same file can be picked again if the user cancels
+    e.target.value = "";
   }
 
   return (
@@ -278,6 +289,14 @@ export default function Home() {
           }
           onClose={() => setDuplicateTarget(null)}
           onConfirm={onConfirmDuplicate}
+        />
+      )}
+
+      {importFile && (
+        <ImportProjectDialog
+          fileName={importFile.name}
+          onClose={() => setImportFile(null)}
+          onConfirm={onConfirmImport}
         />
       )}
     </div>

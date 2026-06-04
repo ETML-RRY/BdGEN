@@ -48,14 +48,19 @@ def import_zip(
     blob: bytes,
     output_root: Path | None = None,
     overwrite: bool = False,
+    new_project_id: str | None = None,
+    new_title: str | None = None,
 ) -> str:
     """Extract a .bdgen blob into the output root. Returns the project name.
 
     The zip is expected to contain exactly one top-level folder which becomes
     the project name. If a project with the same name exists and ``overwrite``
     is False, a numeric suffix is appended.
+
+    ``new_project_id`` and ``new_title`` let the caller override the slug and
+    display name of the imported project respectively.
     """
-    from .lifecycle import projects_root
+    from .lifecycle import projects_root, _slugify, _next_available_name
 
     root = projects_root(output_root)
     root.mkdir(parents=True, exist_ok=True)
@@ -66,16 +71,28 @@ def import_zip(
         top_levels = {n.split("/", 1)[0] for n in names if n.strip()}
         if len(top_levels) != 1:
             raise ValueError("Archive invalide : un unique dossier racine est attendu.")
-        project_name = top_levels.pop()
+        zip_folder = top_levels.pop()
+
+        # Determine desired slug (user override > title-derived > zip folder)
+        if new_project_id and new_project_id.strip():
+            desired = _slugify(new_project_id) or "projet"
+        elif new_title and new_title.strip():
+            desired = _slugify(new_title) or "projet"
+        else:
+            desired = zip_folder
+
+        project_name = _next_available_name(desired, root) if not overwrite else desired
         target_dir = root / project_name
-        if target_dir.exists() and not overwrite:
-            i = 2
-            while (root / f"{project_name}_{i}").exists():
-                i += 1
-            new_name = f"{project_name}_{i}"
-            target_dir = root / new_name
-            project_name = new_name
-            # Rewrite arcnames on extraction
+
+        if target_dir.exists() and overwrite:
+            shutil.rmtree(target_dir, onerror=_force_writable_and_retry)
+
+        if project_name == zip_folder:
+            # No rename needed — simple extractall
+            target_dir.mkdir(parents=True, exist_ok=True)
+            zf.extractall(root)
+        else:
+            # Extract with folder rename
             for member in zf.infolist():
                 rel = member.filename.split("/", 1)[1] if "/" in member.filename else ""
                 if not rel:
@@ -84,17 +101,15 @@ def import_zip(
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 if not member.is_dir():
                     dest.write_bytes(zf.read(member))
-        else:
-            if target_dir.exists() and overwrite:
-                shutil.rmtree(target_dir, onerror=_force_writable_and_retry)
-            target_dir.mkdir(parents=True, exist_ok=True)
-            zf.extractall(root)
-    # Normalize extracted documents so they become portable across machines.
+
+    # Normalize config so it is portable and reflects the user's choices.
     cfg_path = root / project_name / PROJECT_CONFIG_NAME
     if cfg_path.exists():
         try:
             config = BdGenInput.load(cfg_path)
             config.project = project_name
+            if new_title and new_title.strip():
+                config.display_name = new_title.strip()
             save_config(config, root)
         except Exception:
             pass

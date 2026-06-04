@@ -443,6 +443,7 @@ def _register_api(app: FastAPI) -> None:
             raise HTTPException(404, "Projet inconnu.")
         data = payload or {}
         new_id = data.get("new_project") or None
+        new_title = data.get("new_title") or None
         include_refs = bool(data.get("include_references", False))
         include_photos = bool(data.get("include_photos", True))
         include_style_ref = bool(data.get("include_style_reference", True))
@@ -454,6 +455,7 @@ def _register_api(app: FastAPI) -> None:
                 include_references=include_refs,
                 include_photos=include_photos,
                 include_style_reference=include_style_ref,
+                new_title=new_title,
             )
         except FileNotFoundError as e:
             raise HTTPException(404, str(e))
@@ -562,10 +564,19 @@ def _register_api(app: FastAPI) -> None:
         )
 
     @app.post("/api/projects/import")
-    async def import_project(file: UploadFile = File(...)) -> dict:
+    async def import_project(
+        file: UploadFile = File(...),
+        new_project: str = Form(default=""),
+        new_title: str = Form(default=""),
+    ) -> dict:
         blob = await file.read()
         try:
-            project_name = import_export.import_zip(blob, _output_root())
+            project_name = import_export.import_zip(
+                blob,
+                _output_root(),
+                new_project_id=new_project or None,
+                new_title=new_title or None,
+            )
         except Exception as e:
             raise HTTPException(400, f"Archive invalide : {e}")
         return {"name": project_name}

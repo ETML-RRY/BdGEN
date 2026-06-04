@@ -70,12 +70,19 @@ export const api = {
   deleteProject: (name) => request(`/api/projects/${encodeURIComponent(name)}`, { method: "DELETE" }),
   duplicateProject: (
     name,
-    { newProject = null, includeReferences = false, includePhotos = true, includeStyleReference = true } = {},
+    {
+      newProject = null,
+      newTitle = null,
+      includeReferences = false,
+      includePhotos = true,
+      includeStyleReference = true,
+    } = {},
   ) =>
     request(`/api/projects/${encodeURIComponent(name)}/duplicate`, {
       method: "POST",
       body: JSON.stringify({
         new_project: newProject,
+        new_title: newTitle,
         include_references: includeReferences,
         include_photos: includePhotos,
         include_style_reference: includeStyleReference,
@@ -111,9 +118,11 @@ export const api = {
   },
 
   exportUrl: (name) => `/api/projects/${encodeURIComponent(name)}/export`,
-  importProject: async (file) => {
+  importProject: async (file, { newProject = null, newTitle = null } = {}) => {
     const fd = new FormData();
     fd.append("file", file);
+    if (newProject) fd.append("new_project", newProject);
+    if (newTitle) fd.append("new_title", newTitle);
     const res = await fetch("/api/projects/import", { method: "POST", body: fd });
     if (!res.ok) throw new Error(await res.text());
     return res.json();

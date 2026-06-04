@@ -147,6 +147,7 @@ def duplicate_project(
     include_references: bool = False,
     include_photos: bool = True,
     include_style_reference: bool = True,
+    new_title: str | None = None,
 ) -> str:
     """Clone the source project's configuration into a fresh project.
 
@@ -169,16 +170,17 @@ def duplicate_project(
     root = projects_root(output_root)
     src_cfg = load_config(source_name, output_root)
 
-    base = _slugify(new_project_id or f"{source_name}_copie") or "projet_copie"
+    explicit_slug = new_project_id and new_project_id.strip()
+    slug_source = new_project_id or new_title or f"{source_name}_copie"
+    base = _slugify(slug_source) or "projet_copie"
     new_id = _next_available_name(base, root)
 
     new_cfg = src_cfg.model_copy(deep=True)
     new_cfg.project = new_id
-    if not (new_project_id and new_project_id.strip()):
-        # User didn't pass an explicit name → tag the display name (or fall
-        # back to the title) so the duplicate is easy to spot in listings
-        # until the user renames it. The BD title itself is preserved when a
-        # display name exists so the generated content stays unaffected.
+    if new_title and new_title.strip():
+        new_cfg.display_name = new_title.strip()
+    elif not explicit_slug:
+        # No explicit name → tag the display name so the copy is easy to spot
         base_label = new_cfg.display_name or new_cfg.metadata.title
         if base_label:
             new_cfg.display_name = f"{base_label} (copie)"

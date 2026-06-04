@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { slugify, sanitizeSlugInput } from "../utils/slugify.js";
 
 /**
  * Dialog asking the user which elements of the source project to carry over
@@ -8,24 +9,47 @@ import { useState } from "react";
  * Props:
  *   - sourceLabel: friendly name shown in the title
  *   - onClose: () => void
- *   - onConfirm: async ({ includePhotos, includeStyleReference, includeReferences }) => void
+ *   - onConfirm: async ({ newTitle, newProject, includePhotos, includeStyleReference, includeReferences }) => void
  */
 export default function DuplicateProjectDialog({
   sourceLabel,
   onClose,
   onConfirm,
 }) {
+  const [newTitle, setNewTitle] = useState("");
+  const [manualSlug, setManualSlug] = useState("");
+  const [slugIsManual, setSlugIsManual] = useState(false);
   const [includePhotos, setIncludePhotos] = useState(true);
   const [includeStyleReference, setIncludeStyleReference] = useState(true);
   const [includeReferences, setIncludeReferences] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
+  const derivedSlug = newTitle.trim() ? slugify(newTitle) : "";
+  const slugValue = slugIsManual ? manualSlug : derivedSlug;
+
+  function handleTitleChange(e) {
+    setNewTitle(e.target.value);
+  }
+
+  function handleSlugChange(e) {
+    const sanitized = sanitizeSlugInput(e.target.value);
+    if (sanitized === "") {
+      setSlugIsManual(false);
+      setManualSlug("");
+    } else {
+      setSlugIsManual(true);
+      setManualSlug(sanitized);
+    }
+  }
+
   async function handleConfirm() {
     setError(null);
     setSubmitting(true);
     try {
       await onConfirm({
+        newTitle: newTitle.trim() || null,
+        newProject: slugValue || null,
         includePhotos,
         includeStyleReference,
         includeReferences,
@@ -49,10 +73,51 @@ export default function DuplicateProjectDialog({
           )}
         </div>
 
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-semibold mb-1">
+            Identité de la copie
+          </legend>
+
+          <div>
+            <label className="block text-xs font-medium mb-1" htmlFor="dup-title">
+              Titre <span className="text-[var(--color-mute)] font-normal">(affiché dans la liste)</span>
+            </label>
+            <input
+              id="dup-title"
+              type="text"
+              className="input w-full"
+              placeholder={sourceLabel ? `${sourceLabel} (copie)` : "Titre de la copie"}
+              value={newTitle}
+              onChange={handleTitleChange}
+              disabled={submitting}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium mb-1" htmlFor="dup-slug">
+              Identifiant{" "}
+              <span className="text-[var(--color-mute)] font-normal">(slug du dossier)</span>
+            </label>
+            <input
+              id="dup-slug"
+              type="text"
+              className="input w-full font-mono text-sm"
+              placeholder="Identifiant du dossier"
+              value={slugValue}
+              onChange={handleSlugChange}
+              disabled={submitting}
+            />
+            <p className="mt-1 text-xs text-[var(--color-mute)]">
+              Lettres minuscules, chiffres et underscores uniquement.
+              {!slugIsManual && derivedSlug && " Dérivé du titre — modifiable."}
+            </p>
+          </div>
+        </fieldset>
+
         <div className="text-sm rounded-md p-3 bg-[var(--color-mint-100)] border border-[var(--color-mint-200)] text-[var(--color-mint-700)]">
           <div className="font-semibold mb-1">Toujours repris</div>
           <ul className="list-disc list-inside space-y-0.5">
-            <li>Titre, métadonnées, options de génération</li>
+            <li>Métadonnées, options de génération</li>
             <li>Style et description du scénario</li>
             <li>Personnages, décors et objets (définitions)</li>
           </ul>
