@@ -87,6 +87,29 @@ def _format_spec(page_format: str | None) -> dict[str, str]:
     return _PAGE_FORMAT_SPECS.get(page_format or "portrait", _PAGE_FORMAT_SPECS["portrait"])
 
 
+def _layout_rows_text(page: "Page", fmt: dict, page_format: str) -> str:
+    """Build an explicit row→panel map for the image prompt layout section.
+
+    Strip is always a single row regardless of script data. Other formats use
+    page.rows when available (structured LLM output), falling back to page.layout
+    or the generic format hint for older scripts that predate the rows field.
+    """
+    if page_format == "strip":
+        nums = ", ".join(f"panel {p.panel_number}" for p in page.panels)
+        return (
+            f"Row 1 (only row — landscape strip): {nums}\n"
+            "        All panels share the SAME HEIGHT — the full vertical extent of the strip. "
+            "Panel widths may vary. Absolutely no stacking rows."
+        )
+    if page.rows:
+        row_lines = []
+        for i, row in enumerate(page.rows, 1):
+            cells = ", ".join(f"panel {n}" for n in row)
+            row_lines.append(f"Row {i}: {cells}")
+        return "\n        ".join(row_lines)
+    return page.layout or fmt["layout_hint"]
+
+
 def compose_output(
     script: BdGenScript,
     options: GenerationOptions,
@@ -524,11 +547,20 @@ def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | 
                     # rectangular caption box with no tail.
                     lines.append(f'    - CAPTION (narration, no speaker, no tail): "{d.text}"')
                 else:
+                    other_names = [
+                        script.character_by_id(c).name
+                        for c in panel.characters
+                        if c != d.speaker and script.character_by_id(c)
+                    ]
+                    not_from = (
+                        f" MUST NOT point to: {', '.join(other_names)}."
+                        if other_names
+                        else ""
+                    )
                     lines.append(
                         f'    - SPEAKER="{speaker_name}" (type={d.type}): "{d.text}"\n'
                         f"      → Bubble tail MUST originate from {speaker_name}'s mouth area "
-                        f"(or from {speaker_name} for thought clouds). Never let the tail point "
-                        f"to a different character."
+                        f"(or from {speaker_name}'s head for thought clouds).{not_from}"
                     )
             dialogs_block = "\n  Dialogs:\n" + "\n".join(lines)
 
@@ -575,19 +607,11 @@ def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | 
           over complex foreshortening that risks errors.
         {f"- NEGATIVE CONSTRAINTS: {style.negative_constraints}" if style.negative_constraints else ""}
 
-        PAGE LAYOUT:
-        {
-            (
-                f"STRIP FORMAT — NON-NEGOTIABLE SINGLE ROW: place all {len(page.panels)} panel(s) "
-                f"in ONE horizontal row from left to right. Absolutely no stacking rows. "
-                f"All panels share identical height (full strip height). Width may vary per panel."
-            )
-            if script.page_format == "strip"
-            else (page.layout or fmt["layout_hint"])
-        }
+        PAGE LAYOUT — PANEL MAP (non-negotiable):
+        {_layout_rows_text(page, fmt, script.page_format)}
 
-        This page contains {len(page.panels)} panel(s). Arrange them following
-        the layout description above.
+        This page contains {len(page.panels)} panel(s). Arrange them exactly
+        as described in the panel map above — each row lists its panels left to right.
 
         PANELS:
         """)

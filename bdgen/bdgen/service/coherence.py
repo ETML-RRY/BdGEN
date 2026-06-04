@@ -277,7 +277,12 @@ def apply_global_suggestion(
         '  "object_additions": [<nouveaux objets>]\n'
         "}\n"
         "Chaque page dans page_updates doit inclure tous ses champs (page_number, layout, panels…). "
-        "Chaque personnage/décor/objet doit inclure tous ses champs obligatoires (id, name, etc.). "
+        "Chaque personnage dans character_additions/character_updates doit inclure : "
+        "id (EXACTEMENT le même que dans la suggestion), name, physical_description, reference_prompt (obligatoire, en anglais, format prompt image). "
+        "Chaque décor dans location_additions/location_updates doit inclure : "
+        "id (EXACTEMENT le même que dans la suggestion), name, description, reference_prompt (obligatoire, en anglais, format prompt image). "
+        "Chaque objet dans object_additions/object_updates doit inclure : "
+        "id (EXACTEMENT le même que dans la suggestion), name, description, reference_prompt (obligatoire, en anglais, format prompt image). "
         "Retourne un tableau vide pour les catégories non modifiées. "
         "Ne génère PAS les éléments qui n'ont pas besoin de changer."
     )
@@ -686,4 +691,107 @@ def sync_script_with_config(name: str, output_root: Path | None = None) -> dict:
 
     suggestion = _build_sync_suggestion(diff, style_hint)
     result = apply_global_suggestion(name, suggestion, output_root)
+
+    # Fallback: if the LLM silently failed to add some entities (e.g. missing
+    # required reference_prompt caused a validation error), add them directly
+    # from the config so the diff does not reappear on the next config visit.
+    result = _ensure_new_entities_added(name, output_root, diff, result)
+
     return {**result, "diff": diff}
+
+
+def _ensure_new_entities_added(
+    name: str,
+    output_root: "Path | None",
+    original_diff: dict,
+    result: dict,
+) -> dict:
+    """Guarantee that every entity listed as 'new' in *original_diff* exists in
+    the script after the LLM call. When the LLM omits a required field (e.g.
+    reference_prompt) Pydantic validation fails silently; this fallback inserts
+    the entity directly so the diff does not resurface on the next config visit.
+    """
+    from .lifecycle import get_project_dir
+
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    try:
+        bd_script = BdGenScript.load(script_path)
+        config = load_config(name, output_root)
+    except Exception:
+        return result
+
+    changes = dict(result.get("changes") or {})
+    dirty = False
+
+    # --- characters ---
+    existing_char_ids = {c.id for c in bd_script.characters}
+    config_chars = {c.id: c for c in config.characters}
+    for entry in original_diff["new"]["characters"]:
+        cid = entry["id"]
+        if cid not in existing_char_ids:
+            src = config_chars.get(cid)
+            if src is None:
+                continue
+            fallback_prompt = src.physical_description
+            if src.outfit:
+                fallback_prompt += f", {src.outfit}"
+            bd_script.characters.append(
+                ScriptCharacter(
+                    id=src.id,
+                    name=src.name,
+                    physical_description=src.physical_description,
+                    outfit=src.outfit,
+                    reference_prompt=fallback_prompt,
+                )
+            )
+            existing_char_ids.add(cid)
+            changes["character_additions"] = changes.get("character_additions", 0) + 1
+            dirty = True
+
+    # --- locations ---
+    existing_loc_ids = {loc.id for loc in bd_script.locations}
+    config_locs = {loc.id: loc for loc in config.locations}
+    for entry in original_diff["new"]["locations"]:
+        lid = entry["id"]
+        if lid not in existing_loc_ids:
+            src = config_locs.get(lid)
+            if src is None:
+                continue
+            bd_script.locations.append(
+                ScriptLocation(
+                    id=src.id,
+                    name=src.name,
+                    description=src.description,
+                    reference_prompt=src.description,
+                )
+            )
+            existing_loc_ids.add(lid)
+            changes["location_additions"] = changes.get("location_additions", 0) + 1
+            dirty = True
+
+    # --- objects ---
+    existing_obj_ids = {o.id for o in bd_script.objects}
+    config_objs = {o.id: o for o in config.objects}
+    for entry in original_diff["new"]["objects"]:
+        oid = entry["id"]
+        if oid not in existing_obj_ids:
+            src = config_objs.get(oid)
+            if src is None:
+                continue
+            bd_script.objects.append(
+                ScriptObject(
+                    id=src.id,
+                    name=src.name,
+                    description=src.description,
+                    reference_prompt=src.description,
+                )
+            )
+            existing_obj_ids.add(oid)
+            changes["object_additions"] = changes.get("object_additions", 0) + 1
+            dirty = True
+
+    if dirty:
+        bd_script.save(script_path)
+
+    return {**result, "changes": changes}

@@ -633,10 +633,7 @@ function ImageFlipper({
                 <img
                   src={displayedUrl}
                   alt={item.label}
-                  className={
-                    "max-h-full max-w-full object-contain " +
-                    (isStale ? "opacity-60 ring-2 ring-[var(--color-peach-300)]" : "")
-                  }
+                  className="max-h-full max-w-full object-contain"
                 />
               )
             ) : (

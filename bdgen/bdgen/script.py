@@ -196,6 +196,7 @@ PAGE_SYSTEM_PROMPT = dedent("""\
     {
       "page_number": <integer>,
       "layout": "<short composition description>",
+      "rows": [[1, 2], [3, 4, 5]],
       "panels": [
         {
           "panel_number": <1-indexed integer within the page>,
@@ -219,6 +220,10 @@ PAGE_SYSTEM_PROMPT = dedent("""\
       in the language specified by `metadata.language`.
     - The page's `layout` description MUST exactly describe the number of panels you
       produce. Don't say "3 cases" if you emit 4 panels.
+    - The `rows` field MUST list every panel_number exactly once, grouped by row
+      from top to bottom. Row 1 is the topmost row, Row 2 is below it, etc.
+      Example for 5 panels in 2 rows: [[1, 2], [3, 4, 5]]. Every panel_number
+      that appears in `panels` must appear in exactly one row of `rows`.
     - Use ONLY character ids, location ids and object ids defined in the setup. Do not
       introduce new ones in this call.
     - List in `objects` the ids of EVERY object visible in the panel (only objects from
@@ -536,6 +541,8 @@ PAGE_REFINE_SYSTEM_PROMPT = dedent("""\
     - Use ONLY character ids and location ids defined in the setup.
     - Honor `structure.panels_per_page_avg` and `structure.panels_per_page_range`.
     - The page's `layout` description MUST exactly match the number of panels.
+    - The `rows` field MUST list every panel_number exactly once, grouped by row
+      from top to bottom (Row 1 topmost). Example: [[1, 2], [3, 4, 5]].
     - Write narrative content in the language specified by `metadata.language`.
     - Keep dialog lines short.
     - USER-PHOTO ANCHOR — the user message includes a `photo_pinned_entities`
@@ -574,6 +581,8 @@ _STRIP_LAYOUT_CONSTRAINT = dedent("""\
     - The `layout` field MUST be exactly: "single horizontal row of <N> panels"
       (substitute <N> with the actual panel count). Any wording that implies
       multiple rows, a grid, or vertical stacking is rejected.
+    - The `rows` field MUST be a single-element list containing ALL panel numbers
+      in order: e.g. for 4 panels: [[1, 2, 3, 4]].
     - Every panel shares the SAME HEIGHT — the full vertical extent of the strip.
       You MUST NOT vary panel heights.
     - You MAY vary panel WIDTHS (wider for wide action shots, narrower for

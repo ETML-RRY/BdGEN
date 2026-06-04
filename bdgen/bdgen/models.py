@@ -328,6 +328,7 @@ class Panel(BaseModel):
 class Page(BaseModel):
     page_number: int
     layout: str | None = None
+    rows: list[list[int]] | None = None
     panels: list[Panel]
 
 
