@@ -209,6 +209,9 @@ def duplicate_project(
                 for p in src_photos.iterdir():
                     if p.is_file():
                         shutil.copy2(p, dst_photos / p.name)
+                    elif p.is_dir():
+                        # New multi-photo format: subdirectory per entity
+                        shutil.copytree(p, dst_photos / p.name, dirs_exist_ok=True)
 
     if include_references:
         src_refs = src_dir / "references"
@@ -242,10 +245,14 @@ def restyle_project(
     if not proj_dir.is_dir():
         raise FileNotFoundError(f"Projet inconnu : {name}")
 
-    with trace.project_session(proj_dir), trace.node(
-        "restyle_project", "flow",
-        inputs={"project": name, "style_keys": sorted(k for k, v in new_style.items() if v is not None)},
-    ) as tn:
+    with (
+        trace.project_session(proj_dir),
+        trace.node(
+            "restyle_project",
+            "flow",
+            inputs={"project": name, "style_keys": sorted(k for k, v in new_style.items() if v is not None)},
+        ) as tn,
+    ):
         config = load_config(name, output_root)
         # Re-validate the incoming style by routing it through the Pydantic model.
         merged = config.style.model_dump()

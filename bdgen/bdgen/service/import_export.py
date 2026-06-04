@@ -233,9 +233,26 @@ def export_references_bundle(
                 )
             manifest[kind].append(entry)
             files.append((f"references/{kind}/{tid}.png", png))
-            photo = proj_dir / photos_dirname[kind] / f"{tid}.png"
-            if photo.exists() and photo.stat().st_size > 0:
-                files.append((f"{photos_dirname[kind]}/{tid}.png", photo))
+            # Export the first available photo under the legacy flat-file name for
+            # cross-version bundle compat. Check new subdirectory format first.
+            entity_photo_dir = proj_dir / photos_dirname[kind] / tid
+            first_photo: Path | None = None
+            if entity_photo_dir.is_dir():
+                candidates = []
+                for p in entity_photo_dir.iterdir():
+                    if p.is_file() and p.suffix.lower() == ".png" and p.stat().st_size > 0:
+                        try:
+                            candidates.append((int(p.stem), p))
+                        except ValueError:
+                            pass
+                if candidates:
+                    first_photo = sorted(candidates)[0][1]
+            if first_photo is None:
+                flat = proj_dir / photos_dirname[kind] / f"{tid}.png"
+                if flat.exists() and flat.stat().st_size > 0:
+                    first_photo = flat
+            if first_photo is not None:
+                files.append((f"{photos_dirname[kind]}/{tid}.png", first_photo))
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:

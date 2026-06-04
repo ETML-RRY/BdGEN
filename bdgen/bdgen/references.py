@@ -36,6 +36,9 @@ REFERENCE_SIZE = "1024x1024"
 XAI_MAX_PROMPT_CHARS = 8000
 XAI_PROMPT_MARGIN = 200
 XAI_PROMPT_OMISSION = "\n\n[Prompt abridged for Grok's 8000-character image prompt limit.]\n\n"
+# Per-entity photo caps per provider. xAI total input = 3 (style-ref + entity photos).
+OPENAI_MAX_ENTITY_PHOTOS = 4
+XAI_MAX_ENTITY_PHOTOS = 2
 
 
 def generate_references(
@@ -48,9 +51,9 @@ def generate_references(
     reporter: ProgressReporter | None = None,
     interrupt: InterruptFlag | None = None,
     style_ref: Path | None = None,
-    character_photos: dict[str, Path] | None = None,
-    location_photos: dict[str, Path] | None = None,
-    object_photos: dict[str, Path] | None = None,
+    character_photos: dict[str, list[Path]] | None = None,
+    location_photos: dict[str, list[Path]] | None = None,
+    object_photos: dict[str, list[Path]] | None = None,
     stats_project_dir: Path | None = None,
     allow_style_copy: bool | None = None,
 ) -> BdGenScript:
@@ -70,21 +73,36 @@ def generate_references(
     # The flag lives on the script; allow callers to override it explicitly.
     if allow_style_copy is None:
         allow_style_copy = bool(getattr(script, "allow_style_copy", False))
-    with trace.project_session(stats_project_dir), trace.node(
-        "generate_references", "flow",
-        inputs={
-            "project": script.project,
-            "characters": len(script.characters),
-            "locations": len(script.locations),
-            "objects": len(script.objects),
-            "force": force,
-            "image_model": f"{image_model.provider}/{image_model.model}",
-        },
+    with (
+        trace.project_session(stats_project_dir),
+        trace.node(
+            "generate_references",
+            "flow",
+            inputs={
+                "project": script.project,
+                "characters": len(script.characters),
+                "locations": len(script.locations),
+                "objects": len(script.objects),
+                "force": force,
+                "image_model": f"{image_model.provider}/{image_model.model}",
+            },
+        ),
     ):
         return _generate_references_traced(
-            script, options, image_model, script_path, feedback_store, force,
-            rep, flag, style_ref, character_photos, location_photos, object_photos,
-            stats_project_dir, allow_style_copy,
+            script,
+            options,
+            image_model,
+            script_path,
+            feedback_store,
+            force,
+            rep,
+            flag,
+            style_ref,
+            character_photos,
+            location_photos,
+            object_photos,
+            stats_project_dir,
+            allow_style_copy,
         )
 
 
@@ -98,9 +116,9 @@ def _generate_references_traced(
     rep: ProgressReporter,
     flag: InterruptFlag,
     style_ref: Path | None,
-    character_photos: dict[str, Path] | None,
-    location_photos: dict[str, Path] | None,
-    object_photos: dict[str, Path] | None,
+    character_photos: dict[str, list[Path]] | None,
+    location_photos: dict[str, list[Path]] | None,
+    object_photos: dict[str, list[Path]] | None,
     stats_project_dir: Path | None,
     allow_style_copy: bool,
 ) -> BdGenScript:
@@ -159,7 +177,7 @@ def _generate_references_traced(
                 character.id,
                 style=script.style,
             )
-            photo = (character_photos or {}).get(character.id)
+            photos = (character_photos or {}).get(character.id) or []
             started_at, started = start_timer()
             image_stats = _generate_image(
                 client,
@@ -167,7 +185,7 @@ def _generate_references_traced(
                 prompt,
                 target,
                 style_ref=style_ref,
-                character_photo=photo,
+                character_photos=photos,
                 allow_style_copy=allow_style_copy,
                 trace_name=f"ref_character:{character.id}",
             )
@@ -233,8 +251,9 @@ def _generate_references_traced(
                 feedback_store,
                 location.id,
                 style=script.style,
+                medium_anchor=_LOCATION_MEDIUM_ANCHOR,
             )
-            photo = (location_photos or {}).get(location.id)
+            photos = (location_photos or {}).get(location.id) or []
             started_at, started = start_timer()
             image_stats = _generate_image(
                 client,
@@ -242,7 +261,7 @@ def _generate_references_traced(
                 prompt,
                 target,
                 style_ref=style_ref,
-                location_photo=photo,
+                location_photos=photos,
                 allow_style_copy=allow_style_copy,
                 trace_name=f"ref_location:{location.id}",
             )
@@ -308,8 +327,9 @@ def _generate_references_traced(
                 feedback_store,
                 obj.id,
                 style=script.style,
+                medium_anchor=_OBJECT_MEDIUM_ANCHOR,
             )
-            photo = (object_photos or {}).get(obj.id)
+            photos = (object_photos or {}).get(obj.id) or []
             started_at, started = start_timer()
             image_stats = _generate_image(
                 client,
@@ -317,7 +337,7 @@ def _generate_references_traced(
                 prompt,
                 target,
                 style_ref=style_ref,
-                object_photo=photo,
+                object_photos=photos,
                 allow_style_copy=allow_style_copy,
                 trace_name=f"ref_object:{obj.id}",
             )
@@ -371,17 +391,40 @@ _STYLE_RESET_BRIDGE = (
     "section below is the sole and final authority on visual style."
 )
 
+_LOCATION_MEDIUM_ANCHOR = (
+    "FINAL MEDIUM ENFORCEMENT — NON-NEGOTIABLE: the output MUST be a "
+    "hand-drawn comic-book illustration (a background panel). It MUST NOT "
+    "look like a photograph, a photorealistic render, or any non-illustrated "
+    "medium. If the description above uses photographic language (depth of "
+    "field, bokeh, establishing shot, camera angle…), translate it into "
+    "drawn-illustration equivalents. The entire output must read as a drawn "
+    "comic-book panel background — not as a photograph."
+)
+
+_OBJECT_MEDIUM_ANCHOR = (
+    "FINAL MEDIUM ENFORCEMENT — NON-NEGOTIABLE: the output MUST be a "
+    "hand-drawn comic-book illustration (an object reference sheet on a "
+    "neutral white background). It MUST NOT look like a product photograph, "
+    "a studio shot, or any photorealistic render. If the description above "
+    "uses photographic language (macro, depth of field, studio lighting…), "
+    "translate it into drawn-illustration equivalents. The entire output must "
+    "read as a drawn comic-book object illustration — not as a photograph."
+)
+
 
 def _augment_prompt(
     prompt: str,
     feedback_store: FeedbackStore | None,
     target: str,
     style: Style | None = None,
+    medium_anchor: str | None = None,
 ) -> str:
     parts = [prompt, IMAGE_CONSTRAINTS]
     if style is not None:
         parts.append(_STYLE_RESET_BRIDGE)
         parts.append(_style_enforcement_block(style))
+    if medium_anchor:
+        parts.append(medium_anchor)
     if feedback_store is not None:
         feedbacks = feedback_store.get_for("references", target)
         if feedbacks:
@@ -635,15 +678,40 @@ OBJECT_PHOTO_REF_LABEL = (
 )
 
 
+_ADDITIONAL_PERSON_PHOTO_LABEL = (
+    "ADDITIONAL PERSON LIKENESS REFERENCE (another photo of the same person as above): "
+    "combine with the other provided reference photos to build a comprehensive likeness. "
+    "Photos may show different angles, lighting, or expressions — extract the structural "
+    "features that are consistent across all of them and apply caricaturist stylization."
+)
+
+_ADDITIONAL_LOCATION_PHOTO_LABEL = (
+    "ADDITIONAL PLACE LIKENESS REFERENCE (another photo of the same location as above): "
+    "combine with the other reference photos to understand the full layout, architecture, "
+    "and atmosphere of this place. Render in the project's art style."
+)
+
+_ADDITIONAL_OBJECT_PHOTO_LABEL = (
+    "ADDITIONAL OBJECT LIKENESS REFERENCE (another photo of the same object as above): "
+    "combine with the other reference photos to understand the object's full shape, "
+    "markings, and proportions. Render in the project's art style."
+)
+
+_XAI_ADDITIONAL_PHOTO_LABEL = (
+    "ADDITIONAL REFERENCE PHOTO: another image of the same subject as described above. "
+    "Combine all provided reference photos to build a complete, accurate likeness."
+)
+
+
 def _generate_image(
     client: OpenAI | None,
     image_model: ImageModelConfig,
     prompt: str,
     target: Path,
     style_ref: Path | None = None,
-    character_photo: Path | None = None,
-    location_photo: Path | None = None,
-    object_photo: Path | None = None,
+    character_photos: list[Path] | None = None,
+    location_photos: list[Path] | None = None,
+    object_photos: list[Path] | None = None,
     allow_style_copy: bool = False,
     trace_name: str = "ref_image",
 ) -> dict:
@@ -657,19 +725,26 @@ def _generate_image(
     cheaper images.generate() path.
     """
     with trace.node(
-        trace_name, "image_call",
+        trace_name,
+        "image_call",
         inputs={
             "style_ref": style_ref,
-            "character_photo": character_photo,
-            "location_photo": location_photo,
-            "object_photo": object_photo,
+            "character_photos": len(character_photos or []),
+            "location_photos": len(location_photos or []),
+            "object_photos": len(object_photos or []),
         },
     ) as tn:
         tn.set_model(image_model.provider, image_model.model)
         tn.set_extra(quality=image_model.quality, allow_style_copy=allow_style_copy)
         result = _generate_image_impl(
-            client, image_model, prompt, target,
-            style_ref, character_photo, location_photo, object_photo,
+            client,
+            image_model,
+            prompt,
+            target,
+            style_ref,
+            character_photos,
+            location_photos,
+            object_photos,
             allow_style_copy,
         )
         tn.set_prompt(result["prompt"])
@@ -684,11 +759,13 @@ def _generate_image_impl(
     prompt: str,
     target: Path,
     style_ref: Path | None,
-    character_photo: Path | None,
-    location_photo: Path | None,
-    object_photo: Path | None,
+    character_photos: list[Path] | None,
+    location_photos: list[Path] | None,
+    object_photos: list[Path] | None,
     allow_style_copy: bool,
 ) -> dict:
+    max_entity_photos = XAI_MAX_ENTITY_PHOTOS if image_model.provider == "xai" else OPENAI_MAX_ENTITY_PHOTOS
+
     inputs: list[tuple[str, bytes, str]] = []
     prompt_prefix_parts: list[str] = []
     xai_prompt_prefix_parts: list[str] = []
@@ -696,18 +773,36 @@ def _generate_image_impl(
         inputs.append((style_ref.name, style_ref.read_bytes(), _image_mime_type(style_ref)))
         prompt_prefix_parts.append(style_ref_label(allow_copy=allow_style_copy))
         xai_prompt_prefix_parts.append(_xai_style_ref_label(allow_copy=allow_style_copy))
-    if character_photo is not None and character_photo.exists() and character_photo.stat().st_size > 0:
-        inputs.append((character_photo.name, character_photo.read_bytes(), _image_mime_type(character_photo)))
-        prompt_prefix_parts.append(PHOTO_REF_LABEL)
-        xai_prompt_prefix_parts.append(_XAI_PHOTO_REF_LABEL)
-    if location_photo is not None and location_photo.exists() and location_photo.stat().st_size > 0:
-        inputs.append((location_photo.name, location_photo.read_bytes(), _image_mime_type(location_photo)))
-        prompt_prefix_parts.append(LOCATION_PHOTO_REF_LABEL)
-        xai_prompt_prefix_parts.append(_XAI_LOCATION_PHOTO_REF_LABEL)
-    if object_photo is not None and object_photo.exists() and object_photo.stat().st_size > 0:
-        inputs.append((object_photo.name, object_photo.read_bytes(), _image_mime_type(object_photo)))
-        prompt_prefix_parts.append(OBJECT_PHOTO_REF_LABEL)
-        xai_prompt_prefix_parts.append(_XAI_OBJECT_PHOTO_REF_LABEL)
+
+    char_photos = [p for p in (character_photos or []) if p.exists() and p.stat().st_size > 0][:max_entity_photos]
+    for idx, photo in enumerate(char_photos):
+        inputs.append((photo.name, photo.read_bytes(), _image_mime_type(photo)))
+        if idx == 0:
+            prompt_prefix_parts.append(PHOTO_REF_LABEL)
+            xai_prompt_prefix_parts.append(_XAI_PHOTO_REF_LABEL)
+        else:
+            prompt_prefix_parts.append(_ADDITIONAL_PERSON_PHOTO_LABEL)
+            xai_prompt_prefix_parts.append(_XAI_ADDITIONAL_PHOTO_LABEL)
+
+    loc_photos = [p for p in (location_photos or []) if p.exists() and p.stat().st_size > 0][:max_entity_photos]
+    for idx, photo in enumerate(loc_photos):
+        inputs.append((photo.name, photo.read_bytes(), _image_mime_type(photo)))
+        if idx == 0:
+            prompt_prefix_parts.append(LOCATION_PHOTO_REF_LABEL)
+            xai_prompt_prefix_parts.append(_XAI_LOCATION_PHOTO_REF_LABEL)
+        else:
+            prompt_prefix_parts.append(_ADDITIONAL_LOCATION_PHOTO_LABEL)
+            xai_prompt_prefix_parts.append(_XAI_ADDITIONAL_PHOTO_LABEL)
+
+    obj_photos = [p for p in (object_photos or []) if p.exists() and p.stat().st_size > 0][:max_entity_photos]
+    for idx, photo in enumerate(obj_photos):
+        inputs.append((photo.name, photo.read_bytes(), _image_mime_type(photo)))
+        if idx == 0:
+            prompt_prefix_parts.append(OBJECT_PHOTO_REF_LABEL)
+            xai_prompt_prefix_parts.append(_XAI_OBJECT_PHOTO_REF_LABEL)
+        else:
+            prompt_prefix_parts.append(_ADDITIONAL_OBJECT_PHOTO_LABEL)
+            xai_prompt_prefix_parts.append(_XAI_ADDITIONAL_PHOTO_LABEL)
 
     if image_model.provider == "xai":
         full_prompt = _build_xai_prompt(xai_prompt_prefix_parts, prompt)

@@ -19,7 +19,7 @@ from .indices import (
     read_quality_index,
     write_quality_index,
 )
-from .photos import character_photo_path, location_photo_path, object_photo_path
+from .photos import remove_all_character_photos, remove_all_location_photos, remove_all_object_photos
 
 
 def _earliest_page_using_character(bd_script: BdGenScript, character_id: str) -> int | None:
@@ -82,9 +82,7 @@ def delete_character_and_cascade(name: str, character_id: str, output_root: Path
     ref_png = proj_dir / "references" / "characters" / f"{character_id}.png"
     if ref_png.exists():
         ref_png.unlink()
-    photo_png = character_photo_path(proj_dir, character_id)
-    if photo_png.exists():
-        photo_png.unlink()
+    remove_all_character_photos(proj_dir, character_id)
     qidx = read_quality_index(proj_dir)
     if character_id in qidx.get("references", {}):
         qidx["references"].pop(character_id, None)
@@ -122,9 +120,7 @@ def delete_location_and_cascade(name: str, location_id: str, output_root: Path |
     ref_png = proj_dir / "references" / "locations" / f"{location_id}.png"
     if ref_png.exists():
         ref_png.unlink()
-    photo_png = location_photo_path(proj_dir, location_id)
-    if photo_png.exists():
-        photo_png.unlink()
+    remove_all_location_photos(proj_dir, location_id)
     qidx = read_quality_index(proj_dir)
     if location_id in qidx.get("references", {}):
         qidx["references"].pop(location_id, None)
@@ -162,9 +158,7 @@ def delete_object_and_cascade(name: str, object_id: str, output_root: Path | Non
     ref_png = proj_dir / "references" / "objects" / f"{object_id}.png"
     if ref_png.exists():
         ref_png.unlink()
-    photo_png = object_photo_path(proj_dir, object_id)
-    if photo_png.exists():
-        photo_png.unlink()
+    remove_all_object_photos(proj_dir, object_id)
     qidx = read_quality_index(proj_dir)
     if object_id in qidx.get("references", {}):
         qidx["references"].pop(object_id, None)

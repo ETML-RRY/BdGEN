@@ -150,6 +150,7 @@ describe("URL construction and encoding", () => {
     const opts = fetchMock.mock.calls[0][1];
     expect(JSON.parse(opts.body)).toEqual({
       new_project: "dst",
+      new_title: null,
       include_references: true,
       include_photos: false,
       include_style_reference: false,
@@ -161,6 +162,7 @@ describe("URL construction and encoding", () => {
 
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
       new_project: null,
+      new_title: null,
       include_references: false,
       include_photos: true,
       include_style_reference: true,

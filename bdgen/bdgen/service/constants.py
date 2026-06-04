@@ -22,6 +22,10 @@ OBJECT_PHOTOS_DIRNAME = "object_photos"
 CHARACTER_PHOTO_MAX_SIDE = 1024
 LOCATION_PHOTO_MAX_SIDE = 1024
 OBJECT_PHOTO_MAX_SIDE = 1024
+# Maximum reference photos per entity passed to each image provider.
+# xAI total input cap is 3 (style-ref + entity photos); OpenAI is more generous.
+OPENAI_MAX_ENTITY_PHOTOS = 4
+XAI_MAX_ENTITY_PHOTOS = 2
 STALE_STEPS = ("references", "compose")
 THUMBNAIL_NAME = "thumbnail.jpg"
 THUMB_MAX_W = 256

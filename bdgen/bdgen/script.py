@@ -105,29 +105,42 @@ SETUP_SYSTEM_PROMPT = dedent("""\
 
     2. LOCATIONS — first, for EACH entry in the input `locations` array (which may be
        empty), copy `id`, `name`, and `description` verbatim. ADD `reference_prompt`:
-       an English image-generation prompt for an establishing shot, no characters, no
-       text. The prompt must describe the place's key visual features — architecture,
-       spatial layout, dominant landmarks, materials, lighting mood, time of day —
-       with as much specificity as possible. Do NOT include any art style, color
-       palette, line work, rendering technique, or stylization instructions — visual
-       style is injected separately at image-generation time. End with
-       "No text. No characters." Whether you may invent ADDITIONAL locations is
-       decided by the AUTHORING RULES at the end of the user message.
+       an English image-generation prompt for a hand-drawn comic-book background
+       illustration of the place, no characters, no text. The prompt MUST open with
+       a phrase that anchors the output as a drawn illustration — never as a
+       photograph or photorealistic scene — such as "A hand-drawn comic-book
+       background panel showing…" or "A stylized comic-book illustration of…".
+       The prompt must describe the place's key visual features — spatial layout,
+       dominant landmarks, characteristic architecture, atmosphere and lighting mood —
+       with as much specificity as possible. Avoid photographic vocabulary (depth of
+       field, bokeh, establishing shot, camera, lens); use illustration vocabulary
+       instead (composition, foreground, midground, scene, layout). Do NOT include
+       any art style, color palette, line work, rendering technique, or stylization
+       instructions — visual style is injected separately at image-generation time.
+       End with "No text. No characters." Whether you may invent ADDITIONAL locations
+       is decided by the AUTHORING RULES at the end of the user message.
 
     3. OBJECTS — first, for EACH entry in the input `objects` array (which may be
        empty), copy `id`, `name`, and `description` verbatim. ADD `reference_prompt`:
-       an English image-generation prompt for an isolated object reference on a
-       neutral background, no characters, no text. The prompt must describe the
-       object's shape, proportions, silhouette, key structural details, dominant
-       colors and any distinctive markings with as much specificity as possible.
-       If the user provided a photo of this object (passed at image-generation time),
-       the resulting illustration must remain recognizably the SAME object — same
-       shape, key markings, characteristic silhouette. Do NOT include any art style,
-       color palette, line work, rendering technique, or stylization instructions —
-       visual style is injected separately at image-generation time. Plan how each
-       object will recur across the story so panels can reference it consistently.
-       End with "No text. No characters." Whether you may invent ADDITIONAL objects
-       is decided by the AUTHORING RULES at the end of the user message.
+       an English image-generation prompt for a hand-drawn comic-book object
+       reference sheet showing the object isolated on a neutral white background,
+       no characters, no text. The prompt MUST open with a phrase that anchors the
+       output as a drawn illustration — never as a product photograph — such as
+       "A hand-drawn comic-book illustration of…" or "A stylized object reference
+       sheet showing…". The prompt must describe the object's shape, proportions,
+       silhouette, key structural details, dominant colors and any distinctive
+       markings with as much specificity as possible. Avoid photographic vocabulary
+       (product shot, studio photo, macro, depth of field, lighting rig); use
+       illustration vocabulary instead (drawing, illustration, reference sheet,
+       composition). If the user provided a photo of this object (passed at
+       image-generation time), the resulting illustration must remain recognizably
+       the SAME object — same shape, key markings, characteristic silhouette. Do NOT
+       include any art style, color palette, line work, rendering technique, or
+       stylization instructions — visual style is injected separately at
+       image-generation time. Plan how each object will recur across the story so
+       panels can reference it consistently. End with "No text. No characters."
+       Whether you may invent ADDITIONAL objects is decided by the AUTHORING RULES
+       at the end of the user message.
 
     4. COVER — only if `structure.include_cover` is true. Provide:
        - `scene_description`: an evocative illustration concept for the front cover
@@ -343,6 +356,12 @@ LOCATION_REFINE_SYSTEM_PROMPT = dedent("""\
     - Keep `id` unchanged.
     - Write narrative content in the language specified by `metadata.language`.
     - Keep `reference_prompt` in English; it must end with "No text. No characters."
+    - The prompt MUST open with a phrase that anchors the output as a drawn
+      illustration, never as a photograph (e.g. "A hand-drawn comic-book background
+      panel showing…" or "A stylized comic-book illustration of…"). Avoid
+      photographic vocabulary (establishing shot, depth of field, camera, lens,
+      bokeh); use illustration vocabulary instead (composition, scene, layout,
+      foreground, midground).
     - Do NOT include any art style, color palette, line work, rendering technique,
       or stylization instructions in `reference_prompt` — visual style is injected
       separately at image-generation time.
@@ -396,6 +415,12 @@ OBJECT_REFINE_SYSTEM_PROMPT = dedent("""\
     - Keep `id` unchanged.
     - Write narrative content in the language specified by `metadata.language`.
     - Keep `reference_prompt` in English; it must end with "No text. No characters."
+    - The prompt MUST open with a phrase that anchors the output as a drawn
+      illustration, never as a product photograph (e.g. "A hand-drawn comic-book
+      illustration of…" or "A stylized object reference sheet showing…"). Avoid
+      photographic vocabulary (studio shot, product photo, macro, depth of field,
+      lighting rig); use illustration vocabulary instead (drawing, illustration,
+      reference sheet, composition).
     - Do NOT include any art style, color palette, line work, rendering technique,
       or stylization instructions in `reference_prompt` — visual style is injected
       separately at image-generation time.
@@ -538,6 +563,43 @@ PAGE_REFINE_SYSTEM_PROMPT = dedent("""\
     """)
 
 
+_STRIP_LAYOUT_CONSTRAINT = dedent("""\
+
+    STRIP FORMAT — NON-NEGOTIABLE:
+    This project uses the newspaper/comic-strip format. Every planche is ONE
+    single unbroken horizontal row of panels on a landscape canvas.
+    - ABSOLUTELY FORBIDDEN: stacking rows, 2-row grids, 3-row grids, L-shapes,
+      panels placed above or below other panels, or any arrangement where panels
+      are not all on the same horizontal line.
+    - The `layout` field MUST be exactly: "single horizontal row of <N> panels"
+      (substitute <N> with the actual panel count). Any wording that implies
+      multiple rows, a grid, or vertical stacking is rejected.
+    - Every panel shares the SAME HEIGHT — the full vertical extent of the strip.
+      You MUST NOT vary panel heights.
+    - You MAY vary panel WIDTHS (wider for wide action shots, narrower for
+      reaction close-ups); the total of all panel widths fills the full canvas.
+    - The "Vary panel sizes" rule does NOT apply here; ignore it entirely.
+    """)
+
+
+def _page_system_prompt(page_format: str) -> str:
+    base = PAGE_SYSTEM_PROMPT
+    if page_format == "strip":
+        base = base.replace(
+            "- Vary panel sizes and camera shots for visual rhythm.",
+            "- Vary panel WIDTHS only for visual rhythm; all panels MUST share the exact same HEIGHT.",
+        )
+        base = base.rstrip("\n") + _STRIP_LAYOUT_CONSTRAINT
+    return base
+
+
+def _page_refine_system_prompt(page_format: str) -> str:
+    base = PAGE_REFINE_SYSTEM_PROMPT
+    if page_format == "strip":
+        base = base.rstrip("\n") + _STRIP_LAYOUT_CONSTRAINT
+    return base
+
+
 # --- Top-level orchestration ---
 
 
@@ -574,20 +636,33 @@ def generate_script(
     )
     label = f"{model_cfg.provider}/{model_cfg.model}"
 
-    with trace.project_session(stats_project_dir), trace.node(
-        "generate_script", "flow",
-        inputs={
-            "project": config.project,
-            "target_pages": target_pages,
-            "preview_pages": preview_pages,
-            "provider": model_cfg.provider,
-            "model": model_cfg.model,
-            "has_feedback": bool(feedback),
-        },
+    with (
+        trace.project_session(stats_project_dir),
+        trace.node(
+            "generate_script",
+            "flow",
+            inputs={
+                "project": config.project,
+                "target_pages": target_pages,
+                "preview_pages": preview_pages,
+                "provider": model_cfg.provider,
+                "model": model_cfg.model,
+                "has_feedback": bool(feedback),
+            },
+        ),
     ):
         return _generate_script_impl(
-            config, input_path, feedback, preview_pages, target_pages,
-            script_path, rep, flag, model_cfg, label, stats_project_dir,
+            config,
+            input_path,
+            feedback,
+            preview_pages,
+            target_pages,
+            script_path,
+            rep,
+            flag,
+            model_cfg,
+            label,
+            stats_project_dir,
         )
 
 
@@ -661,7 +736,7 @@ def _generate_script_impl(
             )
         )
         page_result = _call_llm(
-            PAGE_SYSTEM_PROMPT,
+            _page_system_prompt(config.structure.page_format),
             _build_page_prompt(config, bd_script, page_n, target_pages, feedback, preview_pages),
             model_cfg,
             Page,
@@ -1333,16 +1408,25 @@ _USER_PHOTO_DIR_BY_KIND: dict[str, str] = {
 def _user_photo_exists(proj_dir: Path | None, kind: str, entity_id: str) -> bool:
     """True iff the user uploaded a reference photo for that entity.
 
-    Mirrors service.photos on-disk layout (``<kind>_photos/<id>.png``). Used
-    by refines to know whether physical descriptors are pinned by a user
-    photo: when one exists, the LLM must not rewrite traits the photo
-    encodes — the photo always wins over text feedback.
+    Checks both the new subdirectory format ({kind}_photos/{id}/*.png) and
+    the legacy flat-file format ({kind}_photos/{id}.png).
     """
     if proj_dir is None:
         return False
     sub = _USER_PHOTO_DIR_BY_KIND.get(kind)
     if sub is None:
         return False
+    # New format: subdirectory with numbered slots
+    entity_dir = proj_dir / sub / entity_id
+    if entity_dir.is_dir():
+        for p in entity_dir.iterdir():
+            if p.is_file() and p.suffix.lower() == ".png" and p.stat().st_size > 0:
+                try:
+                    int(p.stem)
+                    return True
+                except ValueError:
+                    pass
+    # Legacy flat format
     p = proj_dir / sub / f"{entity_id}.png"
     return p.exists() and p.stat().st_size > 0
 
@@ -1379,9 +1463,13 @@ def regenerate_character(
     char = bd_script.character_by_id(character_id)
     if char is None:
         raise RuntimeError(f"Personnage inconnu : {character_id}")
-    with trace.project_session(stats_project_dir), trace.node(
-        f"refine_character:{character_id}", "flow",
-        inputs={"character_id": character_id, "feedback_chars": len(feedback_text)},
+    with (
+        trace.project_session(stats_project_dir),
+        trace.node(
+            f"refine_character:{character_id}",
+            "flow",
+            inputs={"character_id": character_id, "feedback_chars": len(feedback_text)},
+        ),
     ):
         rep.emit(
             ProgressEvent(
@@ -1447,9 +1535,13 @@ def regenerate_location(
     loc = bd_script.location_by_id(location_id)
     if loc is None:
         raise RuntimeError(f"Décor inconnu : {location_id}")
-    with trace.project_session(stats_project_dir), trace.node(
-        f"refine_location:{location_id}", "flow",
-        inputs={"location_id": location_id, "feedback_chars": len(feedback_text)},
+    with (
+        trace.project_session(stats_project_dir),
+        trace.node(
+            f"refine_location:{location_id}",
+            "flow",
+            inputs={"location_id": location_id, "feedback_chars": len(feedback_text)},
+        ),
     ):
         rep.emit(
             ProgressEvent(
@@ -1514,9 +1606,13 @@ def regenerate_object(
     obj = bd_script.object_by_id(object_id)
     if obj is None:
         raise RuntimeError(f"Objet inconnu : {object_id}")
-    with trace.project_session(stats_project_dir), trace.node(
-        f"refine_object:{object_id}", "flow",
-        inputs={"object_id": object_id, "feedback_chars": len(feedback_text)},
+    with (
+        trace.project_session(stats_project_dir),
+        trace.node(
+            f"refine_object:{object_id}",
+            "flow",
+            inputs={"object_id": object_id, "feedback_chars": len(feedback_text)},
+        ),
     ):
         rep.emit(
             ProgressEvent(
@@ -1584,9 +1680,13 @@ def regenerate_page(
     )
     if idx is None:
         raise RuntimeError(f"Planche inconnue : {page_number}")
-    with trace.project_session(stats_project_dir), trace.node(
-        f"refine_page:{page_number}", "flow",
-        inputs={"page_number": page_number, "feedback_chars": len(feedback_text)},
+    with (
+        trace.project_session(stats_project_dir),
+        trace.node(
+            f"refine_page:{page_number}",
+            "flow",
+            inputs={"page_number": page_number, "feedback_chars": len(feedback_text)},
+        ),
     ):
         return _regenerate_page_impl(bd_script, page_number, feedback_text, rep, idx, stats_project_dir)
 
@@ -1629,6 +1729,7 @@ def _regenerate_page_impl(
             "style": bd_script.style.model_dump(mode="json"),
             "structure": {
                 "page_count": len(bd_script.pages),
+                "page_format": bd_script.page_format,
             },
             "setup": setup,
             "prior_pages": prior,
@@ -1645,7 +1746,7 @@ def _regenerate_page_impl(
         indent=2,
     )
     result = _call_llm(
-        PAGE_REFINE_SYSTEM_PROMPT,
+        _page_refine_system_prompt(bd_script.page_format),
         user_prompt,
         bd_script.generation_options.script_model,
         Page,
@@ -1690,9 +1791,13 @@ def regenerate_cover(
         raise RuntimeError("Le script n'a pas de generation_options ; impossible de retoucher.")
     if bd_script.cover is None:
         raise RuntimeError("Ce projet n'a pas de couverture à retoucher.")
-    with trace.project_session(stats_project_dir), trace.node(
-        "refine_cover", "flow",
-        inputs={"feedback_chars": len(feedback_text)},
+    with (
+        trace.project_session(stats_project_dir),
+        trace.node(
+            "refine_cover",
+            "flow",
+            inputs={"feedback_chars": len(feedback_text)},
+        ),
     ):
         rep.emit(
             ProgressEvent(
@@ -1751,9 +1856,13 @@ def regenerate_back_cover(
         raise RuntimeError("Le script n'a pas de generation_options ; impossible de retoucher.")
     if bd_script.back_cover is None:
         raise RuntimeError("Ce projet n'a pas de 4ᵉ de couverture à retoucher.")
-    with trace.project_session(stats_project_dir), trace.node(
-        "refine_back_cover", "flow",
-        inputs={"feedback_chars": len(feedback_text)},
+    with (
+        trace.project_session(stats_project_dir),
+        trace.node(
+            "refine_back_cover",
+            "flow",
+            inputs={"feedback_chars": len(feedback_text)},
+        ),
     ):
         rep.emit(
             ProgressEvent(

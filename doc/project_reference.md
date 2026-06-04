@@ -2,7 +2,7 @@
 
 Operational reference for future work on BdGEN. Keep this file concise and update it after every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-06-04
+Last updated: 2026-06-04 (multi-photo)
 
 ## Update Rule
 
@@ -175,6 +175,21 @@ Lint/format:
 - If a frontend build fails with esbuild `spawn EPERM` on Windows, rerun the build outside the sandbox.
 
 ## Recent Change Log
+
+### 2026-06-04 (2) — multi-photo references
+
+- `bdgen/bdgen/service/photos.py`: rewrote photo storage to support multiple photos per entity. New format: `{kind}_photos/{entity_id}/{slot}.png` (1-indexed subdirectory). Legacy flat `{entity_id}.png` is backward-compatible (auto-migrated to slot 1 on first add). New public helpers: `add_*_photo()`, `delete_*_photo_slot()`, `remove_all_*_photos()`, `list_*_photos_with_slots()`. `list_character/location/object_photos()` now returns `dict[str, list[Path]]` (was `dict[str, Path]`).
+- `bdgen/bdgen/service/constants.py`: added `OPENAI_MAX_ENTITY_PHOTOS = 4` and `XAI_MAX_ENTITY_PHOTOS = 2`.
+- `bdgen/bdgen/references.py`: `generate_references` / `_generate_image` now accept `list[Path]` per entity instead of a single `Path`. Multiple photos are forwarded to the image provider (capped per provider limit). Additional photos get compact supplementary labels. Added `OPENAI_MAX_ENTITY_PHOTOS`, `XAI_MAX_ENTITY_PHOTOS` constants and `_ADDITIONAL_PERSON/LOCATION/OBJECT_PHOTO_LABEL` strings.
+- `bdgen/bdgen/script.py` (`_user_photo_exists`): checks new subdirectory format before falling back to legacy flat file.
+- `bdgen/bdgen/compose.py` (`_existing_photo_path`): returns first photo from new subdirectory format, falls back to legacy flat file.
+- `bdgen/bdgen/service/lifecycle.py`: `duplicate_project` now also copies entity photo subdirectories (not just flat files).
+- `bdgen/bdgen/service/cascades.py`: entity deletion uses `remove_all_*_photos()` to clean both formats.
+- `bdgen/bdgen/service/import_export.py`: `.bdrefs` bundle exports only the first photo per entity under the legacy name for cross-version compat.
+- `bdgen/bdgen/server/app.py`: `get_project` response changes `character/location/object_photos` from `{id: url}` to `{id: [{slot, url}]}`. New endpoints: `POST .../characters/{id}/photos`, `DELETE .../characters/{id}/photos/{slot}` (idem for locations/objects). Legacy `PUT .../photo` now also returns `slot: 1`.
+- `bdgen/web/src/api.js`: added `addCharacterPhoto`, `deleteCharacterPhotoSlot`, `addLocationPhoto`, `deleteLocationPhotoSlot`, `addObjectPhoto`, `deleteObjectPhotoSlot`. Fixed pre-existing `duplicateProject` test expectations (missing `new_title: null`).
+- `bdgen/web/src/components/ProjectForm.jsx`: replaced `CharacterPhotoField / LocationPhotoField / ObjectPhotoField` (single-photo) with unified `MultiPhotosField` (gallery with add/remove). Photo state is now `{[id]: [{slot, url, file, uploading, error}]}`. First photo of a new entity still triggers AI extraction. `maybeUploadPending*` functions updated to upload via `addCharacterPhoto` etc.
+- Verification: `uv run python -m pytest tests/ -q` → 112 passed. `npm run lint` → 0 errors. `npm test -- --run` → 40 passed. `ruff check/format` → clean.
 
 ### 2026-06-04
 

@@ -111,10 +111,10 @@ export const api = {
   },
   restoreVersion: (name, path, versionId) => {
     const encoded = path.split("/").map(encodeURIComponent).join("/");
-    return request(
-      `/api/projects/${encodeURIComponent(name)}/versions/${encoded}/restore`,
-      { method: "POST", body: JSON.stringify({ version_id: versionId }) },
-    );
+    return request(`/api/projects/${encodeURIComponent(name)}/versions/${encoded}/restore`, {
+      method: "POST",
+      body: JSON.stringify({ version_id: versionId }),
+    });
   },
 
   exportUrl: (name) => `/api/projects/${encodeURIComponent(name)}/export`,
@@ -218,6 +218,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(page),
     }),
+  getConfigScriptDiff: (name) => request(`/api/projects/${encodeURIComponent(name)}/script/config-diff`),
+
+  syncScriptWithConfig: (name) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/sync-config`, { method: "POST" }),
+
   checkScriptCoherence: (name) =>
     request(`/api/projects/${encodeURIComponent(name)}/script/coherence/check`, {
       method: "POST",
@@ -391,6 +396,22 @@ export const api = {
       method: "DELETE",
     }),
 
+  addCharacterPhoto: async (name, characterId, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(characterId)}/photos`,
+      { method: "POST", body: fd },
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  deleteCharacterPhotoSlot: (name, characterId, slot) =>
+    request(`/api/projects/${encodeURIComponent(name)}/characters/${encodeURIComponent(characterId)}/photos/${slot}`, {
+      method: "DELETE",
+    }),
+
   objectFromPhoto: async (file, language = "fr") => {
     const fd = new FormData();
     fd.append("file", file);
@@ -427,6 +448,22 @@ export const api = {
       method: "DELETE",
     }),
 
+  addObjectPhoto: async (name, objectId, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(objectId)}/photos`,
+      { method: "POST", body: fd },
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  deleteObjectPhotoSlot: (name, objectId, slot) =>
+    request(`/api/projects/${encodeURIComponent(name)}/objects/${encodeURIComponent(objectId)}/photos/${slot}`, {
+      method: "DELETE",
+    }),
+
   locationFromPhoto: async (file, language = "fr") => {
     const fd = new FormData();
     fd.append("file", file);
@@ -460,6 +497,22 @@ export const api = {
 
   deleteLocationPhoto: (name, locationId) =>
     request(`/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(locationId)}/photo`, {
+      method: "DELETE",
+    }),
+
+  addLocationPhoto: async (name, locationId, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(locationId)}/photos`,
+      { method: "POST", body: fd },
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  deleteLocationPhotoSlot: (name, locationId, slot) =>
+    request(`/api/projects/${encodeURIComponent(name)}/locations/${encodeURIComponent(locationId)}/photos/${slot}`, {
       method: "DELETE",
     }),
 };

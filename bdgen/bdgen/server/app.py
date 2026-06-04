@@ -315,27 +315,24 @@ def _register_api(app: FastAPI) -> None:
             if bd_script.back_cover is not None:
                 composed.append(_compose_entry(name, "back", proj_dir, quality_idx, default_quality, stale_compose))
                 upscaled.append(_upscale_entry(name, "back", proj_dir, upscale_dir, upscale_ext))
-        character_photos: dict[str, str | None] = {}
-        for cid, photo_path in photos.list_character_photos(proj_dir).items():
-            character_photos[cid] = _file_url(
-                name,
-                f"{svc_const.CHARACTER_PHOTOS_DIRNAME}/{cid}.png",
-                photo_path,
-            )
-        location_photos: dict[str, str | None] = {}
-        for lid, photo_path in photos.list_location_photos(proj_dir).items():
-            location_photos[lid] = _file_url(
-                name,
-                f"{svc_const.LOCATION_PHOTOS_DIRNAME}/{lid}.png",
-                photo_path,
-            )
-        object_photos: dict[str, str | None] = {}
-        for oid, photo_path in photos.list_object_photos(proj_dir).items():
-            object_photos[oid] = _file_url(
-                name,
-                f"{svc_const.OBJECT_PHOTOS_DIRNAME}/{oid}.png",
-                photo_path,
-            )
+        character_photos: dict[str, list[dict]] = {}
+        for cid, slots in photos.list_character_photos_with_slots(proj_dir).items():
+            character_photos[cid] = [
+                {"slot": slot, "url": _file_url(name, photo_path.relative_to(proj_dir).as_posix(), photo_path)}
+                for slot, photo_path in slots
+            ]
+        location_photos: dict[str, list[dict]] = {}
+        for lid, slots in photos.list_location_photos_with_slots(proj_dir).items():
+            location_photos[lid] = [
+                {"slot": slot, "url": _file_url(name, photo_path.relative_to(proj_dir).as_posix(), photo_path)}
+                for slot, photo_path in slots
+            ]
+        object_photos: dict[str, list[dict]] = {}
+        for oid, slots in photos.list_object_photos_with_slots(proj_dir).items():
+            object_photos[oid] = [
+                {"slot": slot, "url": _file_url(name, photo_path.relative_to(proj_dir).as_posix(), photo_path)}
+                for slot, photo_path in slots
+            ]
         reference_images: dict[str, dict[str, str | None]] = {
             "characters": {},
             "locations": {},
@@ -909,6 +906,27 @@ def _register_api(app: FastAPI) -> None:
             raise HTTPException(400, f"Planche invalide : {e}")
         return {"ok": True}
 
+    @app.get("/api/projects/{name}/script/config-diff")
+    def get_config_script_diff(name: str) -> dict:
+        """Return the diff between bdgen.json and bdgen-script.json (no LLM call)."""
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        return coherence.get_config_script_diff(name, _output_root())
+
+    @app.post("/api/projects/{name}/script/sync-config")
+    def sync_script_with_config(name: str) -> dict:
+        """Integrate config changes into the existing script via LLM (no full rewrite)."""
+        _ensure_manual_script_edit_allowed(app, name, _output_root())
+        try:
+            cfg = svc_config.load_config(name, _output_root())
+            _check_api_key(cfg.generation_options.script_model.provider)
+        except FileNotFoundError:
+            _check_api_key("openai")
+        try:
+            return coherence.sync_script_with_config(name, _output_root())
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
     @app.post("/api/projects/{name}/script/coherence/check")
     def check_script_coherence(name: str) -> dict:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
@@ -933,7 +951,9 @@ def _register_api(app: FastAPI) -> None:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             character = ScriptCharacter.model_validate(payload)
-            manual_edits.update_script_character_manual(name, character_id, character.model_dump(mode="json"), _output_root())
+            manual_edits.update_script_character_manual(
+                name, character_id, character.model_dump(mode="json"), _output_root()
+            )
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -957,7 +977,9 @@ def _register_api(app: FastAPI) -> None:
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             location = ScriptLocation.model_validate(payload)
-            manual_edits.update_script_location_manual(name, location_id, location.model_dump(mode="json"), _output_root())
+            manual_edits.update_script_location_manual(
+                name, location_id, location.model_dump(mode="json"), _output_root()
+            )
         except RuntimeError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -1286,13 +1308,11 @@ def _register_api(app: FastAPI) -> None:
             p = photos.save_character_photo(name, character_id, blob, _output_root())
         except ValueError as e:
             raise HTTPException(400, str(e))
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
         return {
             "ok": True,
-            "url": _file_url(
-                name,
-                f"{svc_const.CHARACTER_PHOTOS_DIRNAME}/{character_id}.png",
-                p,
-            ),
+            "slot": 1,
+            "url": _file_url(name, p.relative_to(proj_dir).as_posix(), p),
         }
 
     @app.delete("/api/projects/{name}/characters/{character_id}/photo")
@@ -1300,6 +1320,29 @@ def _register_api(app: FastAPI) -> None:
         if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         removed = photos.delete_character_photo(name, character_id, _output_root())
+        return {"ok": True, "removed": removed}
+
+    @app.post("/api/projects/{name}/characters/{character_id}/photos")
+    async def add_character_photo(name: str, character_id: str, file: UploadFile = File(...)) -> dict:
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        blob = await file.read()
+        try:
+            slot, p = photos.add_character_photo(name, character_id, blob, _output_root())
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
+        return {
+            "ok": True,
+            "slot": slot,
+            "url": _file_url(name, p.relative_to(proj_dir).as_posix(), p),
+        }
+
+    @app.delete("/api/projects/{name}/characters/{character_id}/photos/{slot}")
+    def remove_character_photo_slot(name: str, character_id: str, slot: int) -> dict:
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        removed = photos.delete_character_photo_slot(name, character_id, slot, _output_root())
         return {"ok": True, "removed": removed}
 
     # --- Per-object reference photos ---
@@ -1313,13 +1356,11 @@ def _register_api(app: FastAPI) -> None:
             p = photos.save_object_photo(name, object_id, blob, _output_root())
         except ValueError as e:
             raise HTTPException(400, str(e))
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
         return {
             "ok": True,
-            "url": _file_url(
-                name,
-                f"{svc_const.OBJECT_PHOTOS_DIRNAME}/{object_id}.png",
-                p,
-            ),
+            "slot": 1,
+            "url": _file_url(name, p.relative_to(proj_dir).as_posix(), p),
         }
 
     @app.delete("/api/projects/{name}/objects/{object_id}/photo")
@@ -1327,6 +1368,29 @@ def _register_api(app: FastAPI) -> None:
         if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         removed = photos.delete_object_photo(name, object_id, _output_root())
+        return {"ok": True, "removed": removed}
+
+    @app.post("/api/projects/{name}/objects/{object_id}/photos")
+    async def add_object_photo(name: str, object_id: str, file: UploadFile = File(...)) -> dict:
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        blob = await file.read()
+        try:
+            slot, p = photos.add_object_photo(name, object_id, blob, _output_root())
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
+        return {
+            "ok": True,
+            "slot": slot,
+            "url": _file_url(name, p.relative_to(proj_dir).as_posix(), p),
+        }
+
+    @app.delete("/api/projects/{name}/objects/{object_id}/photos/{slot}")
+    def remove_object_photo_slot(name: str, object_id: str, slot: int) -> dict:
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        removed = photos.delete_object_photo_slot(name, object_id, slot, _output_root())
         return {"ok": True, "removed": removed}
 
     # --- Per-location reference photos ---
@@ -1340,13 +1404,11 @@ def _register_api(app: FastAPI) -> None:
             p = photos.save_location_photo(name, location_id, blob, _output_root())
         except ValueError as e:
             raise HTTPException(400, str(e))
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
         return {
             "ok": True,
-            "url": _file_url(
-                name,
-                f"{svc_const.LOCATION_PHOTOS_DIRNAME}/{location_id}.png",
-                p,
-            ),
+            "slot": 1,
+            "url": _file_url(name, p.relative_to(proj_dir).as_posix(), p),
         }
 
     @app.delete("/api/projects/{name}/locations/{location_id}/photo")
@@ -1354,6 +1416,29 @@ def _register_api(app: FastAPI) -> None:
         if not lifecycle.project_exists(name, _output_root()):
             raise HTTPException(404, "Projet inconnu.")
         removed = photos.delete_location_photo(name, location_id, _output_root())
+        return {"ok": True, "removed": removed}
+
+    @app.post("/api/projects/{name}/locations/{location_id}/photos")
+    async def add_location_photo(name: str, location_id: str, file: UploadFile = File(...)) -> dict:
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        blob = await file.read()
+        try:
+            slot, p = photos.add_location_photo(name, location_id, blob, _output_root())
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        proj_dir = lifecycle.get_project_dir(name, _output_root())
+        return {
+            "ok": True,
+            "slot": slot,
+            "url": _file_url(name, p.relative_to(proj_dir).as_posix(), p),
+        }
+
+    @app.delete("/api/projects/{name}/locations/{location_id}/photos/{slot}")
+    def remove_location_photo_slot(name: str, location_id: str, slot: int) -> dict:
+        if not lifecycle.project_exists(name, _output_root()):
+            raise HTTPException(404, "Projet inconnu.")
+        removed = photos.delete_location_photo_slot(name, location_id, slot, _output_root())
         return {"ok": True, "removed": removed}
 
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FaPlus, FaTrash, FaUpload, FaPalette, FaChevronDown } from "react-icons/fa6";
+import { FaPlus, FaTrash, FaPalette, FaChevronDown } from "react-icons/fa6";
 import { api } from "../api.js";
 import StyleFromImageDialog from "./StyleFromImageDialog.jsx";
 import ReferencesBundlePanel from "./ReferencesBundlePanel.jsx";
@@ -293,29 +293,33 @@ export default function ProjectForm({
   const [styleRefFile, setStyleRefFile] = useState(null);
   const [styleRefUrl, setStyleRefUrl] = useState(null);
   const [styleRefLocalPreview, setStyleRefLocalPreview] = useState(null);
-  // Per-character photo state, keyed by character id.
-  // Each entry: { url: server-side URL or null, file: pending File or null,
-  //               extracting: bool, error: string | null }
+  // Per-entity photo state, keyed by entity id.
+  // Each entry is an array: [{ slot, url, file, uploading, error }, ...]
+  // slot: server-assigned slot number (null for locally-picked photos not yet uploaded)
   const [characterPhotos, setCharacterPhotos] = useState(() => {
     const out = {};
-    for (const [id, url] of Object.entries(initialCharacterPhotos || {})) {
-      if (url) out[id] = { url, file: null, extracting: false, error: null };
+    for (const [id, photoList] of Object.entries(initialCharacterPhotos || {})) {
+      if (Array.isArray(photoList) && photoList.length > 0) {
+        out[id] = photoList.map(({ slot, url }) => ({ slot, url, file: null, uploading: false, error: null }));
+      }
     }
     return out;
   });
-  // Same shape as characterPhotos but keyed by location id.
   const [locationPhotos, setLocationPhotos] = useState(() => {
     const out = {};
-    for (const [id, url] of Object.entries(initialLocationPhotos || {})) {
-      if (url) out[id] = { url, file: null, extracting: false, error: null };
+    for (const [id, photoList] of Object.entries(initialLocationPhotos || {})) {
+      if (Array.isArray(photoList) && photoList.length > 0) {
+        out[id] = photoList.map(({ slot, url }) => ({ slot, url, file: null, uploading: false, error: null }));
+      }
     }
     return out;
   });
-  // Same shape as characterPhotos but keyed by object id.
   const [objectPhotos, setObjectPhotos] = useState(() => {
     const out = {};
-    for (const [id, url] of Object.entries(initialObjectPhotos || {})) {
-      if (url) out[id] = { url, file: null, extracting: false, error: null };
+    for (const [id, photoList] of Object.entries(initialObjectPhotos || {})) {
+      if (Array.isArray(photoList) && photoList.length > 0) {
+        out[id] = photoList.map(({ slot, url }) => ({ slot, url, file: null, uploading: false, error: null }));
+      }
     }
     return out;
   });
@@ -338,10 +342,11 @@ export default function ProjectForm({
     if (!initialCharacterPhotos) return;
     setCharacterPhotos((prev) => {
       const next = { ...prev };
-      for (const [id, url] of Object.entries(initialCharacterPhotos)) {
-        if (!url) continue;
-        if (!next[id] || (!next[id].file && next[id].url !== url)) {
-          next[id] = { url, file: null, extracting: false, error: null };
+      for (const [id, photoList] of Object.entries(initialCharacterPhotos)) {
+        if (!Array.isArray(photoList) || photoList.length === 0) continue;
+        const hasPending = (next[id] || []).some((e) => e.file);
+        if (!hasPending) {
+          next[id] = photoList.map(({ slot, url }) => ({ slot, url, file: null, uploading: false, error: null }));
         }
       }
       return next;
@@ -352,10 +357,11 @@ export default function ProjectForm({
     if (!initialObjectPhotos) return;
     setObjectPhotos((prev) => {
       const next = { ...prev };
-      for (const [id, url] of Object.entries(initialObjectPhotos)) {
-        if (!url) continue;
-        if (!next[id] || (!next[id].file && next[id].url !== url)) {
-          next[id] = { url, file: null, extracting: false, error: null };
+      for (const [id, photoList] of Object.entries(initialObjectPhotos)) {
+        if (!Array.isArray(photoList) || photoList.length === 0) continue;
+        const hasPending = (next[id] || []).some((e) => e.file);
+        if (!hasPending) {
+          next[id] = photoList.map(({ slot, url }) => ({ slot, url, file: null, uploading: false, error: null }));
         }
       }
       return next;
@@ -366,10 +372,11 @@ export default function ProjectForm({
     if (!initialLocationPhotos) return;
     setLocationPhotos((prev) => {
       const next = { ...prev };
-      for (const [id, url] of Object.entries(initialLocationPhotos)) {
-        if (!url) continue;
-        if (!next[id] || (!next[id].file && next[id].url !== url)) {
-          next[id] = { url, file: null, extracting: false, error: null };
+      for (const [id, photoList] of Object.entries(initialLocationPhotos)) {
+        if (!Array.isArray(photoList) || photoList.length === 0) continue;
+        const hasPending = (next[id] || []).some((e) => e.file);
+        if (!hasPending) {
+          next[id] = photoList.map(({ slot, url }) => ({ slot, url, file: null, uploading: false, error: null }));
         }
       }
       return next;
@@ -447,6 +454,7 @@ export default function ProjectForm({
           delete out[oldId];
           return out;
         });
+        // Note: server-side slot paths still reference oldId until the next save
       }
       return next;
     });
@@ -470,98 +478,74 @@ export default function ProjectForm({
     });
   }
 
-  async function onPickCharacterPhoto(i, file) {
+  async function onAddCharacterPhoto(i, file) {
     if (!file) return;
     const charId = config.characters[i]?.id;
     if (!charId) return;
     const localUrl = URL.createObjectURL(file);
+
     setCharacterPhotos((prev) => ({
       ...prev,
-      [charId]: {
-        url: localUrl,
-        file,
-        extracting: true,
-        error: null,
-      },
+      [charId]: [...(prev[charId] || []), { slot: null, url: localUrl, file, uploading: false, error: null }],
     }));
+
+    // Extract character info — only fills fields that are still empty
     try {
       const extracted = await api.characterFromPhoto(file, config.metadata.language || "fr");
       setConfig((c) => {
         const next = structuredClone(c);
         const row = next.characters[i];
         if (!row) return c;
-        // Pre-fill empty fields only — never clobber what the user typed.
         if (!row.name && extracted.name) row.name = extracted.name;
-        if (!row.physical_description && extracted.physical_description) {
+        if (!row.physical_description && extracted.physical_description)
           row.physical_description = extracted.physical_description;
-        }
         if (!row.outfit && extracted.outfit) row.outfit = extracted.outfit;
-        if (!row.personality && extracted.personality) {
-          row.personality = extracted.personality;
-        }
+        if (!row.personality && extracted.personality) row.personality = extracted.personality;
         return next;
       });
-      if (projectName) {
-        try {
-          const { url } = await api.setCharacterPhoto(projectName, charId, file);
-          setCharacterPhotos((prev) => ({
-            ...prev,
-            [charId]: {
-              url: url || localUrl,
-              file: null,
-              extracting: false,
-              error: null,
-            },
-          }));
-          return;
-        } catch (uploadErr) {
-          setCharacterPhotos((prev) => ({
-            ...prev,
-            [charId]: {
-              ...prev[charId],
-              extracting: false,
-              error: uploadErr.message || "Échec de l'upload.",
-            },
-          }));
-          return;
-        }
+    } catch {
+      // extraction failure is non-fatal
+    }
+
+    if (projectName) {
+      setCharacterPhotos((prev) => ({
+        ...prev,
+        [charId]: (prev[charId] || []).map((e) => (e.file === file ? { ...e, uploading: true } : e)),
+      }));
+      try {
+        const { slot, url } = await api.addCharacterPhoto(projectName, charId, file);
+        setCharacterPhotos((prev) => ({
+          ...prev,
+          [charId]: (prev[charId] || []).map((e) =>
+            e.file === file ? { slot, url: url || localUrl, file: null, uploading: false, error: null } : e,
+          ),
+        }));
+      } catch (uploadErr) {
+        setCharacterPhotos((prev) => ({
+          ...prev,
+          [charId]: (prev[charId] || []).map((e) =>
+            e.file === file ? { ...e, uploading: false, error: uploadErr.message || "Échec de l'upload." } : e,
+          ),
+        }));
       }
-      setCharacterPhotos((prev) => ({
-        ...prev,
-        [charId]: {
-          ...prev[charId],
-          extracting: false,
-          error: null,
-        },
-      }));
-    } catch (e) {
-      setCharacterPhotos((prev) => ({
-        ...prev,
-        [charId]: {
-          ...prev[charId],
-          extracting: false,
-          error: e.message || "Échec de l'extraction.",
-        },
-      }));
     }
   }
 
-  async function onClearCharacterPhoto(i) {
+  async function onRemoveCharacterPhotoAt(i, entryIndex) {
     const charId = config.characters[i]?.id;
     if (!charId) return;
-    setCharacterPhotos((prev) => {
-      const out = { ...prev };
-      delete out[charId];
-      return out;
-    });
-    if (projectName) {
-      try {
-        await api.deleteCharacterPhoto(projectName, charId);
-      } catch {
-        // non-fatal
-      }
+    const list = characterPhotos[charId] || [];
+    const entry = list[entryIndex];
+    if (!entry) return;
+    setCharacterPhotos((prev) => ({
+      ...prev,
+      [charId]: (prev[charId] || []).filter((_, idx) => idx !== entryIndex),
+    }));
+    if (projectName && entry.slot != null) {
+      api.deleteCharacterPhotoSlot(projectName, charId, entry.slot).catch(() => {});
     }
   }
+
   function addLocation() {
     setConfig((c) => ({
       ...c,
@@ -604,20 +588,18 @@ export default function ProjectForm({
     });
   }
 
-  async function onPickLocationPhoto(i, file) {
+  async function onAddLocationPhoto(i, file) {
     if (!file) return;
     const locId = config.locations[i]?.id;
     if (!locId) return;
     const localUrl = URL.createObjectURL(file);
+
     setLocationPhotos((prev) => ({
       ...prev,
-      [locId]: {
-        url: localUrl,
-        file,
-        extracting: true,
-        error: null,
-      },
+      [locId]: [...(prev[locId] || []), { slot: null, url: localUrl, file, uploading: false, error: null }],
     }));
+
+    // Extract location info — only fills fields that are still empty
     try {
       const extracted = await api.locationFromPhoto(file, config.metadata.language || "fr");
       setConfig((c) => {
@@ -625,70 +607,48 @@ export default function ProjectForm({
         const row = next.locations[i];
         if (!row) return c;
         if (!row.name && extracted.name) row.name = extracted.name;
-        if (!row.description && extracted.description) {
-          row.description = extracted.description;
-        }
+        if (!row.description && extracted.description) row.description = extracted.description;
         return next;
       });
-      if (projectName) {
-        try {
-          const { url } = await api.setLocationPhoto(projectName, locId, file);
-          setLocationPhotos((prev) => ({
-            ...prev,
-            [locId]: {
-              url: url || localUrl,
-              file: null,
-              extracting: false,
-              error: null,
-            },
-          }));
-          return;
-        } catch (uploadErr) {
-          setLocationPhotos((prev) => ({
-            ...prev,
-            [locId]: {
-              ...prev[locId],
-              extracting: false,
-              error: uploadErr.message || "Échec de l'upload.",
-            },
-          }));
-          return;
-        }
+    } catch {
+      // extraction failure is non-fatal
+    }
+
+    if (projectName) {
+      setLocationPhotos((prev) => ({
+        ...prev,
+        [locId]: (prev[locId] || []).map((e) => (e.file === file ? { ...e, uploading: true } : e)),
+      }));
+      try {
+        const { slot, url } = await api.addLocationPhoto(projectName, locId, file);
+        setLocationPhotos((prev) => ({
+          ...prev,
+          [locId]: (prev[locId] || []).map((e) =>
+            e.file === file ? { slot, url: url || localUrl, file: null, uploading: false, error: null } : e,
+          ),
+        }));
+      } catch (uploadErr) {
+        setLocationPhotos((prev) => ({
+          ...prev,
+          [locId]: (prev[locId] || []).map((e) =>
+            e.file === file ? { ...e, uploading: false, error: uploadErr.message || "Échec de l'upload." } : e,
+          ),
+        }));
       }
-      setLocationPhotos((prev) => ({
-        ...prev,
-        [locId]: {
-          ...prev[locId],
-          extracting: false,
-          error: null,
-        },
-      }));
-    } catch (e) {
-      setLocationPhotos((prev) => ({
-        ...prev,
-        [locId]: {
-          ...prev[locId],
-          extracting: false,
-          error: e.message || "Échec de l'extraction.",
-        },
-      }));
     }
   }
 
-  async function onClearLocationPhoto(i) {
+  async function onRemoveLocationPhotoAt(i, entryIndex) {
     const locId = config.locations[i]?.id;
     if (!locId) return;
-    setLocationPhotos((prev) => {
-      const out = { ...prev };
-      delete out[locId];
-      return out;
-    });
-    if (projectName) {
-      try {
-        await api.deleteLocationPhoto(projectName, locId);
-      } catch {
-        // non-fatal
-      }
+    const entry = (locationPhotos[locId] || [])[entryIndex];
+    if (!entry) return;
+    setLocationPhotos((prev) => ({
+      ...prev,
+      [locId]: (prev[locId] || []).filter((_, idx) => idx !== entryIndex),
+    }));
+    if (projectName && entry.slot != null) {
+      api.deleteLocationPhotoSlot(projectName, locId, entry.slot).catch(() => {});
     }
   }
 
@@ -734,20 +694,18 @@ export default function ProjectForm({
     });
   }
 
-  async function onPickObjectPhoto(i, file) {
+  async function onAddObjectPhoto(i, file) {
     if (!file) return;
     const objId = config.objects[i]?.id;
     if (!objId) return;
     const localUrl = URL.createObjectURL(file);
+
     setObjectPhotos((prev) => ({
       ...prev,
-      [objId]: {
-        url: localUrl,
-        file,
-        extracting: true,
-        error: null,
-      },
+      [objId]: [...(prev[objId] || []), { slot: null, url: localUrl, file, uploading: false, error: null }],
     }));
+
+    // Extract object info — only fills fields that are still empty
     try {
       const extracted = await api.objectFromPhoto(file, config.metadata.language || "fr");
       setConfig((c) => {
@@ -755,70 +713,48 @@ export default function ProjectForm({
         const row = next.objects[i];
         if (!row) return c;
         if (!row.name && extracted.name) row.name = extracted.name;
-        if (!row.description && extracted.description) {
-          row.description = extracted.description;
-        }
+        if (!row.description && extracted.description) row.description = extracted.description;
         return next;
       });
-      if (projectName) {
-        try {
-          const { url } = await api.setObjectPhoto(projectName, objId, file);
-          setObjectPhotos((prev) => ({
-            ...prev,
-            [objId]: {
-              url: url || localUrl,
-              file: null,
-              extracting: false,
-              error: null,
-            },
-          }));
-          return;
-        } catch (uploadErr) {
-          setObjectPhotos((prev) => ({
-            ...prev,
-            [objId]: {
-              ...prev[objId],
-              extracting: false,
-              error: uploadErr.message || "Échec de l'upload.",
-            },
-          }));
-          return;
-        }
+    } catch {
+      // extraction failure is non-fatal
+    }
+
+    if (projectName) {
+      setObjectPhotos((prev) => ({
+        ...prev,
+        [objId]: (prev[objId] || []).map((e) => (e.file === file ? { ...e, uploading: true } : e)),
+      }));
+      try {
+        const { slot, url } = await api.addObjectPhoto(projectName, objId, file);
+        setObjectPhotos((prev) => ({
+          ...prev,
+          [objId]: (prev[objId] || []).map((e) =>
+            e.file === file ? { slot, url: url || localUrl, file: null, uploading: false, error: null } : e,
+          ),
+        }));
+      } catch (uploadErr) {
+        setObjectPhotos((prev) => ({
+          ...prev,
+          [objId]: (prev[objId] || []).map((e) =>
+            e.file === file ? { ...e, uploading: false, error: uploadErr.message || "Échec de l'upload." } : e,
+          ),
+        }));
       }
-      setObjectPhotos((prev) => ({
-        ...prev,
-        [objId]: {
-          ...prev[objId],
-          extracting: false,
-          error: null,
-        },
-      }));
-    } catch (e) {
-      setObjectPhotos((prev) => ({
-        ...prev,
-        [objId]: {
-          ...prev[objId],
-          extracting: false,
-          error: e.message || "Échec de l'extraction.",
-        },
-      }));
     }
   }
 
-  async function onClearObjectPhoto(i) {
+  async function onRemoveObjectPhotoAt(i, entryIndex) {
     const objId = config.objects[i]?.id;
     if (!objId) return;
-    setObjectPhotos((prev) => {
-      const out = { ...prev };
-      delete out[objId];
-      return out;
-    });
-    if (projectName) {
-      try {
-        await api.deleteObjectPhoto(projectName, objId);
-      } catch {
-        // non-fatal
-      }
+    const entry = (objectPhotos[objId] || [])[entryIndex];
+    if (!entry) return;
+    setObjectPhotos((prev) => ({
+      ...prev,
+      [objId]: (prev[objId] || []).filter((_, idx) => idx !== entryIndex),
+    }));
+    if (projectName && entry.slot != null) {
+      api.deleteObjectPhotoSlot(projectName, objId, entry.slot).catch(() => {});
     }
   }
 
@@ -864,88 +800,64 @@ export default function ProjectForm({
   async function maybeUploadPendingCharacterPhotos(out) {
     const projName = projectName || out.project;
     if (!projName) return;
-    const updates = [];
     for (const c of out.characters || []) {
-      const slot = characterPhotos[c.id];
-      if (slot?.file) {
-        updates.push(
-          api
-            .setCharacterPhoto(projName, c.id, slot.file)
-            .then(({ url }) => [c.id, url])
-            .catch(() => [c.id, null]),
-        );
-      }
-    }
-    if (!updates.length) return;
-    const results = await Promise.all(updates);
-    setCharacterPhotos((prev) => {
-      const next = { ...prev };
-      for (const [id, url] of results) {
-        if (!next[id]) continue;
-        if (url) {
-          next[id] = { url, file: null, extracting: false, error: null };
+      const photoList = characterPhotos[c.id] || [];
+      for (const entry of photoList.filter((e) => e.file)) {
+        try {
+          const { slot, url } = await api.addCharacterPhoto(projName, c.id, entry.file);
+          setCharacterPhotos((prev) => ({
+            ...prev,
+            [c.id]: (prev[c.id] || []).map((e) =>
+              e.file === entry.file ? { slot, url: url || entry.url, file: null, uploading: false, error: null } : e,
+            ),
+          }));
+        } catch {
+          // non-fatal
         }
       }
-      return next;
-    });
+    }
   }
 
   async function maybeUploadPendingLocationPhotos(out) {
     const projName = projectName || out.project;
     if (!projName) return;
-    const updates = [];
     for (const l of out.locations || []) {
-      const slot = locationPhotos[l.id];
-      if (slot?.file) {
-        updates.push(
-          api
-            .setLocationPhoto(projName, l.id, slot.file)
-            .then(({ url }) => [l.id, url])
-            .catch(() => [l.id, null]),
-        );
-      }
-    }
-    if (!updates.length) return;
-    const results = await Promise.all(updates);
-    setLocationPhotos((prev) => {
-      const next = { ...prev };
-      for (const [id, url] of results) {
-        if (!next[id]) continue;
-        if (url) {
-          next[id] = { url, file: null, extracting: false, error: null };
+      const photoList = locationPhotos[l.id] || [];
+      for (const entry of photoList.filter((e) => e.file)) {
+        try {
+          const { slot, url } = await api.addLocationPhoto(projName, l.id, entry.file);
+          setLocationPhotos((prev) => ({
+            ...prev,
+            [l.id]: (prev[l.id] || []).map((e) =>
+              e.file === entry.file ? { slot, url: url || entry.url, file: null, uploading: false, error: null } : e,
+            ),
+          }));
+        } catch {
+          // non-fatal
         }
       }
-      return next;
-    });
+    }
   }
 
   async function maybeUploadPendingObjectPhotos(out) {
     const projName = projectName || out.project;
     if (!projName) return;
-    const updates = [];
     for (const o of out.objects || []) {
-      const slot = objectPhotos[o.id];
-      if (slot?.file) {
-        updates.push(
-          api
-            .setObjectPhoto(projName, o.id, slot.file)
-            .then(({ url }) => [o.id, url])
-            .catch(() => [o.id, null]),
-        );
-      }
-    }
-    if (!updates.length) return;
-    const results = await Promise.all(updates);
-    setObjectPhotos((prev) => {
-      const next = { ...prev };
-      for (const [id, url] of results) {
-        if (!next[id]) continue;
-        if (url) {
-          next[id] = { url, file: null, extracting: false, error: null };
+      const photoList = objectPhotos[o.id] || [];
+      for (const entry of photoList.filter((e) => e.file)) {
+        try {
+          const { slot, url } = await api.addObjectPhoto(projName, o.id, entry.file);
+          setObjectPhotos((prev) => ({
+            ...prev,
+            [o.id]: (prev[o.id] || []).map((e) =>
+              e.file === entry.file ? { slot, url: url || entry.url, file: null, uploading: false, error: null } : e,
+            ),
+          }));
+        } catch {
+          // non-fatal
         }
       }
-      return next;
-    });
+    }
   }
 
   async function handleSubmit(e) {
@@ -1153,10 +1065,13 @@ export default function ProjectForm({
                     <FaTrash aria-hidden /> Supprimer
                   </button>
                 </div>
-                <CharacterPhotoField
-                  slot={characterPhotos[c.id]}
-                  onPick={(file) => onPickCharacterPhoto(i, file)}
-                  onClear={() => onClearCharacterPhoto(i)}
+                <MultiPhotosField
+                  entityIndex={i}
+                  kind="character"
+                  photos={characterPhotos[c.id] || []}
+                  maxPhotos={config.generation_options?.references?.image_model?.provider === "xai" ? 2 : 4}
+                  onAdd={(file) => onAddCharacterPhoto(i, file)}
+                  onRemove={(idx) => onRemoveCharacterPhotoAt(i, idx)}
                 />
                 <ReferenceImagePreview
                   url={initialReferenceImages?.characters?.[c.id]}
@@ -1253,10 +1168,13 @@ export default function ProjectForm({
                     <FaTrash aria-hidden /> Supprimer
                   </button>
                 </div>
-                <LocationPhotoField
-                  slot={locationPhotos[l.id]}
-                  onPick={(file) => onPickLocationPhoto(i, file)}
-                  onClear={() => onClearLocationPhoto(i)}
+                <MultiPhotosField
+                  entityIndex={i}
+                  kind="location"
+                  photos={locationPhotos[l.id] || []}
+                  maxPhotos={config.generation_options?.references?.image_model?.provider === "xai" ? 2 : 4}
+                  onAdd={(file) => onAddLocationPhoto(i, file)}
+                  onRemove={(idx) => onRemoveLocationPhotoAt(i, idx)}
                 />
                 <ReferenceImagePreview
                   url={initialReferenceImages?.locations?.[l.id]}
@@ -1333,10 +1251,13 @@ export default function ProjectForm({
                     <FaTrash aria-hidden /> Supprimer
                   </button>
                 </div>
-                <ObjectPhotoField
-                  slot={objectPhotos[o.id]}
-                  onPick={(file) => onPickObjectPhoto(i, file)}
-                  onClear={() => onClearObjectPhoto(i)}
+                <MultiPhotosField
+                  entityIndex={i}
+                  kind="object"
+                  photos={objectPhotos[o.id] || []}
+                  maxPhotos={config.generation_options?.references?.image_model?.provider === "xai" ? 2 : 4}
+                  onAdd={(file) => onAddObjectPhoto(i, file)}
+                  onRemove={(idx) => onRemoveObjectPhotoAt(i, idx)}
                 />
                 <ReferenceImagePreview
                   url={initialReferenceImages?.objects?.[o.id]}
@@ -1379,6 +1300,7 @@ export default function ProjectForm({
             <input
               type="number"
               min={1}
+              max={99}
               className="input"
               value={config.structure.page_count}
               onChange={(e) => set("structure.page_count", e.target.value)}
@@ -1399,6 +1321,7 @@ export default function ProjectForm({
               <input
                 type="number"
                 min={1}
+                max={99}
                 className="input"
                 value={config.structure.panels_per_page_range[0]}
                 onChange={(e) =>
@@ -1408,6 +1331,7 @@ export default function ProjectForm({
               <input
                 type="number"
                 min={1}
+                max={99}
                 className="input"
                 value={config.structure.panels_per_page_range[1]}
                 onChange={(e) =>
@@ -1583,7 +1507,10 @@ export default function ProjectForm({
                 value={config.generation_options.upscale.enabled}
                 onChange={(v) => set("generation_options.upscale.enabled", v)}
               />
-              <Field label="Mode d'agrandissement" hint="Choisissez une cible en mégapixels ou un facteur multiplicatif.">
+              <Field
+                label="Mode d'agrandissement"
+                hint="Choisissez une cible en mégapixels ou un facteur multiplicatif."
+              >
                 <select
                   className="select"
                   value={config.generation_options.upscale.mode}
@@ -1900,154 +1827,79 @@ function ReferenceImagePreview({ url, label }) {
   );
 }
 
-function CharacterPhotoField({ slot, onPick, onClear }) {
-  const inputId = `char-photo-${Math.random().toString(36).slice(2, 8)}`;
-  const url = slot?.url || null;
-  const extracting = slot?.extracting || false;
-  const error = slot?.error || null;
-  return (
-    <div className="mb-4 flex items-start gap-4">
-      <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0">
-        {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : <span>Aucune photo</span>}
-      </div>
-      <div className="flex-1 min-w-0">
-        <label className="label">Photo de référence (optionnel)</label>
-        <p className="text-xs text-[var(--color-mute)] mb-2">
-          Si vous ajoutez une photo, l'IA en extrait les caractéristiques pour pré-remplir la fiche puis l'utilise comme
-          guide de ressemblance lors de la génération de la référence (effet caricature). Le style défini reste
-          prioritaire sur la photo.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor={inputId} className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2">
-            <FaUpload aria-hidden />
-            {url ? "Remplacer" : "Choisir une photo"}
-          </label>
-          <input
-            id={inputId}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) onPick(f);
-            }}
-          />
-          {url && (
-            <button
-              type="button"
-              className="btn btn-ghost text-sm inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
-              onClick={onClear}
-              title="Retirer la photo"
-            >
-              <FaTrash aria-hidden /> Retirer
-            </button>
-          )}
-          {extracting && <span className="text-xs text-[var(--color-mute)]">Analyse de la photo…</span>}
-        </div>
-        {error && <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>}
-      </div>
-    </div>
-  );
-}
+const _PHOTO_HINTS = {
+  character:
+    "La première photo est analysée pour pré-remplir la fiche et sert de guide de ressemblance (effet caricature). Les photos suivantes enrichissent l'ancrage visuel. Le style défini reste prioritaire.",
+  location:
+    "La première photo est analysée pour pré-remplir nom et description. Toutes les photos servent de guide pour dessiner le décor dans le style de la BD. Aucun personnage ne sera repris.",
+  object:
+    "La première photo est analysée pour pré-remplir la fiche. Toutes les photos servent de guide pour produire une version stylisée de l'objet dans le style de la BD.",
+};
 
-function LocationPhotoField({ slot, onPick, onClear }) {
-  const inputId = `loc-photo-${Math.random().toString(36).slice(2, 8)}`;
-  const url = slot?.url || null;
-  const extracting = slot?.extracting || false;
-  const error = slot?.error || null;
+function MultiPhotosField({ entityIndex, kind, photos, maxPhotos, onAdd, onRemove }) {
+  const inputId = `photos-${kind}-${entityIndex}`;
+  const canAdd = photos.length < maxPhotos;
   return (
-    <div className="mb-4 flex items-start gap-4">
-      <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0">
-        {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : <span>Aucune photo</span>}
-      </div>
-      <div className="flex-1 min-w-0">
-        <label className="label">Photo de référence (optionnel)</label>
-        <p className="text-xs text-[var(--color-mute)] mb-2">
-          Si vous ajoutez une photo du lieu, l'IA en extrait nom + description pour pré-remplir la fiche, puis l'utilise
-          comme guide visuel pour dessiner le décor (architecture, ambiance) dans le style de la BD. Aucun personnage ne
-          sera repris depuis la photo.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor={inputId} className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2">
-            <FaUpload aria-hidden />
-            {url ? "Remplacer" : "Choisir une photo"}
-          </label>
-          <input
-            id={inputId}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) onPick(f);
-            }}
-          />
-          {url && (
+    <div className="mb-4">
+      <label className="label">Photos de référence (optionnel)</label>
+      <p className="text-xs text-[var(--color-mute)] mb-2">{_PHOTO_HINTS[kind]}</p>
+      <div className="flex flex-wrap gap-2 items-start">
+        {photos.map((entry, idx) => (
+          <div key={idx} className="relative shrink-0">
+            <div className="w-20 h-20 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)]">
+              {entry.url ? (
+                <img src={entry.url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span>{entry.uploading ? "…" : "?"}</span>
+              )}
+            </div>
+            {entry.uploading && (
+              <div className="absolute inset-0 rounded-lg bg-black/30 flex items-center justify-center">
+                <span className="text-white text-xs">↑</span>
+              </div>
+            )}
             <button
               type="button"
-              className="btn btn-ghost text-sm inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
-              onClick={onClear}
-              title="Retirer la photo"
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[var(--color-rose-500)] text-white text-xs flex items-center justify-center hover:bg-[var(--color-rose-600)] leading-none"
+              onClick={() => onRemove(idx)}
+              title="Retirer cette photo"
+              aria-label="Retirer cette photo"
             >
-              <FaTrash aria-hidden /> Retirer
+              ×
             </button>
-          )}
-          {extracting && <span className="text-xs text-[var(--color-mute)]">Analyse de la photo…</span>}
-        </div>
-        {error && <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>}
-      </div>
-    </div>
-  );
-}
-
-function ObjectPhotoField({ slot, onPick, onClear }) {
-  const inputId = `obj-photo-${Math.random().toString(36).slice(2, 8)}`;
-  const url = slot?.url || null;
-  const extracting = slot?.extracting || false;
-  const error = slot?.error || null;
-  return (
-    <div className="mb-4 flex items-start gap-4">
-      <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0">
-        {url ? <img src={url} alt="" className="w-full h-full object-cover" /> : <span>Aucune photo</span>}
-      </div>
-      <div className="flex-1 min-w-0">
-        <label className="label">Photo de référence (optionnel)</label>
-        <p className="text-xs text-[var(--color-mute)] mb-2">
-          Si vous ajoutez une photo, l'IA en extrait nom + description pour pré-remplir la fiche, puis l'utilise comme
-          guide visuel pour produire une version caricaturée de l'objet dans le style de la BD.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor={inputId} className="btn btn-secondary text-sm cursor-pointer inline-flex items-center gap-2">
-            <FaUpload aria-hidden />
-            {url ? "Remplacer" : "Choisir une photo"}
+            {entry.error && (
+              <p className="text-xs text-[var(--color-rose-500)] mt-0.5 max-w-[5rem] break-words">{entry.error}</p>
+            )}
+          </div>
+        ))}
+        {canAdd && (
+          <label
+            htmlFor={inputId}
+            className="w-20 h-20 shrink-0 rounded-lg border-2 border-dashed border-[var(--color-line)] flex flex-col items-center justify-center gap-0.5 cursor-pointer hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] text-[var(--color-mute)] transition-colors"
+            title="Ajouter une photo"
+          >
+            <FaPlus className="w-4 h-4" aria-hidden />
+            <span className="text-xs leading-tight">Ajouter</span>
           </label>
-          <input
-            id={inputId}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) onPick(f);
-            }}
-          />
-          {url && (
-            <button
-              type="button"
-              className="btn btn-ghost text-sm inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
-              onClick={onClear}
-              title="Retirer la photo"
-            >
-              <FaTrash aria-hidden /> Retirer
-            </button>
-          )}
-          {extracting && <span className="text-xs text-[var(--color-mute)]">Analyse de la photo…</span>}
-        </div>
-        {error && <p className="text-xs text-[var(--color-rose-500)] mt-1">{error}</p>}
+        )}
+        <input
+          id={inputId}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) onAdd(f);
+          }}
+        />
       </div>
+      {photos.length >= maxPhotos && (
+        <p className="text-xs text-amber-600 mt-1">
+          Maximum {maxPhotos} photo{maxPhotos > 1 ? "s" : ""} — les photos supplémentaires ne seraient pas transmises au
+          modèle.
+        </p>
+      )}
     </div>
   );
 }

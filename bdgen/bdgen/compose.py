@@ -1,4 +1,5 @@
 """Step 4: generate each BD page as a single image with gpt-image-2, then assemble."""
+
 from __future__ import annotations
 
 import base64
@@ -67,13 +68,16 @@ _PAGE_FORMAT_SPECS: dict[str, dict[str, str]] = {
     "strip": {
         "label": "strip",
         "page_format_line": (
-            "comic strip, single horizontal row of panels (newspaper-strip "
-            "format), landscape canvas"
+            "newspaper comic strip, ONE single horizontal row of panels side by side "
+            "(landscape canvas) — no multiple rows, no vertical stacking whatsoever"
         ),
         "cover_format_line": "landscape strip cover, single horizontal banner",
         "layout_hint": (
-            "single horizontal row of panels reading left-to-right; do NOT stack "
-            "panels vertically; keep all panels at the same height"
+            "STRIP FORMAT — MANDATORY SINGLE ROW: all panels are arranged in ONE "
+            "unbroken horizontal row reading left-to-right. Do NOT create multiple "
+            "rows. Do NOT place any panel above or below another panel. Every panel "
+            "spans the full height of the strip from top edge to bottom edge. "
+            "Panel widths may vary but the composition is always exactly one row."
         ),
     },
 }
@@ -105,20 +109,31 @@ def compose_output(
     """
     rep = _coerce_reporter(reporter)
     flag = _coerce_flag(interrupt)
-    with trace.project_session(stats_project_dir), trace.node(
-        "compose_output", "flow",
-        inputs={
-            "project": script.project,
-            "pages": len(script.pages),
-            "has_cover": script.cover is not None,
-            "has_back": script.back_cover is not None,
-            "force": force,
-            "image_model": f"{options.image_model.provider}/{options.image_model.model}",
-        },
+    with (
+        trace.project_session(stats_project_dir),
+        trace.node(
+            "compose_output",
+            "flow",
+            inputs={
+                "project": script.project,
+                "pages": len(script.pages),
+                "has_cover": script.cover is not None,
+                "has_back": script.back_cover is not None,
+                "force": force,
+                "image_model": f"{options.image_model.provider}/{options.image_model.model}",
+            },
+        ),
     ):
         return _compose_output_impl(
-            script, options, pages_dir, feedback_store, force,
-            rep, flag, style_ref, stats_project_dir,
+            script,
+            options,
+            pages_dir,
+            feedback_store,
+            force,
+            rep,
+            flag,
+            style_ref,
+            stats_project_dir,
         )
 
 
@@ -147,22 +162,37 @@ def _compose_output_impl(
         done += 1
         cover_image = pages_dir / "cover.png"
         if not force and _is_complete(cover_image):
-            rep.emit(ProgressEvent(
-                step="compose", phase="cover_skipped",
-                message="Couverture déjà sur disque.",
-                current=done, total=total, artifact=str(cover_image),
-                extra={"id": "cover"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="compose",
+                    phase="cover_skipped",
+                    message="Couverture déjà sur disque.",
+                    current=done,
+                    total=total,
+                    artifact=str(cover_image),
+                    extra={"id": "cover"},
+                )
+            )
         else:
-            rep.emit(ProgressEvent(
-                step="compose", phase="cover",
-                message="Génération de la couverture…",
-                current=done, total=total, extra={"id": "cover"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="compose",
+                    phase="cover",
+                    message="Génération de la couverture…",
+                    current=done,
+                    total=total,
+                    extra={"id": "cover"},
+                )
+            )
             started_at, started = start_timer()
             image_stats = _generate_cover(
-                client, options.image_model, script, script.cover,
-                cover_image, feedback_store, style_ref=style_ref,
+                client,
+                options.image_model,
+                script,
+                script.cover,
+                cover_image,
+                feedback_store,
+                style_ref=style_ref,
             )
             record_event(
                 stats_project_dir,
@@ -179,12 +209,17 @@ def _compose_output_impl(
                 artifact=cover_image,
                 extra={"quality": options.image_model.quality},
             )
-            rep.emit(ProgressEvent(
-                step="compose", phase="cover_done",
-                message="Couverture générée.",
-                current=done, total=total, artifact=str(cover_image),
-                extra={"id": "cover"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="compose",
+                    phase="cover_done",
+                    message="Couverture générée.",
+                    current=done,
+                    total=total,
+                    artifact=str(cover_image),
+                    extra={"id": "cover"},
+                )
+            )
 
     page_images: list[Path] = []
     for page in script.pages:
@@ -192,23 +227,37 @@ def _compose_output_impl(
         done += 1
         target = pages_dir / f"page_{page.page_number:02d}.png"
         if not force and _is_complete(target):
-            rep.emit(ProgressEvent(
-                step="compose", phase=f"page_{page.page_number}_skipped",
-                message=f"Planche {page.page_number} déjà sur disque.",
-                current=done, total=total, artifact=str(target),
-                extra={"id": f"page_{page.page_number}"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="compose",
+                    phase=f"page_{page.page_number}_skipped",
+                    message=f"Planche {page.page_number} déjà sur disque.",
+                    current=done,
+                    total=total,
+                    artifact=str(target),
+                    extra={"id": f"page_{page.page_number}"},
+                )
+            )
         else:
-            rep.emit(ProgressEvent(
-                step="compose", phase=f"page_{page.page_number}",
-                message=f"Génération de la planche {page.page_number}…",
-                current=done, total=total,
-                extra={"id": f"page_{page.page_number}"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="compose",
+                    phase=f"page_{page.page_number}",
+                    message=f"Génération de la planche {page.page_number}…",
+                    current=done,
+                    total=total,
+                    extra={"id": f"page_{page.page_number}"},
+                )
+            )
             started_at, started = start_timer()
             image_stats = _generate_page(
-                client, options.image_model, script, page, target,
-                feedback_store, style_ref=style_ref,
+                client,
+                options.image_model,
+                script,
+                page,
+                target,
+                feedback_store,
+                style_ref=style_ref,
             )
             record_event(
                 stats_project_dir,
@@ -229,12 +278,17 @@ def _compose_output_impl(
                     "dialogs": sum(len(panel.dialogs) for panel in page.panels),
                 },
             )
-            rep.emit(ProgressEvent(
-                step="compose", phase=f"page_{page.page_number}_done",
-                message=f"Planche {page.page_number} générée.",
-                current=done, total=total, artifact=str(target),
-                extra={"id": f"page_{page.page_number}"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="compose",
+                    phase=f"page_{page.page_number}_done",
+                    message=f"Planche {page.page_number} générée.",
+                    current=done,
+                    total=total,
+                    artifact=str(target),
+                    extra={"id": f"page_{page.page_number}"},
+                )
+            )
         page_images.append(target)
 
     back_image: Path | None = None
@@ -243,22 +297,37 @@ def _compose_output_impl(
         done += 1
         back_image = pages_dir / "back.png"
         if not force and _is_complete(back_image):
-            rep.emit(ProgressEvent(
-                step="compose", phase="back_skipped",
-                message="4ᵉ de couverture déjà sur disque.",
-                current=done, total=total, artifact=str(back_image),
-                extra={"id": "back"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="compose",
+                    phase="back_skipped",
+                    message="4ᵉ de couverture déjà sur disque.",
+                    current=done,
+                    total=total,
+                    artifact=str(back_image),
+                    extra={"id": "back"},
+                )
+            )
         else:
-            rep.emit(ProgressEvent(
-                step="compose", phase="back",
-                message="Génération de la 4ᵉ de couverture…",
-                current=done, total=total, extra={"id": "back"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="compose",
+                    phase="back",
+                    message="Génération de la 4ᵉ de couverture…",
+                    current=done,
+                    total=total,
+                    extra={"id": "back"},
+                )
+            )
             started_at, started = start_timer()
             image_stats = _generate_back(
-                client, options.image_model, script, script.back_cover,
-                back_image, feedback_store, style_ref=style_ref,
+                client,
+                options.image_model,
+                script,
+                script.back_cover,
+                back_image,
+                feedback_store,
+                style_ref=style_ref,
             )
             record_event(
                 stats_project_dir,
@@ -275,41 +344,49 @@ def _compose_output_impl(
                 artifact=back_image,
                 extra={"quality": options.image_model.quality},
             )
-            rep.emit(ProgressEvent(
-                step="compose", phase="back_done",
-                message="4ᵉ de couverture générée.",
-                current=done, total=total, artifact=str(back_image),
-                extra={"id": "back"},
-            ))
+            rep.emit(
+                ProgressEvent(
+                    step="compose",
+                    phase="back_done",
+                    message="4ᵉ de couverture générée.",
+                    current=done,
+                    total=total,
+                    artifact=str(back_image),
+                    extra={"id": "back"},
+                )
+            )
 
-    full_sequence = (
-        ([cover_image] if cover_image else [])
-        + page_images
-        + ([back_image] if back_image else [])
-    )
+    full_sequence = ([cover_image] if cover_image else []) + page_images + ([back_image] if back_image else [])
 
     if options.output_format == "pdf":
-        rep.emit(ProgressEvent(
-            step="compose", phase="assembling",
-            message=f"Assemblage de {len(full_sequence)} images en PDF…",
-        ))
+        rep.emit(
+            ProgressEvent(
+                step="compose",
+                phase="assembling",
+                message=f"Assemblage de {len(full_sequence)} images en PDF…",
+            )
+        )
         _assemble_pdf(full_sequence, options.output_path)
-        rep.emit(ProgressEvent(
-            step="compose", phase="done",
-            message="PDF assemblé.",
-            artifact=str(options.output_path),
-        ))
+        rep.emit(
+            ProgressEvent(
+                step="compose",
+                phase="done",
+                message="PDF assemblé.",
+                artifact=str(options.output_path),
+            )
+        )
         return options.output_path
     if options.output_format == "images":
-        rep.emit(ProgressEvent(
-            step="compose", phase="done",
-            message=f"Images sauvegardées dans {pages_dir}",
-            artifact=str(pages_dir),
-        ))
+        rep.emit(
+            ProgressEvent(
+                step="compose",
+                phase="done",
+                message=f"Images sauvegardées dans {pages_dir}",
+                artifact=str(pages_dir),
+            )
+        )
         return pages_dir
-    raise NotImplementedError(
-        f"Output format '{options.output_format}' is not yet supported."
-    )
+    raise NotImplementedError(f"Output format '{options.output_format}' is not yet supported.")
 
 
 def _prepend_style_ref(
@@ -335,7 +412,8 @@ def _generate_page(
 ) -> dict:
     """Call gpt-image-2 with all relevant character/location refs as input images."""
     refs_with_labels = _prepend_style_ref(
-        _collect_refs(script, page), style_ref,
+        _collect_refs(script, page),
+        style_ref,
         allow_style_copy=bool(getattr(script, "allow_style_copy", False)),
     )
     refs = [path for path, _ in refs_with_labels]
@@ -346,15 +424,17 @@ def _generate_page(
         if feedbacks:
             prompt += feedback_block(feedbacks)
     return _call_image(
-        client, image_model, prompt, target, refs,
+        client,
+        image_model,
+        prompt,
+        target,
+        refs,
         size=image_size_for_format(script.page_format),
         trace_name=f"compose_page_{page.page_number}",
     )
 
 
-def _collect_refs(
-    script: BdGenScript, page: Page
-) -> list[tuple[Path, str]]:
+def _collect_refs(script: BdGenScript, page: Page) -> list[tuple[Path, str]]:
     """Collect refs for this page as (path, label) pairs.
 
     The label describes what the input image is and how the model should treat
@@ -372,9 +452,7 @@ def _collect_refs(
     refs: list[tuple[Path, str]] = []
     for cid in sorted(char_ids):
         char = script.character_by_id(cid)
-        ref_path = _existing_reference_path(
-            script, "characters", cid, char.reference_image if char else None
-        )
+        ref_path = _existing_reference_path(script, "characters", cid, char.reference_image if char else None)
         if char and ref_path:
             label = (
                 f'Character sheet for "{char.name}" — this is the canonical '
@@ -388,9 +466,7 @@ def _collect_refs(
                 refs.append((photo_path, _photo_fallback_label("character", char.name)))
     for lid in sorted(loc_ids):
         loc = script.location_by_id(lid)
-        ref_path = _existing_reference_path(
-            script, "locations", lid, loc.reference_image if loc else None
-        )
+        ref_path = _existing_reference_path(script, "locations", lid, loc.reference_image if loc else None)
         if loc and ref_path:
             label = (
                 f'Establishing shot of "{loc.name}" — match its mood, '
@@ -403,9 +479,7 @@ def _collect_refs(
                 refs.append((photo_path, _photo_fallback_label("location", loc.name)))
     for oid in sorted(obj_ids):
         obj = script.object_by_id(oid)
-        ref_path = _existing_reference_path(
-            script, "objects", oid, obj.reference_image if obj else None
-        )
+        ref_path = _existing_reference_path(script, "objects", oid, obj.reference_image if obj else None)
         if obj and ref_path:
             label = (
                 f'Object reference for "{obj.name}" — this is the canonical '
@@ -422,9 +496,7 @@ def _collect_refs(
     return refs
 
 
-def _build_page_prompt(
-    script: BdGenScript, page: Page, ref_labels: list[str] | None = None
-) -> str:
+def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | None = None) -> str:
     """Build the full page-generation prompt with publication specs and bubble guidance."""
     style = script.style
     language = script.metadata.language
@@ -450,9 +522,7 @@ def _build_page_prompt(
                 if d.type == "narration":
                     # Narration captions are NOT speech bubbles — render as a
                     # rectangular caption box with no tail.
-                    lines.append(
-                        f'    - CAPTION (narration, no speaker, no tail): "{d.text}"'
-                    )
+                    lines.append(f'    - CAPTION (narration, no speaker, no tail): "{d.text}"')
                 else:
                     lines.append(
                         f'    - SPEAKER="{speaker_name}" (type={d.type}): "{d.text}"\n'
@@ -462,14 +532,8 @@ def _build_page_prompt(
                     )
             dialogs_block = "\n  Dialogs:\n" + "\n".join(lines)
 
-        narration_block = (
-            f"\n  Narration caption: {panel.narration}" if panel.narration else ""
-        )
-        sfx_block = (
-            f"\n  Sound effects: {', '.join(panel.sound_effects)}"
-            if panel.sound_effects
-            else ""
-        )
+        narration_block = f"\n  Narration caption: {panel.narration}" if panel.narration else ""
+        sfx_block = f"\n  Sound effects: {', '.join(panel.sound_effects)}" if panel.sound_effects else ""
 
         panels_text.append(
             f"Panel {panel.panel_number} ({panel.size or 'medium'}, "
@@ -481,7 +545,10 @@ def _build_page_prompt(
             f"{narration_block}{dialogs_block}{sfx_block}"
         )
 
-    header = IMAGE_CONSTRAINTS + "\n" + dedent(f"""\
+    header = (
+        IMAGE_CONSTRAINTS
+        + "\n"
+        + dedent(f"""\
         Generate page {page_n} of a comic book ("bande dessinée"), as a single
         publication-ready image containing every panel of this page.
 
@@ -491,8 +558,13 @@ def _build_page_prompt(
         - Line work: {style.line_work or "clean black ink, consistent thickness"}
         - Mood: {style.mood or "neutral"}
         - Stylization level: {style.stylization_level or "moderately stylized"}
-        - Panel borders: {style.panel_borders or "crisp, consistent thickness, fully closed black ink rectangles (or shapes per the layout)"}
-        - Speech bubbles: {style.speech_bubbles or "clean white bubbles with a thin black outline, matching the line-work weight"}
+        - Panel borders: {
+            style.panel_borders
+            or "crisp, consistent thickness, fully closed black ink rectangles (or shapes per the layout)"
+        }
+        - Speech bubbles: {
+            style.speech_bubbles or "clean white bubbles with a thin black outline, matching the line-work weight"
+        }
         - Character rendering: {style.character_rendering or "consistent with the art style above"}
         - HANDS & ARMS (NON-NEGOTIABLE): every character in every panel MUST
           have anatomically correct hands (exactly 5 fingers per hand: 4 fingers
@@ -504,13 +576,22 @@ def _build_page_prompt(
         {f"- NEGATIVE CONSTRAINTS: {style.negative_constraints}" if style.negative_constraints else ""}
 
         PAGE LAYOUT:
-        {page.layout or fmt["layout_hint"]}
+        {
+            (
+                f"STRIP FORMAT — NON-NEGOTIABLE SINGLE ROW: place all {len(page.panels)} panel(s) "
+                f"in ONE horizontal row from left to right. Absolutely no stacking rows. "
+                f"All panels share identical height (full strip height). Width may vary per panel."
+            )
+            if script.page_format == "strip"
+            else (page.layout or fmt["layout_hint"])
+        }
 
         This page contains {len(page.panels)} panel(s). Arrange them following
         the layout description above.
 
         PANELS:
         """)
+    )
 
     footer = dedent(f"""
 
@@ -634,7 +715,8 @@ def _generate_cover(
     style_ref: Path | None = None,
 ) -> dict:
     refs_with_labels = _prepend_style_ref(
-        _collect_album_refs(script, "cover"), style_ref,
+        _collect_album_refs(script, "cover"),
+        style_ref,
         allow_style_copy=bool(getattr(script, "allow_style_copy", False)),
     )
     refs = [p for p, _ in refs_with_labels]
@@ -645,7 +727,11 @@ def _generate_cover(
         if feedbacks:
             prompt += feedback_block(feedbacks)
     return _call_image(
-        client, image_model, prompt, target, refs,
+        client,
+        image_model,
+        prompt,
+        target,
+        refs,
         size=image_size_for_format(script.page_format),
         trace_name="compose_cover",
     )
@@ -661,7 +747,8 @@ def _generate_back(
     style_ref: Path | None = None,
 ) -> dict:
     refs_with_labels = _prepend_style_ref(
-        _collect_album_refs(script, "back"), style_ref,
+        _collect_album_refs(script, "back"),
+        style_ref,
         allow_style_copy=bool(getattr(script, "allow_style_copy", False)),
     )
     refs = [p for p, _ in refs_with_labels]
@@ -672,7 +759,11 @@ def _generate_back(
         if feedbacks:
             prompt += feedback_block(feedbacks)
     return _call_image(
-        client, image_model, prompt, target, refs,
+        client,
+        image_model,
+        prompt,
+        target,
+        refs,
         size=image_size_for_format(script.page_format),
         trace_name="compose_back",
     )
@@ -740,18 +831,28 @@ def _existing_photo_path(
     kind: str,
     entity_id: str,
 ) -> Path | None:
-    """Locate a user-supplied photo for an entity that has no stylized ref yet.
+    """Locate the first user-supplied photo for an entity that has no stylized ref yet.
 
-    Mirrors the per-kind on-disk layout defined in service.photos: photos live
-    under ``<project_dir>/<character|location|object>_photos/<id>.png``. When a
-    photo exists for an entity but its stylized reference image hasn't been
-    generated yet, callers fall back to the photo so the user's likeness
-    constraint remains binding on every image-generation call until the
-    stylized reference replaces it.
+    Checks the new subdirectory format first ({kind}_photos/{id}/{slot}.png),
+    then falls back to the legacy flat file ({kind}_photos/{id}.png). Returns
+    the first photo found (lowest slot number).
     """
     sub = _PHOTO_DIR_BY_KIND.get(kind)
     if sub is None:
         return None
+    # New multi-photo format: subdirectory with numbered slots
+    entity_dir = script.project_dir() / sub / entity_id
+    if entity_dir.is_dir():
+        candidates: list[tuple[int, Path]] = []
+        for p in entity_dir.iterdir():
+            if p.is_file() and p.suffix.lower() == ".png" and p.stat().st_size > 0:
+                try:
+                    candidates.append((int(p.stem), p))
+                except ValueError:
+                    pass
+        if candidates:
+            return sorted(candidates)[0][1]
+    # Legacy flat format
     p = script.project_dir() / sub / f"{entity_id}.png"
     if p.exists() and p.stat().st_size > 0:
         return p
@@ -775,8 +876,7 @@ def _photo_fallback_label(kind: str, entity_name: str) -> str:
             f"MUST visibly resemble the person in this photo (face shape, "
             f"features, build, distinguishing traits). The project's art "
             f"style still overrides the photographic look — render in the "
-            f"defined comic-book style, not in photographic realism.\n\n"
-            + PHOTO_REF_LABEL
+            f"defined comic-book style, not in photographic realism.\n\n" + PHOTO_REF_LABEL
         )
     if kind == "location":
         return (
@@ -785,8 +885,7 @@ def _photo_fallback_label(kind: str, entity_name: str) -> str:
             f"the canonical, non-negotiable setting reference. Every "
             f"appearance of this location MUST visibly resemble the place in "
             f"this photo (architecture, layout, landmarks). The project's "
-            f"art style still overrides the photographic look.\n\n"
-            + LOCATION_PHOTO_REF_LABEL
+            f"art style still overrides the photographic look.\n\n" + LOCATION_PHOTO_REF_LABEL
         )
     if kind == "object":
         return (
@@ -796,8 +895,7 @@ def _photo_fallback_label(kind: str, entity_name: str) -> str:
             f"appearance of this object MUST visibly resemble the item in "
             f"this photo (shape, proportions, key markings, silhouette). "
             f"The project's art style still overrides the photographic "
-            f"look.\n\n"
-            + OBJECT_PHOTO_REF_LABEL
+            f"look.\n\n" + OBJECT_PHOTO_REF_LABEL
         )
     return PHOTO_REF_LABEL
 
@@ -851,13 +949,14 @@ def _call_image(
         }
 
 
-def _build_cover_prompt(
-    script: BdGenScript, cover: Cover, ref_labels: list[str] | None = None
-) -> str:
+def _build_cover_prompt(script: BdGenScript, cover: Cover, ref_labels: list[str] | None = None) -> str:
     style = script.style
     language = script.metadata.language
     fmt = _format_spec(script.page_format)
-    base = IMAGE_CONSTRAINTS + "\n" + dedent(f"""\
+    base = (
+        IMAGE_CONSTRAINTS
+        + "\n"
+        + dedent(f"""\
         Generate the FRONT COVER of a comic book album, as a single
         publication-ready image, {fmt["label"]} format.
 
@@ -902,7 +1001,11 @@ def _build_cover_prompt(
         - All text in {language}
         - Typography integrated harmoniously with the illustration style
 
-        """) + _build_refs_section(ref_labels) + "\n\n" + _style_enforcement_block(style)
+        """)
+        + _build_refs_section(ref_labels)
+        + "\n\n"
+        + _style_enforcement_block(style)
+    )
     attribution = _attribution_free_block(script)
     if attribution:
         base += "\n\n" + attribution
@@ -930,14 +1033,15 @@ def _ai_disclaimer(language: str) -> str:
     return {"fr": fr, "en": en}.get((language or "fr").lower(), fr)
 
 
-def _build_back_prompt(
-    script: BdGenScript, back: BackCover, ref_labels: list[str] | None = None
-) -> str:
+def _build_back_prompt(script: BdGenScript, back: BackCover, ref_labels: list[str] | None = None) -> str:
     style = script.style
     language = script.metadata.language
     disclaimer = _ai_disclaimer(language)
     fmt = _format_spec(script.page_format)
-    base = IMAGE_CONSTRAINTS + "\n" + dedent(f"""\
+    base = (
+        IMAGE_CONSTRAINTS
+        + "\n"
+        + dedent(f"""\
         Generate the BACK COVER of a comic book album, as a single
         publication-ready image, {fmt["label"]} format.
 
@@ -1011,7 +1115,11 @@ def _build_back_prompt(
           MANDATORY AI-assistance disclaimer at the bottom. NOTHING ELSE —
           no fake ISBN digits, no fake publisher name, no placeholder phrases.
 
-        """) + _build_refs_section(ref_labels) + "\n\n" + _style_enforcement_block(style)
+        """)
+        + _build_refs_section(ref_labels)
+        + "\n\n"
+        + _style_enforcement_block(style)
+    )
     attribution = _attribution_free_block(script)
     if attribution:
         base += "\n\n" + attribution
@@ -1021,9 +1129,7 @@ def _build_back_prompt(
 def _client(image_model: ImageModelConfig) -> OpenAI:
     if image_model.provider == "openai":
         return secret_store.openai_client()
-    raise NotImplementedError(
-        f"Provider '{image_model.provider}' is not yet supported."
-    )
+    raise NotImplementedError(f"Provider '{image_model.provider}' is not yet supported.")
 
 
 def _is_complete(path: Path) -> bool:

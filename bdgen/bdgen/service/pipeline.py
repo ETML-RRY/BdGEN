@@ -8,6 +8,7 @@ from .. import compose as compose_module
 from .. import references as references_module
 from .. import script as script_module
 from .. import upscale as upscale_module
+from .. import versioning as versioning_module
 from ..feedback import FeedbackStore, feedback_path_for
 from ..models import BdGenScript
 from ..progress import InterruptFlag, ProgressReporter
@@ -123,6 +124,7 @@ def run_step_references(
             for kind in ("characters", "locations", "objects"):
                 p = opts.references.output_dir / kind / f"{fid}.png"
                 if p.exists():
+                    versioning_module.archive_before_write(p, kind="regen")
                     p.unlink()
     if quality_override:
         opts.reference_image_model().quality = quality_override

@@ -32,7 +32,8 @@ def _llm_coherence_check(
     started_at, started = stats_module.start_timer()
     usage: dict = {}
     with trace_module.node(
-        f"coherence_check:{target_id}", "llm_call",
+        f"coherence_check:{target_id}",
+        "llm_call",
         project_dir=project_dir,
     ) as _tn:
         _tn.set_model(provider, model)
@@ -167,14 +168,8 @@ def check_script_coherence(name: str, output_root: Path | None = None) -> dict:
         {"id": c.id, "name": c.name, "description": c.physical_description, "outfit": c.outfit}
         for c in bd_script.characters
     ]
-    locations = [
-        {"id": loc.id, "name": loc.name, "description": loc.description}
-        for loc in bd_script.locations
-    ]
-    objects = [
-        {"id": o.id, "name": o.name, "description": o.description}
-        for o in bd_script.objects
-    ]
+    locations = [{"id": loc.id, "name": loc.name, "description": loc.description} for loc in bd_script.locations]
+    objects = [{"id": o.id, "name": o.name, "description": o.description} for o in bd_script.objects]
     pages_data = []
     for page in bd_script.pages:
         panels_data = []
@@ -295,7 +290,8 @@ def apply_global_suggestion(
     usage: dict = {}
     raw = ""
     with trace_module.node(
-        f"apply_suggestion:{name}", "llm_call",
+        f"apply_suggestion:{name}",
+        "llm_call",
         project_dir=proj_dir,
     ) as _tn2:
         _tn2.set_model(provider, model)
@@ -486,3 +482,208 @@ def apply_global_suggestion(
     coh_idx["suggestions"] = [s for s in coh_idx.get("suggestions", []) if s.get("message") != suggestion]
     write_coherence_index(proj_dir, coh_idx)
     return {"applied": True, "changes": changes}
+
+
+# ---------------------------------------------------------------------------
+# Config ↔ Script diff and synchronisation
+# ---------------------------------------------------------------------------
+
+
+def get_config_script_diff(name: str, output_root: Path | None = None) -> dict:
+    """Compare bdgen.json entities with bdgen-script.json entities.
+
+    Returns a dict with ``new`` and ``modified`` sub-dicts, each containing
+    lists of characters, locations and objects that are either absent from the
+    script or whose descriptive fields changed since the script was generated.
+    Returns empty lists when the script does not exist or when there is nothing
+    to synchronise.
+    """
+    from .lifecycle import get_project_dir
+
+    proj_dir = get_project_dir(name, output_root)
+    script_path = proj_dir / "bdgen-script.json"
+    empty: dict = {
+        "new": {"characters": [], "locations": [], "objects": []},
+        "modified": {"characters": [], "locations": [], "objects": []},
+    }
+    if not script_path.exists():
+        return empty
+
+    try:
+        config = load_config(name, output_root)
+        bd_script = BdGenScript.load(script_path)
+    except Exception:
+        return empty
+
+    script_char_ids = {c.id for c in bd_script.characters}
+    script_loc_ids = {loc.id for loc in bd_script.locations}
+    script_obj_ids = {o.id for o in bd_script.objects}
+
+    new_chars = [c for c in config.characters if c.id not in script_char_ids]
+    new_locs = [l for l in config.locations if l.id not in script_loc_ids]
+    new_objs = [o for o in config.objects if o.id not in script_obj_ids]
+
+    modified_chars = []
+    for c in config.characters:
+        if c.id in script_char_ids:
+            sc = bd_script.character_by_id(c.id)
+            if sc and (
+                sc.name != c.name
+                or sc.physical_description != c.physical_description
+                or (c.outfit and sc.outfit != c.outfit)
+            ):
+                modified_chars.append(c)
+
+    modified_locs = []
+    for l in config.locations:
+        if l.id in script_loc_ids:
+            sl = bd_script.location_by_id(l.id)
+            if sl and (sl.name != l.name or sl.description != l.description):
+                modified_locs.append(l)
+
+    modified_objs = []
+    for o in config.objects:
+        if o.id in script_obj_ids:
+            so = bd_script.object_by_id(o.id)
+            if so and (so.name != o.name or so.description != o.description):
+                modified_objs.append(o)
+
+    def _char_dict(c) -> dict:
+        return {
+            "id": c.id,
+            "name": c.name,
+            "role": c.role,
+            "physical_description": c.physical_description,
+            "outfit": c.outfit,
+            "personality": c.personality,
+        }
+
+    def _loc_dict(l) -> dict:
+        return {"id": l.id, "name": l.name, "description": l.description}
+
+    def _obj_dict(o) -> dict:
+        return {"id": o.id, "name": o.name, "description": o.description}
+
+    return {
+        "new": {
+            "characters": [_char_dict(c) for c in new_chars],
+            "locations": [_loc_dict(l) for l in new_locs],
+            "objects": [_obj_dict(o) for o in new_objs],
+        },
+        "modified": {
+            "characters": [_char_dict(c) for c in modified_chars],
+            "locations": [_loc_dict(l) for l in modified_locs],
+            "objects": [_obj_dict(o) for o in modified_objs],
+        },
+    }
+
+
+def _build_sync_suggestion(diff: dict, style_hint: str = "") -> str:
+    """Build the natural-language suggestion that ``apply_global_suggestion`` will apply."""
+    parts: list[str] = [
+        "Synchronisation du scénario avec la configuration du projet. "
+        "RÈGLE ABSOLUE : ne pas réécrire l'histoire, ne pas modifier les dialogues existants, "
+        "ne pas ajouter de nouvelles planches. Appliquer uniquement les modifications ci-dessous.",
+    ]
+
+    new_chars = diff["new"]["characters"]
+    new_locs = diff["new"]["locations"]
+    new_objs = diff["new"]["objects"]
+    mod_chars = diff["modified"]["characters"]
+    mod_locs = diff["modified"]["locations"]
+    mod_objs = diff["modified"]["objects"]
+
+    if new_chars:
+        parts.append("\nNOUVEAUX PERSONNAGES (absents du scénario actuel) :")
+        for c in new_chars:
+            line = f"- {c['name']} (id: {c['id']})"
+            if c.get("role"):
+                line += f", rôle : {c['role']}"
+            line += f"\n  Description physique : {c['physical_description']}"
+            if c.get("outfit"):
+                line += f"\n  Tenue : {c['outfit']}"
+            if c.get("personality"):
+                line += f"\n  Personnalité : {c['personality']}"
+            parts.append(line)
+
+    if new_locs:
+        parts.append("\nNOUVEAUX DÉCORS (absents du scénario actuel) :")
+        for l in new_locs:
+            parts.append(f"- {l['name']} (id: {l['id']}) : {l['description']}")
+
+    if new_objs:
+        parts.append("\nNOUVEAUX OBJETS (absents du scénario actuel) :")
+        for o in new_objs:
+            parts.append(f"- {o['name']} (id: {o['id']}) : {o['description']}")
+
+    if mod_chars:
+        parts.append("\nPERSONNAGES MODIFIÉS (mise à jour de description) :")
+        for c in mod_chars:
+            line = f"- {c['name']} (id: {c['id']})"
+            line += f"\n  Nouvelle description physique : {c['physical_description']}"
+            if c.get("outfit"):
+                line += f"\n  Nouvelle tenue : {c['outfit']}"
+            parts.append(line)
+
+    if mod_locs:
+        parts.append("\nDÉCORS MODIFIÉS :")
+        for l in mod_locs:
+            parts.append(f"- {l['name']} (id: {l['id']}) : nouvelle description : {l['description']}")
+
+    if mod_objs:
+        parts.append("\nOBJETS MODIFIÉS :")
+        for o in mod_objs:
+            parts.append(f"- {o['name']} (id: {o['id']}) : nouvelle description : {o['description']}")
+
+    instructions: list[str] = []
+    if new_chars or new_locs or new_objs:
+        instructions.append(
+            "1. Pour chaque élément AJOUTÉ : génère une reference_prompt en anglais (format prompt pour "
+            "générateur d'images, inspire-toi du style des reference_prompts existants"
+            + (f" et du style artistique du projet : {style_hint}" if style_hint else "")
+            + ")."
+        )
+        instructions.append(
+            "2. Intègre les nouveaux éléments dans les cases existantes où leur présence est naturelle "
+            "et enrichirait la narration. Ne modifie que les cases qui le permettent vraiment. "
+            "Si un élément ne s'intègre nulle part naturellement, ajoute-le à la liste sans le "
+            "forcer dans des cases."
+        )
+    if mod_chars or mod_locs or mod_objs:
+        instructions.append(
+            f"{'3' if instructions else '1'}. Pour chaque élément MODIFIÉ : mets à jour sa "
+            "description et régénère sa reference_prompt d'après la nouvelle description."
+        )
+
+    if instructions:
+        parts.append("\nCONSIGNES :\n" + "\n".join(instructions))
+
+    return "\n".join(parts)
+
+
+def sync_script_with_config(name: str, output_root: Path | None = None) -> dict:
+    """Integrate configuration changes into the existing script via LLM.
+
+    Adds entities that are in bdgen.json but not in bdgen-script.json, and
+    updates entities whose descriptive fields changed. Does NOT regenerate the
+    script: only the affected entities and panels are touched.
+
+    Returns the same shape as ``apply_global_suggestion`` plus a ``diff`` key.
+    """
+    diff = get_config_script_diff(name, output_root)
+
+    new_total = sum(len(diff["new"][k]) for k in diff["new"])
+    mod_total = sum(len(diff["modified"][k]) for k in diff["modified"])
+    if new_total + mod_total == 0:
+        return {"applied": False, "reason": "Aucun écart entre la configuration et le scénario.", "diff": diff}
+
+    style_hint = ""
+    try:
+        cfg = load_config(name, output_root)
+        style_hint = cfg.style.art_style or ""
+    except Exception:
+        pass
+
+    suggestion = _build_sync_suggestion(diff, style_hint)
+    result = apply_global_suggestion(name, suggestion, output_root)
+    return {**result, "diff": diff}
