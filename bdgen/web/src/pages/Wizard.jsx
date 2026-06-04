@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Routes, Route, Link, useParams, useLocation, useNavigate, Navigate } from "react-router-dom";
+import { Routes, Route, Link, NavLink, useParams, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { FaCopy, FaDownload } from "react-icons/fa6";
 import { api } from "../api.js";
 import StepNav from "../components/StepNav.jsx";
@@ -9,6 +9,8 @@ import ReferencesStep from "../components/steps/ReferencesStep.jsx";
 import ComposeStep from "../components/steps/ComposeStep.jsx";
 import UpscaleStep from "../components/steps/UpscaleStep.jsx";
 import DuplicateProjectDialog from "../components/DuplicateProjectDialog.jsx";
+import TracePanel from "../components/TracePanel.jsx";
+import { useDebugEnabled } from "../components/useDebugEnabled.js";
 import { SHOW_UPSCALE } from "../featureFlags.js";
 
 export const STEPS = [
@@ -28,6 +30,7 @@ export default function Wizard() {
   const [error, setError] = useState(null);
   const [duplicating, setDuplicating] = useState(false);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const debug = useDebugEnabled();
 
   const reload = useCallback(async () => {
     try {
@@ -121,6 +124,18 @@ export default function Wizard() {
             >
               <FaDownload aria-hidden /> Exporter projet
             </a>
+            {debug.enabled && (
+              <NavLink
+                to={`/projects/${encodeURIComponent(name)}/trace`}
+                className={({ isActive }) =>
+                  "btn btn-ghost text-sm inline-flex items-center gap-2 " +
+                  (isActive ? "text-[var(--color-primary-700)]" : "")
+                }
+                title="Panneau debug : suivre les prompts et appels modèles"
+              >
+                Trace
+              </NavLink>
+            )}
           </div>
         </div>
         {project.config?.display_name &&
@@ -171,6 +186,9 @@ export default function Wizard() {
               )
             }
           />
+          {debug.enabled && (
+            <Route path="trace" element={<TracePanel projectName={name} />} />
+          )}
           <Route path="*" element={<Navigate to="preparation" replace />} />
         </Routes>
       </div>

@@ -19,6 +19,22 @@ async function request(path, options = {}) {
     throw err;
   }
   if (res.status === 204) return null;
+  // Some endpoints can be served by the SPA fallback when the backend
+  // doesn't know the route (typically when the server was started before
+  // a new endpoint was added). Detecting HTML here gives a clear,
+  // actionable error instead of a cryptic JSON parse failure.
+  const contentType = res.headers.get("content-type") || "";
+  if (!contentType.includes("json")) {
+    const peek = (await res.text()).slice(0, 80);
+    if (peek.trim().toLowerCase().startsWith("<!doctype") || peek.includes("<html")) {
+      const err = new Error(
+        `Endpoint inconnu côté serveur (${path}). Redémarre le backend pour charger les nouvelles routes.`,
+      );
+      err.status = 404;
+      err.body = { detail: peek };
+      throw err;
+    }
+  }
   return res.json();
 }
 
@@ -71,6 +87,28 @@ export const api = {
       body: JSON.stringify({ style }),
     }),
   feedback: (name) => request(`/api/projects/${encodeURIComponent(name)}/feedback`),
+
+  // Dev-only trace endpoints. Return 404 in production (when BDGEN_DEBUG is off).
+  debugEnabled: () => request("/api/debug/enabled"),
+  listTraces: (name) => request(`/api/projects/${encodeURIComponent(name)}/traces`),
+  getTrace: (name, sessionId) =>
+    request(`/api/projects/${encodeURIComponent(name)}/traces/${encodeURIComponent(sessionId)}`),
+
+  // File version history. `path` is the project-relative path of the live
+  // artefact (e.g. "pages/page_03.png"). Each archive entry has a
+  // `version_id` (ISO timestamp) and a `relpath` to fetch its bytes via the
+  // /files endpoint.
+  listVersions: (name, path) => {
+    const encoded = path.split("/").map(encodeURIComponent).join("/");
+    return request(`/api/projects/${encodeURIComponent(name)}/versions/${encoded}`);
+  },
+  restoreVersion: (name, path, versionId) => {
+    const encoded = path.split("/").map(encodeURIComponent).join("/");
+    return request(
+      `/api/projects/${encodeURIComponent(name)}/versions/${encoded}/restore`,
+      { method: "POST", body: JSON.stringify({ version_id: versionId }) },
+    );
+  },
 
   exportUrl: (name) => `/api/projects/${encodeURIComponent(name)}/export`,
   importProject: async (file) => {

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .. import secret_store
 from .. import stats as stats_module
+from .. import trace as trace_module
 from ..models import BdGenScript, Page, ScriptCharacter, ScriptLocation, ScriptObject
 from .config import load_config
 from .indices import mark_stale, read_coherence_index, write_coherence_index
@@ -30,57 +31,67 @@ def _llm_coherence_check(
 
     started_at, started = stats_module.start_timer()
     usage: dict = {}
-    try:
-        if provider == "anthropic":
-            client = secret_store.anthropic_client()
-            response = client.messages.create(
+    with trace_module.node(
+        f"coherence_check:{target_id}", "llm_call",
+        project_dir=project_dir,
+    ) as _tn:
+        _tn.set_model(provider, model)
+        _tn.set_prompt(user)
+        _tn.set_extra(system_prompt=system)
+        try:
+            if provider == "anthropic":
+                client = secret_store.anthropic_client()
+                response = client.messages.create(
+                    model=model,
+                    max_tokens=4096,
+                    system=system,
+                    messages=[{"role": "user", "content": user}],
+                )
+                raw = response.content[0].text
+                usage = stats_module.normalise_usage(getattr(response, "usage", None))
+            elif provider == "xai":
+                client = secret_store.xai_client()
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                raw = response.choices[0].message.content
+                usage = stats_module.normalise_usage(getattr(response, "usage", None))
+            else:
+                client = secret_store.openai_client()
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                raw = response.choices[0].message.content
+                usage = stats_module.normalise_usage(getattr(response, "usage", None))
+            _tn.set_usage(usage)
+            _tn.set_outputs({"raw_chars": len(raw or "")})
+        except Exception as _exc:
+            _tn.set_extra(error=str(_exc))
+            stats_module.record_event(
+                project_dir,
+                step="coherence",
+                target_id=target_id,
+                target_kind="script",
+                operation="check_coherence",
+                provider=provider,
                 model=model,
-                max_tokens=4096,
-                system=system,
-                messages=[{"role": "user", "content": user}],
+                timer=stats_module.stop_timer(started_at, started),
+                status="error",
+                usage=usage,
+                prompt=user,
+                extra={"retouch": False},
             )
-            raw = response.content[0].text
-            usage = stats_module.normalise_usage(getattr(response, "usage", None))
-        elif provider == "xai":
-            client = secret_store.xai_client()
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format={"type": "json_object"},
-            )
-            raw = response.choices[0].message.content
-            usage = stats_module.normalise_usage(getattr(response, "usage", None))
-        else:
-            client = secret_store.openai_client()
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format={"type": "json_object"},
-            )
-            raw = response.choices[0].message.content
-            usage = stats_module.normalise_usage(getattr(response, "usage", None))
-    except Exception:
-        stats_module.record_event(
-            project_dir,
-            step="coherence",
-            target_id=target_id,
-            target_kind="script",
-            operation="check_coherence",
-            provider=provider,
-            model=model,
-            timer=stats_module.stop_timer(started_at, started),
-            status="error",
-            usage=usage,
-            prompt=user,
-            extra={"retouch": False},
-        )
-        return {"issues": [], "suggestions": []}
+            return {"issues": [], "suggestions": []}
 
     stats_module.record_event(
         project_dir,
@@ -283,57 +294,67 @@ def apply_global_suggestion(
     started_at, started = stats_module.start_timer()
     usage: dict = {}
     raw = ""
-    try:
-        if provider == "anthropic":
-            client = secret_store.anthropic_client()
-            response = client.messages.create(
+    with trace_module.node(
+        f"apply_suggestion:{name}", "llm_call",
+        project_dir=proj_dir,
+    ) as _tn2:
+        _tn2.set_model(provider, model)
+        _tn2.set_prompt(user)
+        _tn2.set_extra(system_prompt=system, suggestion=suggestion)
+        try:
+            if provider == "anthropic":
+                client = secret_store.anthropic_client()
+                response = client.messages.create(
+                    model=model,
+                    max_tokens=8192,
+                    system=system,
+                    messages=[{"role": "user", "content": user}],
+                )
+                raw = response.content[0].text
+                usage = stats_module.normalise_usage(getattr(response, "usage", None))
+            elif provider == "xai":
+                client = secret_store.xai_client()
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                raw = response.choices[0].message.content
+                usage = stats_module.normalise_usage(getattr(response, "usage", None))
+            else:
+                client = secret_store.openai_client()
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+                raw = response.choices[0].message.content
+                usage = stats_module.normalise_usage(getattr(response, "usage", None))
+            _tn2.set_usage(usage)
+            _tn2.set_outputs({"raw_chars": len(raw or "")})
+        except Exception as exc:
+            _tn2.set_extra(error=str(exc))
+            stats_module.record_event(
+                proj_dir,
+                step="coherence",
+                target_id=name,
+                target_kind="script",
+                operation="apply_suggestion",
+                provider=provider,
                 model=model,
-                max_tokens=8192,
-                system=system,
-                messages=[{"role": "user", "content": user}],
+                timer=stats_module.stop_timer(started_at, started),
+                status="error",
+                usage=usage,
+                prompt=user,
+                extra={"retouch": True},
             )
-            raw = response.content[0].text
-            usage = stats_module.normalise_usage(getattr(response, "usage", None))
-        elif provider == "xai":
-            client = secret_store.xai_client()
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format={"type": "json_object"},
-            )
-            raw = response.choices[0].message.content
-            usage = stats_module.normalise_usage(getattr(response, "usage", None))
-        else:
-            client = secret_store.openai_client()
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                response_format={"type": "json_object"},
-            )
-            raw = response.choices[0].message.content
-            usage = stats_module.normalise_usage(getattr(response, "usage", None))
-    except Exception as exc:
-        stats_module.record_event(
-            proj_dir,
-            step="coherence",
-            target_id=name,
-            target_kind="script",
-            operation="apply_suggestion",
-            provider=provider,
-            model=model,
-            timer=stats_module.stop_timer(started_at, started),
-            status="error",
-            usage=usage,
-            prompt=user,
-            extra={"retouch": True},
-        )
-        raise RuntimeError(f"Erreur LLM : {exc}") from exc
+            raise RuntimeError(f"Erreur LLM : {exc}") from exc
 
     stats_module.record_event(
         proj_dir,

@@ -29,6 +29,8 @@ from .progress import (
     _coerce_reporter,
 )
 from .stats import normalise_usage, record_event, start_timer, stop_timer
+from . import trace
+from . import versioning
 
 REFERENCE_SIZE = "1024x1024"
 XAI_MAX_PROMPT_CHARS = 8000
@@ -68,6 +70,40 @@ def generate_references(
     # The flag lives on the script; allow callers to override it explicitly.
     if allow_style_copy is None:
         allow_style_copy = bool(getattr(script, "allow_style_copy", False))
+    with trace.project_session(stats_project_dir), trace.node(
+        "generate_references", "flow",
+        inputs={
+            "project": script.project,
+            "characters": len(script.characters),
+            "locations": len(script.locations),
+            "objects": len(script.objects),
+            "force": force,
+            "image_model": f"{image_model.provider}/{image_model.model}",
+        },
+    ):
+        return _generate_references_traced(
+            script, options, image_model, script_path, feedback_store, force,
+            rep, flag, style_ref, character_photos, location_photos, object_photos,
+            stats_project_dir, allow_style_copy,
+        )
+
+
+def _generate_references_traced(
+    script: BdGenScript,
+    options: ReferencesOptions,
+    image_model: ImageModelConfig,
+    script_path: Path | None,
+    feedback_store: FeedbackStore | None,
+    force: bool,
+    rep: ProgressReporter,
+    flag: InterruptFlag,
+    style_ref: Path | None,
+    character_photos: dict[str, Path] | None,
+    location_photos: dict[str, Path] | None,
+    object_photos: dict[str, Path] | None,
+    stats_project_dir: Path | None,
+    allow_style_copy: bool,
+) -> BdGenScript:
     if not options.generate:
         rep.emit(
             ProgressEvent(
@@ -133,6 +169,7 @@ def generate_references(
                 style_ref=style_ref,
                 character_photo=photo,
                 allow_style_copy=allow_style_copy,
+                trace_name=f"ref_character:{character.id}",
             )
             record_event(
                 stats_project_dir,
@@ -207,6 +244,7 @@ def generate_references(
                 style_ref=style_ref,
                 location_photo=photo,
                 allow_style_copy=allow_style_copy,
+                trace_name=f"ref_location:{location.id}",
             )
             record_event(
                 stats_project_dir,
@@ -281,6 +319,7 @@ def generate_references(
                 style_ref=style_ref,
                 object_photo=photo,
                 allow_style_copy=allow_style_copy,
+                trace_name=f"ref_object:{obj.id}",
             )
             record_event(
                 stats_project_dir,
@@ -606,6 +645,7 @@ def _generate_image(
     location_photo: Path | None = None,
     object_photo: Path | None = None,
     allow_style_copy: bool = False,
+    trace_name: str = "ref_image",
 ) -> dict:
     """Call images.generate() or images.edit() with optional input images.
 
@@ -616,6 +656,39 @@ def _generate_image(
     charge. If none of the optional inputs are supplied we fall back to the
     cheaper images.generate() path.
     """
+    with trace.node(
+        trace_name, "image_call",
+        inputs={
+            "style_ref": style_ref,
+            "character_photo": character_photo,
+            "location_photo": location_photo,
+            "object_photo": object_photo,
+        },
+    ) as tn:
+        tn.set_model(image_model.provider, image_model.model)
+        tn.set_extra(quality=image_model.quality, allow_style_copy=allow_style_copy)
+        result = _generate_image_impl(
+            client, image_model, prompt, target,
+            style_ref, character_photo, location_photo, object_photo,
+            allow_style_copy,
+        )
+        tn.set_prompt(result["prompt"])
+        tn.set_usage(result["usage"])
+        tn.set_outputs({"artifact": target, "input_images": result["input_images"]})
+        return result
+
+
+def _generate_image_impl(
+    client: OpenAI | None,
+    image_model: ImageModelConfig,
+    prompt: str,
+    target: Path,
+    style_ref: Path | None,
+    character_photo: Path | None,
+    location_photo: Path | None,
+    object_photo: Path | None,
+    allow_style_copy: bool,
+) -> dict:
     inputs: list[tuple[str, bytes, str]] = []
     prompt_prefix_parts: list[str] = []
     xai_prompt_prefix_parts: list[str] = []
@@ -668,6 +741,7 @@ def _generate_image(
     image_b64 = result.data[0].b64_json
     tmp = target.with_suffix(target.suffix + ".tmp")
     tmp.write_bytes(base64.b64decode(image_b64))
+    versioning.archive_before_write(target, kind="regen")
     tmp.replace(target)
     return {
         "usage": normalise_usage(getattr(result, "usage", None)),

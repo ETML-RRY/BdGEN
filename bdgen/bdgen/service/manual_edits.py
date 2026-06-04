@@ -44,7 +44,7 @@ def update_script_page_manual(
     if page.page_number != page_number:
         raise RuntimeError("Le numero de planche ne peut pas etre modifie.")
     bd_script.pages[idx] = page
-    bd_script.save(script_path)
+    bd_script.save(script_path, kind="manual")
     mark_script_coherence_dirty(proj_dir)
     composed = proj_dir / "pages" / f"page_{page_number:02d}.png"
     if composed.exists():
@@ -78,7 +78,7 @@ def add_script_character_manual(
     character = ScriptCharacter.model_validate(character_payload)
     _validate_new_script_item_id(character.id, {item.id for item in bd_script.characters}, "personnage")
     bd_script.characters.append(character)
-    bd_script.save(script_path)
+    bd_script.save(script_path, kind="manual")
     mark_script_coherence_dirty(proj_dir)
     return bd_script
 
@@ -102,7 +102,7 @@ def update_script_character_manual(
     if character.id != character_id:
         raise RuntimeError("L'id du personnage ne peut pas etre modifie.")
     bd_script.characters[idx] = character
-    bd_script.save(script_path)
+    bd_script.save(script_path, kind="manual")
     mark_script_coherence_dirty(proj_dir)
     if (proj_dir / "references" / "characters" / f"{character_id}.png").exists():
         mark_stale(proj_dir, "references", character_id)
@@ -123,7 +123,7 @@ def add_script_location_manual(
     location = ScriptLocation.model_validate(location_payload)
     _validate_new_script_item_id(location.id, {item.id for item in bd_script.locations}, "decor")
     bd_script.locations.append(location)
-    bd_script.save(script_path)
+    bd_script.save(script_path, kind="manual")
     mark_script_coherence_dirty(proj_dir)
     return bd_script
 
@@ -147,7 +147,7 @@ def update_script_location_manual(
     if location.id != location_id:
         raise RuntimeError("L'id du decor ne peut pas etre modifie.")
     bd_script.locations[idx] = location
-    bd_script.save(script_path)
+    bd_script.save(script_path, kind="manual")
     mark_script_coherence_dirty(proj_dir)
     if (proj_dir / "references" / "locations" / f"{location_id}.png").exists():
         mark_stale(proj_dir, "references", location_id)
@@ -168,7 +168,7 @@ def add_script_object_manual(
     obj = ScriptObject.model_validate(object_payload)
     _validate_new_script_item_id(obj.id, {item.id for item in bd_script.objects}, "objet")
     bd_script.objects.append(obj)
-    bd_script.save(script_path)
+    bd_script.save(script_path, kind="manual")
     mark_script_coherence_dirty(proj_dir)
     return bd_script
 
@@ -192,7 +192,7 @@ def update_script_object_manual(
     if obj.id != object_id:
         raise RuntimeError("L'id de l'objet ne peut pas etre modifie.")
     bd_script.objects[idx] = obj
-    bd_script.save(script_path)
+    bd_script.save(script_path, kind="manual")
     mark_script_coherence_dirty(proj_dir)
     if (proj_dir / "references" / "objects" / f"{object_id}.png").exists():
         mark_stale(proj_dir, "references", object_id)
@@ -213,7 +213,7 @@ def update_script_cover_manual(
     if bd_script.cover is None:
         raise RuntimeError("Couverture inconnue.")
     bd_script.cover = Cover.model_validate(cover_payload)
-    bd_script.save(script_path)
+    bd_script.save(script_path, kind="manual")
     mark_script_coherence_dirty(proj_dir)
     if (proj_dir / "pages" / "cover.png").exists():
         mark_stale(proj_dir, "compose", "cover")
@@ -234,7 +234,7 @@ def update_script_back_cover_manual(
     if bd_script.back_cover is None:
         raise RuntimeError("4e de couverture inconnue.")
     bd_script.back_cover = BackCover.model_validate(back_cover_payload)
-    bd_script.save(script_path)
+    bd_script.save(script_path, kind="manual")
     mark_script_coherence_dirty(proj_dir)
     if (proj_dir / "pages" / "back.png").exists():
         mark_stale(proj_dir, "compose", "back")

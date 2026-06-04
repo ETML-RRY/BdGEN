@@ -18,6 +18,43 @@ The project can be used in two main ways:
 - **Web mode**: the local server is started manually, then the interface is opened in a browser.
 - **Desktop package mode**: a standalone Electron package starts the application and its embedded local server.
 
+## Showcase
+
+Same script, six visual identities. Each sample below was produced from the same short story about Harold — a writer whose drawings finally come to life — and re-rendered through a different art direction. They illustrate the range of styles BdGEN can drive from a single project description.
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_01.png"><img src="doc/samples/sample_01.png" alt="Noir style sample" /></a><br/>
+      <sub><b>Noir</b> — high-contrast monochrome with yellow sound effects</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_02.png"><img src="doc/samples/sample_02.png" alt="Golden vintage style sample" /></a><br/>
+      <sub><b>Golden Vintage</b> — warm sepia tones, classic ink &amp; wash</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_03.png"><img src="doc/samples/sample_03.png" alt="Fantasy illuminated style sample" /></a><br/>
+      <sub><b>Illuminated Fantasy</b> — saturated colors and magical aura</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_04.png"><img src="doc/samples/sample_04.png" alt="Watercolor style sample" /></a><br/>
+      <sub><b>Watercolor</b> — soft European-comic pastels and pencil work</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_05.png"><img src="doc/samples/sample_05.png" alt="Vaporwave style sample" /></a><br/>
+      <sub><b>Vaporwave</b> — neon purples and synthwave atmosphere</sub>
+    </td>
+    <td align="center" width="33%">
+      <a href="doc/samples/sample_06.png"><img src="doc/samples/sample_06.png" alt="Animated cartoon style sample" /></a><br/>
+      <sub><b>Animated Cartoon</b> — clean line art with selective color accents</sub>
+    </td>
+  </tr>
+</table>
+
+> Click any thumbnail to open the full-resolution page.
+
 ## Requirements
 
 - Python 3.12+
@@ -180,6 +217,45 @@ BdGEN follows four main steps:
 | References | Generates model sheets for characters, environments, and objects | `references/`       |
 | Pages      | Composes final pages, the cover, and the back cover              | `pages/`, final PDF |
 | Upscale    | Optional, enlarges the final images                              | `pages_upscaled/`   |
+
+## Debug Mode and Trace Analysis
+
+The pipeline includes an optional execution trace that records each prompt-building step, LLM call, and image call as a JSONL timeline. It is gated behind the `BDGEN_DEBUG` environment variable and adds no overhead when unset.
+
+### Enable Debug Mode
+
+Set `BDGEN_DEBUG=1` before starting the server:
+
+```bash
+# Linux / macOS
+BDGEN_DEBUG=1 uv run python -m bdgen.server
+
+# Windows PowerShell
+$env:BDGEN_DEBUG = "1"
+uv run python -m bdgen.server
+```
+
+You can also add `BDGEN_DEBUG=1` to `bdgen/.env`. Accepted truthy values: `1`, `true`, `yes`, `on`.
+
+When debug mode is active, the backend exposes `/api/debug/enabled` and the React frontend reveals a **Trace** tab in the wizard, next to the existing project tabs. In production builds the gate stays closed and the tab is hidden.
+
+### Trace Tab
+
+For each project, the Trace tab lists every session captured during generation. A session corresponds to one process lifetime per project.
+
+- **Session A** selects the timeline to display as a dagre-laid-out graph.
+- **Session B** (optional) overlays a second run on top of the first — modified nodes get a purple border, making it easy to spot which prompt or call drifted between two runs.
+- Clicking a node opens a modal with the resolved prompt, model parameters, response, and timing.
+
+### Trace Files
+
+Traces are written next to the project output:
+
+```text
+<project_dir>/.bdgen-trace/timeline.jsonl
+```
+
+One node per line, grouped by `session_id`. Delete the `.bdgen-trace/` folder to discard captured sessions.
 
 ## Useful Commands
 

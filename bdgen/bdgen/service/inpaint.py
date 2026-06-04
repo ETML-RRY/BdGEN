@@ -9,6 +9,8 @@ from typing import Literal
 
 from .. import secret_store
 from .. import stats as stats_module
+from .. import trace
+from .. import versioning
 from ..feedback import FeedbackStore, feedback_path_for
 from ..models import BdGenScript, image_size_for_format
 from ._helpers import _resolve_options
@@ -54,72 +56,83 @@ def inpaint_image(
     if image_path is None or not image_path.exists():
         raise FileNotFoundError(f"Image source introuvable pour « {target_id} ».")
 
-    img = _Image.open(image_path).convert("RGBA")
-    w, h = img.size
+    with trace.project_session(proj_dir), trace.node(
+        f"inpaint:{step}:{target_id}", "image_call",
+        inputs={"source": image_path, "prompt_chars": len(prompt)},
+    ) as tn:
+        img = _Image.open(image_path).convert("RGBA")
+        w, h = img.size
 
-    mask_img = _Image.open(_io.BytesIO(mask_bytes)).convert("RGBA")
-    if mask_img.size != (w, h):
-        mask_img = mask_img.resize((w, h), _Image.NEAREST)
-    # Binarize after resize to keep the mask strictly transparent/opaque
-    pixels = mask_img.load()
-    for py in range(mask_img.height):
-        for px in range(mask_img.width):
-            r, g, b, a = pixels[px, py]
-            pixels[px, py] = (r, g, b, 0 if a < 128 else 255)
+        mask_img = _Image.open(_io.BytesIO(mask_bytes)).convert("RGBA")
+        if mask_img.size != (w, h):
+            mask_img = mask_img.resize((w, h), _Image.NEAREST)
+        # Binarize after resize to keep the mask strictly transparent/opaque
+        pixels = mask_img.load()
+        for py in range(mask_img.height):
+            for px in range(mask_img.width):
+                r, g, b, a = pixels[px, py]
+                pixels[px, py] = (r, g, b, 0 if a < 128 else 255)
 
-    img_buf = _io.BytesIO()
-    img.save(img_buf, format="PNG")
-    img_bytes = img_buf.getvalue()
+        img_buf = _io.BytesIO()
+        img.save(img_buf, format="PNG")
+        img_bytes = img_buf.getvalue()
 
-    mask_buf = _io.BytesIO()
-    mask_img.save(mask_buf, format="PNG")
-    mask_data = mask_buf.getvalue()
+        mask_buf = _io.BytesIO()
+        mask_img.save(mask_buf, format="PNG")
+        mask_data = mask_buf.getvalue()
 
-    if opts.image_model.provider != "openai":
-        raise NotImplementedError(f"L'inpainting n'est pas supporté pour le provider « {opts.image_model.provider} ».")
-    client = secret_store.openai_client()
+        if opts.image_model.provider != "openai":
+            raise NotImplementedError(f"L'inpainting n'est pas supporté pour le provider « {opts.image_model.provider} ».")
+        client = secret_store.openai_client()
 
-    # gpt-image-2 inpainting is prompt-based: explicitly instruct the model to
-    # preserve the rest of the image so it doesn't regenerate everything.
-    guided_prompt = (
-        f"{prompt}. Keep all other parts of the image exactly as they are, only modify the area indicated by the mask."
-    )
+        # gpt-image-2 inpainting is prompt-based: explicitly instruct the model to
+        # preserve the rest of the image so it doesn't regenerate everything.
+        guided_prompt = (
+            f"{prompt}. Keep all other parts of the image exactly as they are, only modify the area indicated by the mask."
+        )
 
-    started_at, started = stats_module.start_timer()
-    result = client.images.edit(
-        model=opts.image_model.model,
-        image=("image.png", img_bytes, "image/png"),
-        mask=("mask.png", mask_data, "image/png"),
-        prompt=guided_prompt,
-        size=size,
-        quality=opts.image_model.quality,
-    )
-    if step == "compose":
-        _inpaint_kind = "cover" if target_id == "cover" else "back_cover" if target_id == "back" else "page"
-    else:
-        _kind_map = {"characters": "character", "locations": "location", "objects": "object"}
-        _inpaint_kind = _kind_map.get(image_path.parent.name, "reference")
-    stats_module.record_event(
-        proj_dir,
-        step=step,
-        target_id=target_id,
-        target_kind=_inpaint_kind,
-        operation="inpaint",
-        provider=opts.image_model.provider,
-        model=opts.image_model.model,
-        timer=stats_module.stop_timer(started_at, started),
-        usage=stats_module.normalise_usage(getattr(result, "usage", None)),
-        prompt=guided_prompt,
-        input_images=2,
-        artifact=image_path,
-        extra={"retouch": True, "quality": opts.image_model.quality},
-    )
+        started_at, started = stats_module.start_timer()
+        result = client.images.edit(
+            model=opts.image_model.model,
+            image=("image.png", img_bytes, "image/png"),
+            mask=("mask.png", mask_data, "image/png"),
+            prompt=guided_prompt,
+            size=size,
+            quality=opts.image_model.quality,
+        )
+        if step == "compose":
+            _inpaint_kind = "cover" if target_id == "cover" else "back_cover" if target_id == "back" else "page"
+        else:
+            _kind_map = {"characters": "character", "locations": "location", "objects": "object"}
+            _inpaint_kind = _kind_map.get(image_path.parent.name, "reference")
+        usage = stats_module.normalise_usage(getattr(result, "usage", None))
+        stats_module.record_event(
+            proj_dir,
+            step=step,
+            target_id=target_id,
+            target_kind=_inpaint_kind,
+            operation="inpaint",
+            provider=opts.image_model.provider,
+            model=opts.image_model.model,
+            timer=stats_module.stop_timer(started_at, started),
+            usage=usage,
+            prompt=guided_prompt,
+            input_images=2,
+            artifact=image_path,
+            extra={"retouch": True, "quality": opts.image_model.quality},
+        )
 
-    result_bytes = base64.b64decode(result.data[0].b64_json)
-    tmp = image_path.with_suffix(image_path.suffix + ".tmp")
-    tmp.write_bytes(result_bytes)
-    tmp.replace(image_path)
-    return image_path
+        result_bytes = base64.b64decode(result.data[0].b64_json)
+        tmp = image_path.with_suffix(image_path.suffix + ".tmp")
+        tmp.write_bytes(result_bytes)
+        versioning.archive_before_write(image_path, kind="inpaint", extra={"prompt": prompt[:200]})
+        tmp.replace(image_path)
+        tn.set_model(opts.image_model.provider, opts.image_model.model)
+        tn.set_prompt(guided_prompt)
+        tn.set_usage(usage)
+        tn.set_outputs({"artifact": image_path})
+        tn.set_extra(quality=opts.image_model.quality, target_kind=_inpaint_kind)
+        return image_path
 
 
 def _reference_path_for_id(proj_dir: Path, bd_script: BdGenScript, target_id: str) -> Path | None:

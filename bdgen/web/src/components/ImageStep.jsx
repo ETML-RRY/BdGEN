@@ -6,6 +6,18 @@ import ProgressPanel from "./ProgressPanel.jsx";
 import RunningBanner from "./RunningBanner.jsx";
 import RefineDialog from "./RefineDialog.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
+import VersionPicker from "./VersionPicker.jsx";
+
+// Extract the project-relative path from a /api/projects/{name}/files/{path}
+// URL — needed to query the version history of the same file.
+function filePathFromUrl(url) {
+  if (!url || typeof url !== "string") return null;
+  const marker = "/files/";
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  const tail = url.substring(idx + marker.length).split("?")[0];
+  return tail.split("/").map(decodeURIComponent).join("/");
+}
 
 const QUALITY_LABEL = {
   low: "Brouillon",
@@ -101,6 +113,8 @@ export default function ImageStep({
         idx={idx}
         setIdx={setIdx}
         layout={layout}
+        projectName={name}
+        onChanged={onChanged}
         busy={starting}
         busyItemId={activeGenerationId}
         busyLabel={isRunning ? "Génération en cours..." : "Préparation..."}
@@ -322,6 +336,8 @@ function ImageFlipper({
   idx,
   setIdx,
   layout,
+  projectName,
+  onChanged,
   busy = false,
   busyItemId = null,
   busyLabel = "Génération en cours...",
@@ -340,15 +356,28 @@ function ImageFlipper({
   const [inpaintPrompt, setInpaintPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [inpaintError, setInpaintError] = useState(null);
+  const [selectedVersion, setSelectedVersion] = useState({ id: null, version: null });
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
   const lastPos = useRef(null);
 
   const safeIdx = Math.max(0, Math.min(idx, items.length - 1));
   const item = items[safeIdx];
-  const canUpgrade = onUpgrade && item.image_url && item.quality && item.quality !== "high";
+  const filePath = filePathFromUrl(item.image_url);
+  const viewingHistory = !!selectedVersion.id;
+  // When the user is browsing an archived version, swap the rendered image
+  // URL. Destructive actions (refine/inpaint/upgrade) stay disabled so we
+  // never overwrite an old version by accident.
+  const archivedUrl = viewingHistory && selectedVersion.version?.relpath && projectName
+    ? `/api/projects/${encodeURIComponent(projectName)}/files/${selectedVersion.version.relpath
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/")}`
+    : null;
+  const displayedUrl = archivedUrl || item.image_url;
+  const canUpgrade = !viewingHistory && onUpgrade && item.image_url && item.quality && item.quality !== "high";
   const isStale = !!item.stale && !!item.image_url;
-  const canRefresh = onRefresh && item.image_url;
+  const canRefresh = !viewingHistory && onRefresh && item.image_url;
   const itemBusy = busy || submitting || busyItemId === item.id;
   const readerBusyLabel = submitting ? "Retouche en cours..." : busyLabel;
 
@@ -357,6 +386,7 @@ function ImageFlipper({
     setHasMask(false);
     setInpaintPrompt("");
     setInpaintError(null);
+    setSelectedVersion({ id: null, version: null });
     lastPos.current = null;
   }, [safeIdx]);
 
@@ -514,6 +544,16 @@ function ImageFlipper({
             <span className="text-sm text-[var(--color-mute)]">
               {safeIdx + 1}/{items.length}
             </span>
+            {projectName && filePath && (
+              <VersionPicker
+                projectName={projectName}
+                filePath={filePath}
+                selectedVersionId={selectedVersion.id}
+                onSelectVersion={(id, version) => setSelectedVersion({ id, version })}
+                onRestored={onChanged}
+                disabled={inpaintActive || submitting}
+              />
+            )}
             {item.image_url && item.quality && (
               <span className={QUALITY_CHIP[item.quality] || "chip"} title={`Qualité de génération : ${item.quality}`}>
                 {QUALITY_LABEL[item.quality] || item.quality}
@@ -525,6 +565,15 @@ function ImageFlipper({
                 title="Le texte a été modifié après cette image. Régénérez pour aligner le visuel sur la nouvelle description."
               >
                 Texte modifié
+              </span>
+            )}
+            {viewingHistory && (
+              <span
+                className="chip"
+                style={{ background: "var(--color-paper-soft)", color: "var(--color-primary-700)" }}
+                title="Vous visualisez une version archivée. Les actions destructives sont désactivées."
+              >
+                version archivée
               </span>
             )}
           </div>
@@ -562,7 +611,7 @@ function ImageFlipper({
                 >
                   <img
                     ref={imgRef}
-                    src={item.image_url}
+                    src={displayedUrl}
                     alt={item.label}
                     className="block max-h-full max-w-full"
                     draggable={false}
@@ -582,7 +631,7 @@ function ImageFlipper({
                 </div>
               ) : (
                 <img
-                  src={item.image_url}
+                  src={displayedUrl}
                   alt={item.label}
                   className={
                     "max-h-full max-w-full object-contain " +
@@ -719,8 +768,12 @@ function ImageFlipper({
               <button
                 className="btn btn-ghost text-sm"
                 onClick={() => setInpaintActive(true)}
-                disabled={!item.image_url || itemBusy}
-                title="Peindre une zone et décrire la retouche souhaitée."
+                disabled={!item.image_url || itemBusy || viewingHistory}
+                title={
+                  viewingHistory
+                    ? "Restaurez d'abord cette version pour la retoucher."
+                    : "Peindre une zone et décrire la retouche souhaitée."
+                }
               >
                 🖌 Retouche ciblée
               </button>
@@ -729,7 +782,8 @@ function ImageFlipper({
               <button
                 className="btn btn-ghost text-sm"
                 onClick={() => onRefine(item)}
-                disabled={!item.image_url || itemBusy}
+                disabled={!item.image_url || itemBusy || viewingHistory}
+                title={viewingHistory ? "Restaurez d'abord cette version pour la retoucher." : ""}
               >
                 Retoucher cet élément
               </button>
