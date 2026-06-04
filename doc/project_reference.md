@@ -178,6 +178,8 @@ Lint/format:
 
 ### 2026-06-04
 
+- `Makefile`: made `make dev-desktop` Windows-compatible by setting `BDGEN_BACKEND_CMD` and `BDGEN_BACKEND_ARGS` with `cmd.exe` `set "VAR=value"` syntax while keeping the POSIX inline environment form for Unix shells; it now runs `npm rebuild electron` after install so a missing Electron binary from skipped postinstall scripts is repaired before launch.
+- `.github/workflows/release-portable.yml`, `bdgen/desktop/package.json`, `bdgen/desktop/package-lock.json`: tightened npm security gates by running full `npm audit` for both frontend and Electron desktop dependencies, upgraded the workflow to Node 22 for current Electron tooling, and updated desktop Electron tooling to `electron@41.7.1` plus `electron-builder@26.8.1` to clear audit findings.
 - `bdgen/web/package.json`, `bdgen/web/package-lock.json`: upgraded frontend tooling to Vite 7 (`vite@7.3.5`) with matching Vitest 4 coverage tooling (`vitest@4.1.8`, `@vitest/coverage-v8@4.1.8`); `npm audit` now reports 0 vulnerabilities.
 - `bdgen/web/vite.config.js`: made the ESM config compatible with Vite 7 by deriving `__dirname` from `import.meta.url`.
 - `bdgen/web/src/api.test.js`: updated mocked JSON responses to include `Headers`, matching the API client's content-type check under Vitest 4.

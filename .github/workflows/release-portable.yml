@@ -35,7 +35,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: |
             bdgen/web/package-lock.json
@@ -59,11 +59,11 @@ jobs:
         run: make lint
 
       - name: Audit frontend dependencies
-        run: npm audit --audit-level=critical
+        run: npm audit
         working-directory: bdgen/web
 
       - name: Audit desktop dependencies
-        run: npm audit --audit-level=critical
+        run: npm audit
         working-directory: bdgen/desktop
 
   test:
@@ -88,7 +88,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: bdgen/web/package-lock.json
 
@@ -246,7 +246,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: |
             bdgen/web/package-lock.json
@@ -344,7 +344,7 @@ jobs:
           Quality gates:
           - Backend (pytest) and frontend (vitest) tests passed.
           - Backend, frontend and desktop lint passed.
-          - Frontend and desktop npm audit passed with no critical vulnerabilities.
+          - Frontend and desktop npm audit passed with no vulnerabilities.
 
           Artifacts:
           - Windows portable executable.

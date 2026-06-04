@@ -121,7 +121,11 @@ test-cov:
 	cd $(APP_DIR) && uv run pytest --cov --cov-report=term-missing --cov-report=html
 
 dev-desktop: frontend
-	cd $(DESKTOP_DIR) && npm install && BDGEN_BACKEND_CMD=uv BDGEN_BACKEND_ARGS="--directory .. run python -m bdgen.server" npm run dev
+ifeq ($(OS),Windows_NT)
+	cd $(DESKTOP_DIR) && npm install && npm rebuild electron && set "BDGEN_BACKEND_CMD=uv" && set "BDGEN_BACKEND_ARGS=--directory .. run python -m bdgen.server" && npm run dev
+else
+	cd $(DESKTOP_DIR) && npm install && npm rebuild electron && BDGEN_BACKEND_CMD=uv BDGEN_BACKEND_ARGS="--directory .. run python -m bdgen.server" npm run dev
+endif
 
 clean:
 	powershell -NoProfile -Command "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue '$(BUILD_DIR)','$(APP_DIR)/build','$(APP_DIR)/dist','$(DESKTOP_DIR)/build','$(DESKTOP_DIR)/dist','dist'"
