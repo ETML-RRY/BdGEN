@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import logging
 import os
@@ -556,7 +557,7 @@ def _register_api(app: FastAPI) -> None:
             content=blob,
             media_type="application/zip",
             headers={
-                "Content-Disposition": f'attachment; filename="{name}.bdgen"',
+                "Content-Disposition": f'attachment; filename="{name}_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.bdgen"',
             },
         )
 
