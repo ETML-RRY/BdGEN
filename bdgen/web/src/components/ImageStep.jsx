@@ -321,6 +321,13 @@ export default function ImageStep({
   );
 }
 
+const LAYOUT_CLASS = {
+  portrait: "aspect-[2/3]",
+  landscape: "aspect-[3/2]",
+  strip: "aspect-[3/2]",
+  square: "aspect-square",
+};
+
 function generationTargetId(job) {
   if (!job || job.status !== "running") return null;
   const event = job.last_event;
@@ -588,7 +595,7 @@ function ImageFlipper({
         <div
           className={
             "relative rounded-lg bg-[var(--color-paper-soft)] flex items-center justify-center overflow-hidden " +
-            (layout === "portrait" ? "aspect-[2/3]" : "aspect-square")
+            (LAYOUT_CLASS[layout] || LAYOUT_CLASS.portrait)
           }
           aria-busy={itemBusy}
         >

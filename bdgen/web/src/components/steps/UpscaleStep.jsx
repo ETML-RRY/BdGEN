@@ -89,7 +89,7 @@ export default function UpscaleStep({ project, onChanged }) {
       title="Upscale (Pruna)"
       intro="Agrandissement des planches via Pruna P-Image-Upscale (Replicate). Coût : ~$0.005/image (1-4 MP) ou ~$0.01/image (5-8 MP)."
       items={items}
-      layout="portrait"
+      layout={project.config?.structure?.page_format || "portrait"}
       allowRefine={false}
       emptyLabel="Aucune planche upscalée pour l'instant."
     />

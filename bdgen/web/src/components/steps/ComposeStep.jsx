@@ -27,7 +27,7 @@ export default function ComposeStep({ project, onChanged }) {
         title="Planches finales"
         intro="Génération de chaque planche en pleine page avec bulles, texte, couleurs et finitions. Étape la plus longue et la plus coûteuse en API — lancez d'abord en brouillon pour valider l'ensemble, puis montez en qualité ce qui le mérite."
         items={items}
-        layout="portrait"
+        layout={project.config?.structure?.page_format || "portrait"}
         supportsQuality
         onContinue={
           SHOW_UPSCALE
