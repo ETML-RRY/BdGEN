@@ -19,6 +19,7 @@ wheels/
 bdgen/web/node_modules/
 bdgen/web/dist/
 bdgen/server/static/
+bdgen/bdgen/server/static/
 
 bdgen/desktop/node_modules/
 

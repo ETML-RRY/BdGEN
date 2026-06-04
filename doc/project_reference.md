@@ -2,7 +2,7 @@
 
 Operational reference for future work on BdGEN. Keep this file concise and update it after every code, configuration, documentation, or workflow change.
 
-Last updated: 2026-05-20
+Last updated: 2026-06-04
 
 ## Update Rule
 
@@ -175,6 +175,14 @@ Lint/format:
 - If a frontend build fails with esbuild `spawn EPERM` on Windows, rerun the build outside the sandbox.
 
 ## Recent Change Log
+
+### 2026-06-04
+
+- `bdgen/web/package.json`, `bdgen/web/package-lock.json`: upgraded frontend tooling to Vite 7 (`vite@7.3.5`) with matching Vitest 4 coverage tooling (`vitest@4.1.8`, `@vitest/coverage-v8@4.1.8`); `npm audit` now reports 0 vulnerabilities.
+- `bdgen/web/vite.config.js`: made the ESM config compatible with Vite 7 by deriving `__dirname` from `import.meta.url`.
+- `bdgen/web/src/api.test.js`: updated mocked JSON responses to include `Headers`, matching the API client's content-type check under Vitest 4.
+- `.gitignore`: ignores both the legacy generated static path (`bdgen/server/static/`) and the current backend-served static path (`bdgen/bdgen/server/static/`).
+- Verification: frontend `npm run lint`, `npm test`, `npm run test:coverage`, `npm run build`, and `npm audit` OK. Vitest commands needed outside-sandbox execution on Windows due config-load read restrictions; production build still emits the existing chunk-size warning.
 
 ### 2026-05-20
 
