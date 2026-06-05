@@ -174,23 +174,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  regenerateAll: (name, step, qualityOverride) =>
+  regenerateAll: (name, step) =>
     request(`/api/projects/${encodeURIComponent(name)}/steps/${step}/start`, {
       method: "POST",
-      body: JSON.stringify({
-        force_all: true,
-        quality_override: qualityOverride || undefined,
-      }),
-    }),
-  // Convenience helper: launches a force-regeneration of a single target at
-  // high quality, used by the per-item "Améliorer la qualité" buttons.
-  upgradeQuality: (name, step, targetIds) =>
-    request(`/api/projects/${encodeURIComponent(name)}/steps/${step}/start`, {
-      method: "POST",
-      body: JSON.stringify({
-        force_ids: targetIds,
-        quality_override: "high",
-      }),
+      body: JSON.stringify({ force_all: true }),
     }),
 
   refineCharacter: (name, id, feedback) =>
@@ -220,8 +207,11 @@ export const api = {
     }),
   getConfigScriptDiff: (name) => request(`/api/projects/${encodeURIComponent(name)}/script/config-diff`),
 
-  syncScriptWithConfig: (name) =>
-    request(`/api/projects/${encodeURIComponent(name)}/script/sync-config`, { method: "POST" }),
+  syncScriptWithConfig: (name, removals = null) =>
+    request(`/api/projects/${encodeURIComponent(name)}/script/sync-config`, {
+      method: "POST",
+      body: JSON.stringify(removals ? { removals } : {}),
+    }),
 
   checkScriptCoherence: (name) =>
     request(`/api/projects/${encodeURIComponent(name)}/script/coherence/check`, {

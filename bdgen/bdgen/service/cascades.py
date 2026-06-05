@@ -2,9 +2,9 @@
 
 Each ``delete_*_and_cascade`` removes the entity from the script, truncates
 the script from the earliest page that referenced it, deletes the entity's
-on-disk reference PNG and photo, and clears its quality/stale entries. The
-caller is then expected to relaunch ``run_step_script`` to regenerate the
-dropped pages without that entity.
+on-disk reference PNG and photo, and clears its stale entries. The caller
+is then expected to relaunch ``run_step_script`` to regenerate the dropped
+pages without that entity.
 """
 
 from __future__ import annotations
@@ -16,8 +16,6 @@ from ..models import BdGenScript
 from .indices import (
     clear_stale,
     mark_script_coherence_dirty,
-    read_quality_index,
-    write_quality_index,
 )
 from .photos import remove_all_character_photos, remove_all_location_photos, remove_all_object_photos
 
@@ -77,16 +75,12 @@ def delete_character_and_cascade(name: str, character_id: str, output_root: Path
     bd_script.save(script_path)
     mark_script_coherence_dirty(proj_dir)
 
-    # Tidy: drop the character's reference image and quality-index entry
-    # so the references step doesn't show an orphan asset.
+    # Tidy: drop the character's reference image so the references step
+    # doesn't show an orphan asset.
     ref_png = proj_dir / "references" / "characters" / f"{character_id}.png"
     if ref_png.exists():
         ref_png.unlink()
     remove_all_character_photos(proj_dir, character_id)
-    qidx = read_quality_index(proj_dir)
-    if character_id in qidx.get("references", {}):
-        qidx["references"].pop(character_id, None)
-        write_quality_index(proj_dir, qidx)
     clear_stale(proj_dir, "references", character_id)
 
     return {
@@ -121,10 +115,6 @@ def delete_location_and_cascade(name: str, location_id: str, output_root: Path |
     if ref_png.exists():
         ref_png.unlink()
     remove_all_location_photos(proj_dir, location_id)
-    qidx = read_quality_index(proj_dir)
-    if location_id in qidx.get("references", {}):
-        qidx["references"].pop(location_id, None)
-        write_quality_index(proj_dir, qidx)
     clear_stale(proj_dir, "references", location_id)
 
     return {
@@ -159,10 +149,6 @@ def delete_object_and_cascade(name: str, object_id: str, output_root: Path | Non
     if ref_png.exists():
         ref_png.unlink()
     remove_all_object_photos(proj_dir, object_id)
-    qidx = read_quality_index(proj_dir)
-    if object_id in qidx.get("references", {}):
-        qidx["references"].pop(object_id, None)
-        write_quality_index(proj_dir, qidx)
     clear_stale(proj_dir, "references", object_id)
 
     return {

@@ -137,10 +137,6 @@ class ImageFeedbackPayload(BaseModel):
 class StartStepPayload(BaseModel):
     preview_pages: int | None = None
     force_ids: list[str] | None = None
-    # "low" | "medium" | "high" — overrides the project's image_model.quality
-    # for this single run. Records the quality used per generated target so
-    # the UI can flag drafts and offer a per-item upgrade.
-    quality_override: str | None = None
     force_all: bool = False
 
 
@@ -253,11 +249,8 @@ def _register_api(app: FastAPI) -> None:
         bd_script = svc_config.load_script_if_present(name, _output_root())
         script_dict = bd_script.to_portable_dict(script_path) if bd_script else None
         state = svc_state.derive_state(proj_dir)
-        quality_idx = indices.read_quality_index(proj_dir)
         stale_idx = indices.read_stale_index(proj_dir)
         coherence_idx = indices.read_coherence_index(proj_dir)
-        # Default quality to assume for items that pre-date the quality index.
-        default_quality = (cfg_dict or {}).get("generation_options", {}).get("image_model", {}).get("quality", "high")
         # Per-step asset listings the frontend uses to flip through items.
         refs = {"characters": [], "locations": [], "objects": []}
         composed = []
@@ -276,7 +269,6 @@ def _register_api(app: FastAPI) -> None:
                         "physical_description": c.physical_description,
                         "outfit": c.outfit,
                         "image_url": _file_url(name, f"references/characters/{c.id}.png", ref_path),
-                        "quality": _quality_for(quality_idx, "references", c.id, ref_path, default_quality),
                         "stale": c.id in stale_refs and ref_path.exists(),
                     }
                 )
@@ -288,7 +280,6 @@ def _register_api(app: FastAPI) -> None:
                         "name": l.name,
                         "description": l.description,
                         "image_url": _file_url(name, f"references/locations/{l.id}.png", ref_path),
-                        "quality": _quality_for(quality_idx, "references", l.id, ref_path, default_quality),
                         "stale": l.id in stale_refs and ref_path.exists(),
                     }
                 )
@@ -300,20 +291,17 @@ def _register_api(app: FastAPI) -> None:
                         "name": o.name,
                         "description": o.description,
                         "image_url": _file_url(name, f"references/objects/{o.id}.png", ref_path),
-                        "quality": _quality_for(quality_idx, "references", o.id, ref_path, default_quality),
                         "stale": o.id in stale_refs and ref_path.exists(),
                     }
                 )
             if bd_script.cover is not None:
-                composed.append(_compose_entry(name, "cover", proj_dir, quality_idx, default_quality, stale_compose))
+                composed.append(_compose_entry(name, "cover", proj_dir, stale_compose))
                 upscaled.append(_upscale_entry(name, "cover", proj_dir, upscale_dir, upscale_ext))
             for p in bd_script.pages:
-                composed.append(
-                    _compose_entry(name, f"page_{p.page_number}", proj_dir, quality_idx, default_quality, stale_compose)
-                )
+                composed.append(_compose_entry(name, f"page_{p.page_number}", proj_dir, stale_compose))
                 upscaled.append(_upscale_entry(name, f"page_{p.page_number}", proj_dir, upscale_dir, upscale_ext))
             if bd_script.back_cover is not None:
-                composed.append(_compose_entry(name, "back", proj_dir, quality_idx, default_quality, stale_compose))
+                composed.append(_compose_entry(name, "back", proj_dir, stale_compose))
                 upscaled.append(_upscale_entry(name, "back", proj_dir, upscale_dir, upscale_ext))
         character_photos: dict[str, list[dict]] = {}
         for cid, slots in photos.list_character_photos_with_slots(proj_dir).items():
@@ -354,7 +342,6 @@ def _register_api(app: FastAPI) -> None:
             "stale": stale_idx,
             "coherence": coherence_idx,
             "pdf_url": _file_url(name, f"{name}.pdf", proj_dir / f"{name}.pdf"),
-            "default_quality": default_quality,
             "character_photos": character_photos,
             "location_photos": location_photos,
             "object_photos": object_photos,
@@ -735,7 +722,6 @@ def _register_api(app: FastAPI) -> None:
         except FileNotFoundError:
             raise HTTPException(400, "Configuration du projet introuvable.")
         _check_api_key(cfg.generation_options.image_model.provider)
-        _validate_quality(payload.quality_override)
 
         force_ids = payload.force_ids
         if payload.force_all and not force_ids:
@@ -754,7 +740,6 @@ def _register_api(app: FastAPI) -> None:
                 interrupt,
                 output_root=_output_root(),
                 force_ids=force_ids,
-                quality_override=payload.quality_override,
             )
 
         return _start("references", name, runner)
@@ -768,7 +753,6 @@ def _register_api(app: FastAPI) -> None:
         except FileNotFoundError:
             raise HTTPException(400, "Configuration du projet introuvable.")
         _check_api_key(cfg.generation_options.image_model.provider)
-        _validate_quality(payload.quality_override)
 
         force_ids = payload.force_ids
         if payload.force_all and not force_ids:
@@ -790,7 +774,6 @@ def _register_api(app: FastAPI) -> None:
                 interrupt,
                 output_root=_output_root(),
                 force_ids=force_ids,
-                quality_override=payload.quality_override,
             )
 
         return _start("compose", name, runner)
@@ -914,18 +897,27 @@ def _register_api(app: FastAPI) -> None:
         return coherence.get_config_script_diff(name, _output_root())
 
     @app.post("/api/projects/{name}/script/sync-config")
-    def sync_script_with_config(name: str) -> dict:
-        """Integrate config changes into the existing script via LLM (no full rewrite)."""
+    def sync_script_with_config(name: str, payload: dict | None = Body(default=None)) -> dict:
+        """Integrate config changes into the existing script via LLM (no full rewrite).
+
+        ``payload.removals`` ({characters, locations, objects} → list of ids)
+        lists entities the user chose to drop from the script after removing
+        them from the config; they are deleted with a cascade and the dropped
+        pages are regenerated.
+        """
         _ensure_manual_script_edit_allowed(app, name, _output_root())
         try:
             cfg = svc_config.load_config(name, _output_root())
             _check_api_key(cfg.generation_options.script_model.provider)
         except FileNotFoundError:
             _check_api_key("openai")
+        removals = (payload or {}).get("removals") if isinstance(payload, dict) else None
         try:
-            return coherence.sync_script_with_config(name, _output_root())
+            result = coherence.sync_script_with_config(name, _output_root(), removals=removals)
         except Exception as e:
             raise HTTPException(400, str(e))
+        result["job"] = _maybe_autostart_script(name, result, True)
+        return result
 
     @app.post("/api/projects/{name}/script/coherence/check")
     def check_script_coherence(name: str) -> dict:
@@ -1442,11 +1434,6 @@ def _register_api(app: FastAPI) -> None:
         return {"ok": True, "removed": removed}
 
 
-def _validate_quality(q: str | None) -> None:
-    if q is not None and q not in ("low", "medium", "high"):
-        raise HTTPException(400, "quality_override doit valoir 'low', 'medium' ou 'high'.")
-
-
 def _check_api_key(provider: str) -> None:
     secret_name = secret_store.PROVIDERS.get(provider)
     if secret_name is None:
@@ -1494,20 +1481,17 @@ def _compose_entry(
     project: str,
     target: str,
     proj_dir: Path,
-    quality_idx: dict[str, dict[str, str]],
-    default_quality: str,
     stale_set: set[str] | None = None,
 ) -> dict:
-    """Build {id, image_url, quality, stale} for a composed page target."""
+    """Build {id, image_url, stale} for a composed page target."""
     rel = _target_relpath(target, "pages")
     if rel is None:
-        return {"id": target, "image_url": None, "quality": None, "stale": False}
+        return {"id": target, "image_url": None, "stale": False}
     full = proj_dir / rel
     exists = full.exists()
     return {
         "id": target,
         "image_url": _file_url(project, rel, full),
-        "quality": _quality_for(quality_idx, "compose", target, full, default_quality),
         "stale": bool(stale_set and target in stale_set and exists),
     }
 
@@ -1533,7 +1517,7 @@ def _upscale_entry(
 ) -> dict:
     src_rel = _target_relpath(target, "pages")
     if src_rel is None:
-        return {"id": target, "image_url": None, "quality": None, "stale": False}
+        return {"id": target, "image_url": None, "stale": False}
     suffix = output_format if output_format.startswith(".") else f".{output_format}"
     if target == "cover":
         full = upscale_dir / f"cover{suffix}"
@@ -1543,10 +1527,10 @@ def _upscale_entry(
         try:
             n = int(target.split("_", 1)[1])
         except (ValueError, IndexError):
-            return {"id": target, "image_url": None, "quality": None, "stale": False}
+            return {"id": target, "image_url": None, "stale": False}
         full = upscale_dir / f"page_{n:02d}{suffix}"
     else:
-        return {"id": target, "image_url": None, "quality": None, "stale": False}
+        return {"id": target, "image_url": None, "stale": False}
     try:
         rel = full.relative_to(proj_dir).as_posix()
     except ValueError:
@@ -1555,25 +1539,8 @@ def _upscale_entry(
     return {
         "id": target,
         "image_url": _file_url(project, rel, full) if rel is not None else None,
-        "quality": None,
         "stale": photos.is_upscaled_stale(source, full),
     }
-
-
-def _quality_for(
-    quality_idx: dict[str, dict[str, str]],
-    step: str,
-    target: str,
-    file_path: Path | None,
-    default_quality: str,
-) -> str | None:
-    """Look up the recorded quality for a target, or assume default if the
-    file exists without a record (legacy generations). Returns None if the
-    file doesn't exist yet.
-    """
-    if file_path is None or not file_path.exists():
-        return None
-    return quality_idx.get(step, {}).get(target, default_quality)
 
 
 def _sse(payload: dict) -> str:

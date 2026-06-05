@@ -21,7 +21,6 @@ from .constants import (
     LOCATION_PHOTOS_DIRNAME,
     OBJECT_PHOTOS_DIRNAME,
     PROJECT_CONFIG_NAME,
-    QUALITY_INDEX_NAME,
     STALE_INDEX_NAME,
     STYLE_REF_NAME,
 )
@@ -218,10 +217,6 @@ def duplicate_project(
         if src_refs.is_dir():
             dst_refs = dst_dir / "references"
             shutil.copytree(src_refs, dst_refs, dirs_exist_ok=True)
-        src_qidx = src_dir / QUALITY_INDEX_NAME
-        if src_qidx.exists():
-            dst_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_qidx, dst_dir / QUALITY_INDEX_NAME)
 
     return new_id
 
@@ -234,10 +229,9 @@ def restyle_project(
     """Apply a new visual style without rewriting the script.
 
     Updates ``style`` on both ``bdgen.json`` and ``bdgen-script.json``, then
-    wipes the downstream image artefacts (references, composed pages, PDF,
-    quality index) so the user can rerun those steps under the new style.
-    Script text, characters, locations, panels and dialogs are preserved
-    verbatim.
+    wipes the downstream image artefacts (references, composed pages, PDF) so
+    the user can rerun those steps under the new style. Script text,
+    characters, locations, panels and dialogs are preserved verbatim.
 
     Returns a summary describing what was deleted.
     """
@@ -264,7 +258,6 @@ def restyle_project(
             "references": 0,
             "pages": 0,
             "pdf": False,
-            "quality_index": False,
         }
 
         script_path = proj_dir / "bdgen-script.json"
@@ -298,11 +291,6 @@ def restyle_project(
             versioning.archive_before_write(pdf, kind="restyle")
             pdf.unlink()
             deleted["pdf"] = True
-
-        qidx = proj_dir / QUALITY_INDEX_NAME
-        if qidx.exists():
-            qidx.unlink()
-            deleted["quality_index"] = True
 
         sidx = proj_dir / STALE_INDEX_NAME
         if sidx.exists():

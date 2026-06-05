@@ -1,6 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
+import {
+  FaWandMagicSparkles,
+  FaArrowRotateRight,
+  FaPaintbrush,
+  FaForward,
+  FaCheck,
+  FaImages,
+} from "react-icons/fa6";
 import { api } from "../api.js";
+import { useAppContext } from "../context/AppContext.jsx";
+import useRegisterShell from "../hooks/useRegisterShell.js";
+import { projectRibbonGroup } from "./shell/ribbonModel.js";
 import useJobStream from "./useJobStream.js";
 import ProgressPanel from "./ProgressPanel.jsx";
 import RunningBanner from "./RunningBanner.jsx";
@@ -19,307 +31,10 @@ function filePathFromUrl(url) {
   return tail.split("/").map(decodeURIComponent).join("/");
 }
 
-const QUALITY_LABEL = {
-  low: "Brouillon",
-  medium: "Standard",
-  high: "Final",
-};
-const QUALITY_CHIP = {
-  low: "chip chip-peach",
-  medium: "chip chip-sky",
-  high: "chip chip-mint",
-};
-
 const MIN_BRUSH = 8;
 const MAX_BRUSH = 80;
 const DEFAULT_BRUSH = 24;
 const IDLE_PHASE_SUFFIXES = ["_done", "_skipped"];
-
-/**
- * Reusable shell for the image-generation steps (references, compose). Each
- * step provides:
- *   - stepId: "references" | "compose"
- *   - title / intro / etc.
- *   - items: [{ id, label, image_url, description?, quality? }]
- *   - supportsQuality: true to enable draft/final mode + per-item upgrade
- */
-export default function ImageStep({
-  onChanged,
-  stepId,
-  title,
-  intro,
-  feedbackStep = stepId,
-  allowRefine = true,
-  allowSkip = false,
-  onSkip,
-  onContinue,
-  continueLabel = "Continuer →",
-  items,
-  emptyLabel,
-  layout = "portrait",
-  supportsQuality = false,
-}) {
-  const { name } = useParams();
-  const stream = useJobStream({ project: name, step: stepId });
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState(null);
-  const [refining, setRefining] = useState(null);
-  const [idx, setIdx] = useState(0);
-  const [confirmingRegenAll, setConfirmingRegenAll] = useState(false);
-
-  const isRunning = stream.matchesThisStep && stream.job?.status === "running";
-  const otherStepRunning = stream.job?.status === "running" && !stream.matchesThisStep;
-  const blocked = otherStepRunning;
-  const hasAnyImage = items.some((it) => it.image_url);
-  const activeGenerationId = generationTargetId(stream.job);
-
-  // Items not yet at "high" quality — surfaced for the per-step "Tout améliorer".
-  const draftItems = supportsQuality ? items.filter((it) => it.image_url && it.quality && it.quality !== "high") : [];
-  // Items whose underlying script text was rewritten after the image was
-  // generated — the on-disk PNG no longer matches the latest description.
-  const staleItems = items.filter((it) => it.stale && it.image_url);
-
-  useEffect(() => {
-    if (stream.terminal) onChanged();
-  }, [stream.terminal, onChanged]);
-
-  useEffect(() => {
-    if (!stream.events.length) return;
-    const last = stream.events[stream.events.length - 1];
-    if (last?.artifact) onChanged();
-  }, [stream.events, onChanged]);
-
-  async function start({ force_ids, quality_override } = {}) {
-    if (starting || isRunning) return;
-    setError(null);
-    setStarting(true);
-    try {
-      const payload = {};
-      if (force_ids) payload.force_ids = force_ids;
-      if (quality_override) payload.quality_override = quality_override;
-      await api.startStep(name, stepId, payload);
-      await stream.refresh();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setStarting(false);
-    }
-  }
-
-  const flipper =
-    items.length > 0 ? (
-      <ImageFlipper
-        items={items}
-        idx={idx}
-        setIdx={setIdx}
-        layout={layout}
-        projectName={name}
-        onChanged={onChanged}
-        busy={starting}
-        busyItemId={activeGenerationId}
-        busyLabel={isRunning ? "Génération en cours..." : "Préparation..."}
-        selectorLabel={stepId === "references" ? "Image" : "Planche"}
-        onRefine={isRunning || blocked || !allowRefine ? null : (item) => setRefining(item)}
-        onInpaint={
-          isRunning || blocked || !allowRefine
-            ? null
-            : async (item, maskBlob, prompt) => {
-                await api.inpaintImage(name, feedbackStep, item.id, maskBlob, prompt);
-                onChanged();
-              }
-        }
-        onUpgrade={
-          isRunning || blocked || !supportsQuality
-            ? null
-            : (item) => start({ force_ids: [item.id], quality_override: "high" })
-        }
-        onRefresh={
-          isRunning || blocked
-            ? null
-            : (item) =>
-                start({
-                  force_ids: [item.id],
-                  quality_override: item.quality || undefined,
-                })
-        }
-        emptyLabel={emptyLabel}
-      />
-    ) : null;
-
-  if (isRunning) {
-    return (
-      <div className="space-y-6">
-        <ProgressPanel
-          title={`${title} — génération en cours…`}
-          job={stream.job}
-          events={stream.events}
-          onInterrupt={stream.interrupt}
-          hint={
-            allowRefine
-              ? "Vous pouvez feuilleter les images déjà générées. Pour donner un retour, interrompez d'abord la génération."
-              : "Vous pouvez feuilleter les images déjà générées pendant l'upscale local."
-          }
-        />
-        {flipper}
-      </div>
-    );
-  }
-
-  // Idle (never started, or finished, or interrupted)
-  if (!hasAnyImage) {
-    return (
-      <div className="space-y-6">
-        {blocked && <RunningBanner job={stream.job} />}
-        {stream.terminal && stream.terminal.status !== "completed" && (
-          <TerminalBanner terminal={stream.terminal} onClear={stream.clear} />
-        )}
-        <div className="card p-8 text-center">
-          <h2 className="text-lg font-semibold mb-2">{title}</h2>
-          <p className="text-[var(--color-ink-soft)] max-w-2xl mx-auto mb-6">{intro}</p>
-          {error && <p className="text-[var(--color-rose-500)] text-sm mb-3">{error}</p>}
-          <div className="flex justify-center flex-wrap gap-3">
-            {supportsQuality && (
-              <button
-                className="btn btn-secondary"
-                onClick={() => start({ quality_override: "low" })}
-                disabled={starting || blocked}
-                title="Génération basse qualité — beaucoup moins coûteuse, idéale pour valider l'ensemble avant de monter en qualité."
-              >
-                Brouillon (économique)
-              </button>
-            )}
-            <button
-              className="btn btn-primary"
-              onClick={() => start(supportsQuality ? { quality_override: "high" } : {})}
-              disabled={starting || blocked}
-            >
-              {starting ? "Démarrage…" : supportsQuality ? "Qualité finale" : "Lancer la génération"}
-            </button>
-            {allowSkip && (
-              <button className="btn btn-ghost" onClick={onSkip} disabled={starting || blocked}>
-                Passer
-              </button>
-            )}
-          </div>
-          {supportsQuality && (
-            <p className="text-xs text-[var(--color-mute)] mt-4 max-w-md mx-auto">
-              Astuce&nbsp;: lancez d'abord en brouillon, puis améliorez élément par élément ce qui en vaut la peine.
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {blocked && <RunningBanner job={stream.job} />}
-      {stream.terminal && stream.terminal.status !== "completed" && (
-        <TerminalBanner terminal={stream.terminal} onClear={stream.clear} />
-      )}
-      <div className="card p-6">
-        <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <div className="flex gap-2 flex-wrap">
-            <button
-              className="btn btn-ghost text-sm"
-              onClick={() => setConfirmingRegenAll(true)}
-              disabled={starting || blocked}
-              title="Régénère toutes les images de cette étape"
-            >
-              ↻ Tout régénérer
-            </button>
-            {staleItems.length > 0 && (
-              <button
-                className="btn btn-primary text-sm"
-                onClick={() =>
-                  start({
-                    force_ids: staleItems.map((it) => it.id),
-                  })
-                }
-                disabled={starting || blocked}
-                title={`${staleItems.length} image(s) ne correspondent plus au texte modifié`}
-              >
-                ↻ Rafraîchir les obsolètes ({staleItems.length})
-              </button>
-            )}
-            {supportsQuality ? (
-              <>
-                <button
-                  className="btn btn-ghost text-sm"
-                  onClick={() => start({ quality_override: "low" })}
-                  disabled={starting || blocked}
-                  title="Génère ce qui manque encore en brouillon. Les éléments déjà en final sont conservés."
-                >
-                  Compléter en brouillon
-                </button>
-                <button
-                  className="btn btn-secondary text-sm"
-                  onClick={() =>
-                    start({
-                      force_ids: draftItems.length > 0 ? draftItems.map((it) => it.id) : undefined,
-                      quality_override: "high",
-                    })
-                  }
-                  disabled={starting || blocked}
-                  title={
-                    draftItems.length > 0
-                      ? `Régénère ${draftItems.length} brouillon(s) en final et complète les éléments manquants en final.`
-                      : "Génère ce qui manque encore en qualité finale."
-                  }
-                >
-                  {draftItems.length > 0
-                    ? `Tout finaliser (${draftItems.length} brouillon${draftItems.length > 1 ? "s" : ""})`
-                    : "Compléter en final"}
-                </button>
-              </>
-            ) : (
-              <button className="btn btn-secondary text-sm" onClick={() => start()} disabled={starting || blocked}>
-                {starting ? "Démarrage…" : "Reprendre / compléter"}
-              </button>
-            )}
-            {onContinue && (
-              <button className="btn btn-primary text-sm" onClick={onContinue}>
-                {continueLabel}
-              </button>
-            )}
-          </div>
-        </div>
-        {error && <p className="text-[var(--color-rose-500)] text-sm mb-3">{error}</p>}
-        {flipper}
-      </div>
-
-      {allowRefine && refining && (
-        <RefineDialog
-          title={`Retoucher « ${refining.label} »`}
-          hint="Décrivez ce qui doit changer. La génération sera relancée pour cet élément uniquement (les autres restent intacts)."
-          onClose={() => setRefining(null)}
-          onSubmit={async (text) => {
-            await api.imageFeedback(name, feedbackStep, refining.id, text);
-            await start({
-              force_ids: [refining.id],
-              quality_override: refining.quality || undefined,
-            });
-          }}
-        />
-      )}
-
-      {confirmingRegenAll && (
-        <ConfirmDialog
-          title="Tout régénérer ?"
-          body={`Les ${items.length} images de cette étape seront régénérées. Les images existantes seront remplacées. Cette action consomme des crédits API.`}
-          confirmLabel="Tout régénérer"
-          onConfirm={async () => {
-            await start({
-              force_ids: items.map((it) => it.id),
-            });
-          }}
-          onClose={() => setConfirmingRegenAll(false)}
-        />
-      )}
-    </div>
-  );
-}
 
 const LAYOUT_CLASS = {
   portrait: "aspect-[2/3]",
@@ -338,24 +53,48 @@ function generationTargetId(job) {
   return event.extra.id;
 }
 
-function ImageFlipper({
-  items,
-  idx,
-  setIdx,
-  layout,
-  projectName,
+/**
+ * Reusable shell for the image-generation steps (references, compose).
+ *
+ * The reading zone here stays intentionally bare — just the current image,
+ * its busy overlay, the optional inpaint canvas and the description. Every
+ * action and the pager are published to the desktop chrome (ribbon / sidebar /
+ * status-bar pager) via `useRegisterShell`, so nothing stacks above and below
+ * the image anymore.
+ *
+ * Items: [{ id, label, image_url, description?, stale?,
+ *           group?, shortLabel? }]
+ */
+export default function ImageStep({
   onChanged,
-  busy = false,
-  busyItemId = null,
-  busyLabel = "Génération en cours...",
-  selectorLabel = "Planche",
-  onRefine,
-  onInpaint,
-  onUpgrade,
-  onRefresh,
+  stepId,
+  title,
+  intro,
+  feedbackStep = stepId,
+  allowRefine = true,
+  allowSkip = false,
+  onSkip,
+  onContinue,
+  continueLabel = "Continuer →",
+  projectExtraCommands = null,
+  genGroupLabel = "Génération",
+  startLabel = "Lancer la génération",
+  items,
   emptyLabel,
+  layout = "portrait",
 }) {
+  const { name } = useParams();
+  const { projectActions } = useAppContext();
+  const stream = useJobStream({ project: name, step: stepId });
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState(null);
+  const [refining, setRefining] = useState(null);
+  const [idx, setIdx] = useState(0);
+  const [confirmingRegenAll, setConfirmingRegenAll] = useState(false);
   const [confirmingRegen, setConfirmingRegen] = useState(false);
+
+  // Inpaint + version-history state (lifted from the old flipper so the ribbon
+  // can drive them).
   const [inpaintActive, setInpaintActive] = useState(false);
   const [brushSize, setBrushSize] = useState(DEFAULT_BRUSH);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -367,27 +106,50 @@ function ImageFlipper({
   const canvasRef = useRef(null);
   const imgRef = useRef(null);
   const lastPos = useRef(null);
+  // The retouche popover is anchored under its ribbon icon (rendered by the
+  // shell). We hand the button a ref through the ribbon command and read its
+  // on-screen rect to place a non-modal panel just below it.
+  const inpaintBtnRef = useRef(null);
+  const [inpaintPos, setInpaintPos] = useState(null);
+  // Once the user drags the popover, stop auto-anchoring it under the icon.
+  const inpaintMovedRef = useRef(false);
+
+  const isRunning = stream.matchesThisStep && stream.job?.status === "running";
+  const otherStepRunning = stream.job?.status === "running" && !stream.matchesThisStep;
+  const blocked = otherStepRunning;
+  const hasAnyImage = items.some((it) => it.image_url);
+  const activeGenerationId = generationTargetId(stream.job);
+
+  const staleItems = items.filter((it) => it.stale && it.image_url);
 
   const safeIdx = Math.max(0, Math.min(idx, items.length - 1));
   const item = items[safeIdx];
-  const filePath = filePathFromUrl(item.image_url);
+  const filePath = item ? filePathFromUrl(item.image_url) : null;
   const viewingHistory = !!selectedVersion.id;
-  // When the user is browsing an archived version, swap the rendered image
-  // URL. Destructive actions (refine/inpaint/upgrade) stay disabled so we
-  // never overwrite an old version by accident.
-  const archivedUrl = viewingHistory && selectedVersion.version?.relpath && projectName
-    ? `/api/projects/${encodeURIComponent(projectName)}/files/${selectedVersion.version.relpath
-        .split("/")
-        .map(encodeURIComponent)
-        .join("/")}`
-    : null;
-  const displayedUrl = archivedUrl || item.image_url;
-  const canUpgrade = !viewingHistory && onUpgrade && item.image_url && item.quality && item.quality !== "high";
-  const isStale = !!item.stale && !!item.image_url;
-  const canRefresh = !viewingHistory && onRefresh && item.image_url;
-  const itemBusy = busy || submitting || busyItemId === item.id;
-  const readerBusyLabel = submitting ? "Retouche en cours..." : busyLabel;
+  const archivedUrl =
+    viewingHistory && selectedVersion.version?.relpath && name
+      ? `/api/projects/${encodeURIComponent(name)}/files/${selectedVersion.version.relpath
+          .split("/")
+          .map(encodeURIComponent)
+          .join("/")}`
+      : null;
+  const displayedUrl = archivedUrl || item?.image_url;
+  const isStale = !!item?.stale && !!item?.image_url;
+  const canRefresh = !viewingHistory && item?.image_url;
+  const itemBusy = starting || submitting || activeGenerationId === item?.id;
+  const readerBusyLabel = submitting ? "Retouche en cours..." : isRunning ? "Génération en cours..." : "Préparation...";
 
+  useEffect(() => {
+    if (stream.terminal) onChanged();
+  }, [stream.terminal, onChanged]);
+
+  useEffect(() => {
+    if (!stream.events.length) return;
+    const last = stream.events[stream.events.length - 1];
+    if (last?.artifact) onChanged();
+  }, [stream.events, onChanged]);
+
+  // Reset inpaint/version state when switching items.
   useEffect(() => {
     setInpaintActive(false);
     setHasMask(false);
@@ -397,6 +159,68 @@ function ImageFlipper({
     lastPos.current = null;
   }, [safeIdx]);
 
+  // Keep the retouche popover anchored under the ribbon icon. It is non-modal:
+  // closing happens via the icon, Annuler or Échap — never on outside click,
+  // so painting the mask on the image never dismisses it.
+  useEffect(() => {
+    if (!inpaintActive) {
+      setInpaintPos(null);
+      return;
+    }
+    inpaintMovedRef.current = false;
+    function place() {
+      const btn = inpaintBtnRef.current;
+      if (!btn || inpaintMovedRef.current) return;
+      const rect = btn.getBoundingClientRect();
+      const width = 340;
+      let left = rect.left;
+      // Keep the panel off the image so it never blocks painting the mask:
+      // if it would overlap, tuck it into the free space left of the image
+      // when there's room there.
+      const img = imgRef.current;
+      if (img) {
+        const ir = img.getBoundingClientRect();
+        if (left + width > ir.left && ir.left - width - 12 >= 8) {
+          left = ir.left - width - 12;
+        }
+      }
+      left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+      setInpaintPos({ top: rect.bottom + 6, left, width });
+    }
+    function onKey(e) {
+      if (e.key === "Escape") closeInpaint();
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("keydown", onKey);
+    };
+    // closeInpaint is a stable handler; re-running on it would needlessly
+    // rebind listeners on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inpaintActive]);
+
+  async function start({ force_ids } = {}) {
+    if (starting || isRunning) return;
+    setError(null);
+    setStarting(true);
+    try {
+      const payload = {};
+      if (force_ids) payload.force_ids = force_ids;
+      await api.startStep(name, stepId, payload);
+      await stream.refresh();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  // ── Inpaint canvas helpers ────────────────────────────────────────────
   function syncCanvas() {
     const img = imgRef.current;
     const cvs = canvasRef.current;
@@ -471,6 +295,35 @@ function ImageFlipper({
     setHasMask(false);
   }
 
+  function closeInpaint() {
+    setInpaintActive(false);
+    clearMask();
+  }
+
+  // Drag the retouche popover by its header so the user can move it off the
+  // image while painting the mask.
+  function startInpaintDrag(e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const orig = inpaintPos;
+    if (!orig) return;
+    inpaintMovedRef.current = true;
+    function move(ev) {
+      const width = orig.width;
+      const left = Math.max(8, Math.min(orig.left + ev.clientX - startX, window.innerWidth - width - 8));
+      const top = Math.max(8, Math.min(orig.top + ev.clientY - startY, window.innerHeight - 60));
+      setInpaintPos({ ...orig, top, left });
+    }
+    function up() {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    }
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
+
   async function buildMaskBlob() {
     const cvs = canvasRef.current;
     return new Promise((resolve) => {
@@ -511,7 +364,8 @@ function ImageFlipper({
     setSubmitting(true);
     try {
       const maskBlob = await buildMaskBlob();
-      await onInpaint(item, maskBlob, inpaintPrompt.trim());
+      await api.inpaintImage(name, feedbackStep, item.id, maskBlob, inpaintPrompt.trim());
+      onChanged();
       setInpaintActive(false);
       clearMask();
     } catch (e) {
@@ -521,77 +375,406 @@ function ImageFlipper({
     }
   }
 
-  return (
-    <div className="relative">
-      <div>
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <button
-            className="btn btn-ghost text-sm"
-            disabled={safeIdx === 0 || inpaintActive || submitting}
-            onClick={() => setIdx(safeIdx - 1)}
-          >
-            ← Précédent
-          </button>
-          <div className="flex items-center gap-2 min-w-0 flex-1 justify-center flex-wrap">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <span>{selectorLabel}</span>
-              <select
-                className="select page-select"
-                value={safeIdx}
-                onChange={(event) => setIdx(Number(event.target.value))}
-                disabled={inpaintActive || submitting}
-              >
-                {items.map((option, optionIdx) => (
-                  <option key={option.id} value={optionIdx}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <span className="text-sm text-[var(--color-mute)]">
-              {safeIdx + 1}/{items.length}
-            </span>
-            {projectName && filePath && (
-              <VersionPicker
-                projectName={projectName}
-                filePath={filePath}
-                selectedVersionId={selectedVersion.id}
-                onSelectVersion={(id, version) => setSelectedVersion({ id, version })}
-                onRestored={onChanged}
-                disabled={inpaintActive || submitting}
-              />
-            )}
-            {item.image_url && item.quality && (
-              <span className={QUALITY_CHIP[item.quality] || "chip"} title={`Qualité de génération : ${item.quality}`}>
-                {QUALITY_LABEL[item.quality] || item.quality}
-              </span>
-            )}
-            {isStale && (
-              <span
-                className="chip chip-peach"
-                title="Le texte a été modifié après cette image. Régénérez pour aligner le visuel sur la nouvelle description."
-              >
-                Texte modifié
-              </span>
-            )}
-            {viewingHistory && (
-              <span
-                className="chip"
-                style={{ background: "var(--color-paper-soft)", color: "var(--color-primary-700)" }}
-                title="Vous visualisez une version archivée. Les actions destructives sont désactivées."
-              >
-                version archivée
-              </span>
+  // ── Shell model (ribbon / sidebar / pager) ────────────────────────────
+  const ribbon = buildRibbon();
+  const sidebar = buildSidebar();
+  const pager =
+    items.length > 1 && hasAnyImage
+      ? {
+          index: safeIdx,
+          total: items.length,
+          onPrev: () => setIdx(Math.max(0, safeIdx - 1)),
+          onNext: () => setIdx(Math.min(items.length - 1, safeIdx + 1)),
+        }
+      : null;
+
+  useRegisterShell({ ribbon, sidebar, pager }, [
+    items.length,
+    safeIdx,
+    item?.id,
+    item?.image_url,
+    item?.stale,
+    starting,
+    isRunning,
+    blocked,
+    staleItems.length,
+    hasAnyImage,
+    inpaintActive,
+    viewingHistory,
+    canRefresh,
+    Boolean(onContinue),
+    Boolean(onSkip),
+    projectActions,
+    projectExtraCommands,
+    genGroupLabel,
+    allowRefine,
+  ]);
+
+  function buildSidebar() {
+    if (!items.length || !hasAnyImage) return null;
+    const order = [];
+    const byGroup = new Map();
+    items.forEach((it, i) => {
+      const g = it.group || "Éléments";
+      if (!byGroup.has(g)) {
+        byGroup.set(g, []);
+        order.push(g);
+      }
+      byGroup.get(g).push({
+        id: String(i),
+        label: it.shortLabel || it.label,
+        badge: it.stale && it.image_url ? "•" : undefined,
+        tone: "peach",
+        title: it.stale ? "Le texte a changé depuis cette image" : it.label,
+      });
+    });
+    return {
+      sections: order.map((g) => ({ id: g, label: g, items: byGroup.get(g) })),
+      activeItem: String(safeIdx),
+      onSelect: (id) => setIdx(Number(id)),
+    };
+  }
+
+  function buildRibbon() {
+    const genCommands = [];
+    if (!hasAnyImage) {
+      genCommands.push({
+        id: "generate",
+        label: "Lancer",
+        icon: <FaImages />,
+        tone: "primary",
+        onClick: () => start(),
+        disabled: starting || blocked || isRunning,
+        title: "Lancer la génération avec la qualité définie en préparation.",
+      });
+    } else {
+      genCommands.push({
+        id: "resume",
+        label: "Reprendre",
+        icon: <FaImages />,
+        onClick: () => start(),
+        disabled: starting || blocked || isRunning,
+        title: "Reprendre / compléter la génération.",
+      });
+      genCommands.push({
+        id: "regen-all",
+        label: "Tout régénérer",
+        icon: <FaArrowRotateRight />,
+        onClick: () => setConfirmingRegenAll(true),
+        disabled: starting || blocked || isRunning,
+        title: "Régénère toutes les images de cette étape.",
+      });
+      if (staleItems.length > 0) {
+        genCommands.push({
+          id: "refresh-stale",
+          label: `Obsolètes (${staleItems.length})`,
+          icon: <FaArrowRotateRight />,
+          tone: "primary",
+          onClick: () => start({ force_ids: staleItems.map((it) => it.id) }),
+          disabled: starting || blocked || isRunning,
+          title: `${staleItems.length} image(s) ne correspondent plus au texte modifié.`,
+        });
+      }
+    }
+    if (allowSkip && !hasAnyImage) {
+      genCommands.push({
+        id: "skip",
+        label: "Passer",
+        icon: <FaForward />,
+        onClick: onSkip,
+        disabled: starting || blocked || isRunning,
+      });
+    }
+
+    const groups = [{ id: "gen", label: genGroupLabel, commands: genCommands }];
+
+    // Retouche group — only meaningful once an image exists.
+    if (hasAnyImage && allowRefine) {
+      const editCommands = [];
+      if (canRefresh) {
+        editCommands.push({
+          id: "regen-one",
+          label: "Régénérer",
+          icon: <FaArrowRotateRight />,
+          onClick: () => setConfirmingRegen(true),
+          disabled: itemBusy || isRunning,
+          title: "Régénère cette image (qualité actuelle conservée).",
+        });
+      }
+      editCommands.push({
+        id: "inpaint",
+        label: "Retouche ciblée",
+        icon: <FaPaintbrush />,
+        ref: inpaintBtnRef,
+        active: inpaintActive,
+        onClick: () => (inpaintActive ? closeInpaint() : setInpaintActive(true)),
+        disabled: !item?.image_url || itemBusy || isRunning || viewingHistory,
+        title: viewingHistory
+          ? "Restaurez d'abord cette version pour la retoucher."
+          : "Peindre une zone et décrire la retouche.",
+      });
+      editCommands.push({
+        id: "refine",
+        label: "Retoucher",
+        icon: <FaWandMagicSparkles />,
+        onClick: () => setRefining(item),
+        disabled: !item?.image_url || itemBusy || isRunning || viewingHistory,
+        title: "Décrire une retouche en langage naturel.",
+      });
+      groups.push({ id: "edit", label: "Retouche", commands: editCommands });
+    }
+
+    // Album / continue group.
+    const albumCommands = [];
+    if (onContinue) {
+      albumCommands.push({
+        id: "continue",
+        label: continueLabel.replace(/\s*→\s*$/, ""),
+        icon: <FaCheck />,
+        tone: "primary",
+        onClick: onContinue,
+        title: continueLabel,
+      });
+    }
+    if (albumCommands.length) {
+      groups.push({ id: "album", label: "Album", commands: albumCommands });
+    }
+
+    const projectGroup = projectRibbonGroup(projectActions, projectExtraCommands || []);
+    if (projectGroup) groups.push(projectGroup);
+
+    return { groups };
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────
+  if (isRunning) {
+    return (
+      <div className="space-y-6">
+        <ProgressPanel
+          title={`${title} — génération en cours…`}
+          job={stream.job}
+          events={stream.events}
+          onInterrupt={stream.interrupt}
+          hint={
+            allowRefine
+              ? "Vous pouvez feuilleter les images déjà générées. Pour donner un retour, interrompez d'abord la génération."
+              : "Vous pouvez feuilleter les images déjà générées pendant l'upscale local."
+          }
+        />
+        {hasAnyImage && item && renderReader()}
+      </div>
+    );
+  }
+
+  if (!hasAnyImage) {
+    return (
+      <div className="space-y-6">
+        {blocked && <RunningBanner job={stream.job} />}
+        {stream.terminal && stream.terminal.status !== "completed" && (
+          <TerminalBanner terminal={stream.terminal} onClear={stream.clear} />
+        )}
+        <div className="card p-8 text-center">
+          <h2 className="text-lg font-semibold mb-2">{title}</h2>
+          <p className="text-[var(--color-ink-soft)] max-w-2xl mx-auto mb-6">{intro}</p>
+          {error && <p className="text-[var(--color-rose-500)] text-sm mb-3">{error}</p>}
+          <div className="flex items-center justify-center gap-3">
+            <button
+              className="btn btn-primary"
+              onClick={() => start()}
+              disabled={starting || blocked || isRunning}
+            >
+              {starting ? "Démarrage…" : startLabel}
+            </button>
+            {allowSkip && onSkip && (
+              <button className="btn btn-secondary" onClick={onSkip} disabled={starting || blocked || isRunning}>
+                Passer cette étape
+              </button>
             )}
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {blocked && <RunningBanner job={stream.job} />}
+      {stream.terminal && stream.terminal.status !== "completed" && (
+        <TerminalBanner terminal={stream.terminal} onClear={stream.clear} />
+      )}
+      {error && <p className="text-[var(--color-rose-500)] text-sm">{error}</p>}
+      {item && renderReader()}
+
+      {inpaintActive && inpaintPos && createPortal(renderInpaintPopover(), document.body)}
+
+      {allowRefine && refining && (
+        <RefineDialog
+          title={`Retoucher « ${refining.label} »`}
+          hint="Décrivez ce qui doit changer. La génération sera relancée pour cet élément uniquement (les autres restent intacts)."
+          onClose={() => setRefining(null)}
+          onSubmit={async (text) => {
+            await api.imageFeedback(name, feedbackStep, refining.id, text);
+            await start({ force_ids: [refining.id] });
+          }}
+        />
+      )}
+
+      {confirmingRegenAll && (
+        <ConfirmDialog
+          title="Tout régénérer ?"
+          body={`Les ${items.length} images de cette étape seront régénérées. Les images existantes seront remplacées. Cette action consomme des crédits API.`}
+          confirmLabel="Tout régénérer"
+          onConfirm={async () => {
+            await start({ force_ids: items.map((it) => it.id) });
+          }}
+          onClose={() => setConfirmingRegenAll(false)}
+        />
+      )}
+
+      {confirmingRegen && item && (
+        <ConfirmDialog
+          title={`Régénérer « ${item.label} » ?`}
+          body="L'image actuelle sera remplacée par une nouvelle génération. Cette action consomme des crédits API."
+          confirmLabel="Régénérer"
+          onConfirm={async () => {
+            await start({ force_ids: [item.id] });
+          }}
+          onClose={() => setConfirmingRegen(false)}
+        />
+      )}
+    </div>
+  );
+
+  // Non-modal retouche panel, portalled to <body> and anchored under the
+  // ribbon icon via `inpaintPos`. The mask is still painted on the image in
+  // renderReader; this panel only carries the brush, prompt and actions.
+  function renderInpaintPopover() {
+    return (
+      <div
+        className="card"
+        style={{
+          position: "fixed",
+          top: inpaintPos.top,
+          left: inpaintPos.left,
+          width: inpaintPos.width,
+          zIndex: 60,
+          boxShadow: "0 12px 32px rgb(0 0 0 / 0.18)",
+        }}
+        role="dialog"
+        aria-label="Retouche ciblée"
+      >
+        <div
+          className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-[var(--color-line)] select-none"
+          style={{ cursor: "move" }}
+          onMouseDown={startInpaintDrag}
+          title="Glissez pour déplacer le panneau"
+        >
+          <span className="text-sm font-semibold truncate">⠿ Retouche ciblée — {item.label}</span>
           <button
-            className="btn btn-ghost text-sm"
-            disabled={safeIdx === items.length - 1 || inpaintActive || submitting}
-            onClick={() => setIdx(safeIdx + 1)}
+            className="btn btn-ghost text-sm px-2 py-0.5"
+            onClick={closeInpaint}
+            onMouseDown={(e) => e.stopPropagation()}
+            disabled={submitting}
+            aria-label="Fermer"
+            style={{ cursor: "pointer" }}
           >
-            Suivant →
+            ✕
           </button>
         </div>
+        <div className="p-4 space-y-3">
+          <p className="text-xs text-[var(--color-ink-soft)]">
+            Peignez la zone sur l'image, puis décrivez le changement.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap text-sm">
+            <span className="text-[var(--color-ink-soft)]">Pinceau</span>
+            <button
+              className="status-pager-btn"
+              onClick={() => setBrushSize((s) => Math.max(MIN_BRUSH, s - 8))}
+              aria-label="Réduire le pinceau"
+            >
+              −
+            </button>
+            <input
+              type="range"
+              min={MIN_BRUSH}
+              max={MAX_BRUSH}
+              value={brushSize}
+              onChange={(e) => setBrushSize(Number(e.target.value))}
+              className="w-24"
+            />
+            <button
+              className="status-pager-btn"
+              onClick={() => setBrushSize((s) => Math.min(MAX_BRUSH, s + 8))}
+              aria-label="Agrandir le pinceau"
+            >
+              +
+            </button>
+            <span className="text-[var(--color-mute)] text-xs">{brushSize}px</span>
+            <button className="btn btn-ghost text-xs ml-auto" onClick={clearMask} disabled={!hasMask}>
+              Effacer le masque
+            </button>
+          </div>
+          <textarea
+            className="input textarea"
+            rows={3}
+            placeholder="Ex. : remplacer le fond par un ciel étoilé, changer la couleur du manteau en rouge…"
+            value={inpaintPrompt}
+            onChange={(e) => setInpaintPrompt(e.target.value)}
+            disabled={itemBusy}
+          />
+          {inpaintError && <p className="text-xs text-[var(--color-rose-500)]">{inpaintError}</p>}
+          <div className="flex justify-end gap-2">
+            <button className="btn btn-ghost text-sm" onClick={closeInpaint} disabled={itemBusy}>
+              Annuler
+            </button>
+            <button
+              className="btn btn-primary text-sm"
+              onClick={submitInpaint}
+              disabled={itemBusy || !hasMask || !inpaintPrompt.trim()}
+            >
+              {submitting ? "Retouche en cours…" : "Lancer la retouche"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // renderReader is a plain render function (not a nested component) so the
+  // image/canvas DOM is inlined into ImageStep's tree and never remounts —
+  // the inpaint mask survives re-renders. The reading zone holds only the
+  // image + overlay + optional inpaint canvas + description.
+  function renderReader() {
+    return (
+      <div className="card p-4 sm:p-6">
+        <div className="flex items-center justify-center gap-2 mb-3 flex-wrap text-sm">
+          <span className="font-medium truncate max-w-[18rem]">{item.label}</span>
+          {name && filePath && (
+            <VersionPicker
+              projectName={name}
+              filePath={filePath}
+              selectedVersionId={selectedVersion.id}
+              onSelectVersion={(id, version) => setSelectedVersion({ id, version })}
+              onRestored={onChanged}
+              disabled={inpaintActive || submitting}
+            />
+          )}
+          {isStale && (
+            <span className="chip chip-peach" title="Le texte a été modifié après cette image.">
+              Texte modifié
+            </span>
+          )}
+          {viewingHistory && (
+            <span
+              className="chip"
+              style={{ background: "var(--color-paper-soft)", color: "var(--color-primary-700)" }}
+              title="Version archivée — actions destructives désactivées."
+            >
+              version archivée
+            </span>
+          )}
+        </div>
+
         <div
           className={
             "relative rounded-lg bg-[var(--color-paper-soft)] flex items-center justify-center overflow-hidden " +
@@ -637,11 +820,7 @@ function ImageFlipper({
                   />
                 </div>
               ) : (
-                <img
-                  src={displayedUrl}
-                  alt={item.label}
-                  className="max-h-full max-w-full object-contain"
-                />
+                <img src={displayedUrl} alt={item.label} className="max-h-full max-w-full object-contain" />
               )
             ) : (
               <div className="text-sm text-[var(--color-mute)]">{emptyLabel || "Pas encore généré."}</div>
@@ -657,158 +836,12 @@ function ImageFlipper({
           )}
         </div>
 
-        <div className="flex items-center justify-between mt-3 gap-2">
-          <button
-            className="btn btn-ghost text-sm"
-            disabled={safeIdx === 0 || inpaintActive || submitting}
-            onClick={() => setIdx(safeIdx - 1)}
-          >
-            ← Précédent
-          </button>
-          <span className="text-sm font-medium text-[var(--color-ink-soft)]">
-            {safeIdx + 1}/{items.length}
-          </span>
-          <button
-            className="btn btn-ghost text-sm"
-            disabled={safeIdx === items.length - 1 || inpaintActive || submitting}
-            onClick={() => setIdx(safeIdx + 1)}
-          >
-            Suivant →
-          </button>
-        </div>
-
-        {inpaintActive && (
-          <div className="mt-3 space-y-3">
-            <p className="text-xs text-[var(--color-ink-soft)]">
-              Peignez la zone à modifier, puis décrivez la retouche souhaitée.
-            </p>
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-xs text-[var(--color-ink-soft)]">Pinceau :</span>
-              <button
-                className="btn btn-ghost text-xs px-2 py-1"
-                onClick={() => setBrushSize((s) => Math.max(MIN_BRUSH, s - 8))}
-              >
-                −
-              </button>
-              <input
-                type="range"
-                min={MIN_BRUSH}
-                max={MAX_BRUSH}
-                value={brushSize}
-                onChange={(e) => setBrushSize(Number(e.target.value))}
-                className="w-28"
-              />
-              <button
-                className="btn btn-ghost text-xs px-2 py-1"
-                onClick={() => setBrushSize((s) => Math.min(MAX_BRUSH, s + 8))}
-              >
-                +
-              </button>
-              <span className="text-xs text-[var(--color-mute)]">{brushSize}px</span>
-              <button className="btn btn-ghost text-xs ml-auto" onClick={clearMask} disabled={!hasMask}>
-                Effacer le masque
-              </button>
-            </div>
-            <label className="block text-xs font-medium text-[var(--color-ink-soft)]">
-              Que souhaitez-vous changer dans cette zone ?
-            </label>
-            <textarea
-              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-paper-soft)] px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-              rows={2}
-              placeholder="Ex. : remplacer le fond par un ciel étoilé, changer la couleur du manteau en rouge…"
-              value={inpaintPrompt}
-              onChange={(e) => setInpaintPrompt(e.target.value)}
-              disabled={itemBusy}
-            />
-            {inpaintError && <p className="text-xs text-[var(--color-rose-500)]">{inpaintError}</p>}
-            <div className="flex justify-end gap-2">
-              <button
-                className="btn btn-ghost text-sm"
-                onClick={() => {
-                  setInpaintActive(false);
-                  clearMask();
-                }}
-                disabled={itemBusy}
-              >
-                Annuler
-              </button>
-              <button
-                className="btn btn-primary text-sm"
-                onClick={submitInpaint}
-                disabled={itemBusy || !hasMask || !inpaintPrompt.trim()}
-              >
-                {submitting ? "Retouche en cours…" : "Lancer la retouche"}
-              </button>
-            </div>
-          </div>
-        )}
-
         {!inpaintActive && item.description && (
           <p className="text-sm text-[var(--color-ink-soft)] mt-3 whitespace-pre-wrap">{item.description}</p>
         )}
-        {!inpaintActive && (onRefine || onInpaint || canUpgrade || canRefresh) && (
-          <div className="flex justify-end gap-2 mt-3 flex-wrap">
-            {canRefresh && (
-              <button
-                className="btn btn-secondary text-sm"
-                onClick={() => setConfirmingRegen(true)}
-                disabled={itemBusy}
-                title="Régénère cette image (la qualité actuelle est conservée)."
-              >
-                ↻ Régénérer
-              </button>
-            )}
-            {canUpgrade && (
-              <button
-                className="btn btn-primary text-sm"
-                onClick={() => onUpgrade(item)}
-                disabled={itemBusy}
-                title="Régénère cet élément seul en haute qualité."
-              >
-                ✨ Améliorer la qualité
-              </button>
-            )}
-            {onInpaint && (
-              <button
-                className="btn btn-ghost text-sm"
-                onClick={() => setInpaintActive(true)}
-                disabled={!item.image_url || itemBusy || viewingHistory}
-                title={
-                  viewingHistory
-                    ? "Restaurez d'abord cette version pour la retoucher."
-                    : "Peindre une zone et décrire la retouche souhaitée."
-                }
-              >
-                🖌 Retouche ciblée
-              </button>
-            )}
-            {onRefine && (
-              <button
-                className="btn btn-ghost text-sm"
-                onClick={() => onRefine(item)}
-                disabled={!item.image_url || itemBusy || viewingHistory}
-                title={viewingHistory ? "Restaurez d'abord cette version pour la retoucher." : ""}
-              >
-                Retoucher cet élément
-              </button>
-            )}
-          </div>
-        )}
-
-        {confirmingRegen && (
-          <ConfirmDialog
-            title={`Régénérer « ${item.label} » ?`}
-            body="L'image actuelle sera remplacée par une nouvelle génération. Cette action consomme des crédits API."
-            confirmLabel="Régénérer"
-            onConfirm={async () => {
-              await onRefresh(item);
-            }}
-            onClose={() => setConfirmingRegen(false)}
-          />
-        )}
       </div>
-    </div>
-  );
+    );
+  }
 }
 
 function TerminalBanner({ terminal, onClear }) {

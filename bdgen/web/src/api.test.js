@@ -175,16 +175,7 @@ describe("URL construction and encoding", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/projects/p/refine/character/id%20with%20spaces");
   });
 
-  it("upgradeQuality forces high quality on the listed targets", async () => {
-    await api.upgradeQuality("p", "references", ["a", "b"]);
-
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
-      force_ids: ["a", "b"],
-      quality_override: "high",
-    });
-  });
-
-  it("regenerateAll omits quality_override when none is provided", async () => {
+  it("regenerateAll sends only the force_all flag", async () => {
     await api.regenerateAll("p", "references");
 
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ force_all: true });
