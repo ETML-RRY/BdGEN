@@ -13,7 +13,7 @@ from . import upscale as upscale_module
 from . import wizard as wizard_module
 from .feedback import FeedbackStore, feedback_path_for
 from .models import BdGenInput, BdGenScript, GenerationOptions
-from .progress import StdoutReporter
+from .progress import StdoutReporter, configure_stdio_utf8
 
 
 def _project_dir(bd_script: BdGenScript, script_path: Path) -> Path:
@@ -168,6 +168,7 @@ def _resolve_options(script: BdGenScript, input_override: Path | None) -> Genera
 
 
 def main(argv: list[str] | None = None) -> None:
+    configure_stdio_utf8()
     load_dotenv()
     parser = argparse.ArgumentParser(
         prog="bdgen",

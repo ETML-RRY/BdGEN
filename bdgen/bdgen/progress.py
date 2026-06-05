@@ -9,12 +9,35 @@ controllable from an HTTP endpoint.
 """
 from __future__ import annotations
 
+import sys
 import threading
 from dataclasses import asdict, dataclass, field
 from typing import Protocol
 
 
 Step = str  # "script" | "references" | "compose" | "upscale"
+
+
+def configure_stdio_utf8() -> None:
+    """Force stdout/stderr to UTF-8 so progress messages crash-proof on Windows.
+
+    Messages such as ``"4ᵉ de couverture"`` contain non-cp1252 characters (here
+    the superscript ``ᵉ`` / ``\\u1d49``). On a Windows console defaulting to the
+    cp1252 (``charmap``) codec, ``print()`` raises ``UnicodeEncodeError`` and
+    aborts generation. Reconfiguring the streams to UTF-8 with ``errors=replace``
+    makes every print path (progress events, the script spinner, …) safe.
+
+    Idempotent and best-effort: silently skips streams that can't be
+    reconfigured (e.g. already-wrapped or redirected streams).
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
 
 
 class Interrupted(Exception):

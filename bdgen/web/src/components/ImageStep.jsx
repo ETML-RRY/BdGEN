@@ -118,7 +118,11 @@ export default function ImageStep({
   const otherStepRunning = stream.job?.status === "running" && !stream.matchesThisStep;
   const blocked = otherStepRunning;
   const hasAnyImage = items.some((it) => it.image_url);
-  const activeGenerationId = generationTargetId(stream.job);
+  // Only treat the running job as "ours" when it belongs to this project AND
+  // step. Otherwise navigating to another comic (a different project) whose
+  // board shares the same item id (e.g. "p2") would light up the busy overlay
+  // as if that already-ready board were regenerating.
+  const activeGenerationId = stream.matchesThisStep ? generationTargetId(stream.job) : null;
 
   const staleItems = items.filter((it) => it.stale && it.image_url);
 

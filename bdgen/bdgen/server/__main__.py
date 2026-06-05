@@ -12,6 +12,7 @@ from pathlib import Path
 
 import uvicorn
 
+from bdgen.progress import configure_stdio_utf8
 from bdgen.server.app import create_app
 
 
@@ -30,6 +31,7 @@ def _static_dir() -> Path | None:
 
 
 def main() -> None:
+    configure_stdio_utf8()
     app = create_app(_static_dir())
     host = os.environ.get("BDGEN_HOST", "127.0.0.1")
     port = int(os.environ.get("BDGEN_PORT", "8000"))
