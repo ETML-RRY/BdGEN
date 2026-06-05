@@ -49,6 +49,14 @@ ANTHROPIC_DEFAULT_TIMEOUT_SECONDS = 1_800
 ANTHROPIC_DEFAULT_EFFORT = "medium"
 ANTHROPIC_EFFORT_LEVELS = {"low", "medium", "high", "max", "xhigh"}
 
+# Per-page context budget. Instead of re-sending every prior page in full on each
+# page call (input cost grows ~O(P^2) over a P-page album), only the last
+# PAGE_CONTEXT_WINDOW_DEFAULT pages travel in full detail; earlier pages are
+# folded into a one-line-per-page condensed synopsis. This keeps tight local
+# continuity (recent pages verbatim) while collapsing the long tail.
+PAGE_CONTEXT_WINDOW_DEFAULT = 3
+PAGE_SUMMARY_MAX_CHARS = 320
+
 _ANTHROPIC_THROTTLE_LOCK = threading.Lock()
 _ANTHROPIC_THROTTLE_STATE = {
     "tokens": float(ANTHROPIC_DEFAULT_INPUT_TOKENS_PER_MINUTE),
@@ -942,6 +950,44 @@ def _build_setup_prompt(
     return base
 
 
+def _page_context_window() -> int:
+    """How many trailing pages to send in full detail (env-overridable)."""
+    raw = os.environ.get("BDGEN_PAGE_CONTEXT_WINDOW")
+    if raw is None:
+        return PAGE_CONTEXT_WINDOW_DEFAULT
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return PAGE_CONTEXT_WINDOW_DEFAULT
+
+
+def _summarize_page(page: Page) -> str:
+    """Condense a page into a single plot-digest line for cheap long-tail context.
+
+    Keeps the narrative thread (where, narration, dialog) the next page needs to
+    stay coherent, while dropping verbose layout/panel-geometry fields and
+    capping length so older pages cost a small, bounded number of tokens each.
+    """
+    locations: list[str] = []
+    beats: list[str] = []
+    for panel in page.panels:
+        if panel.location and panel.location not in locations:
+            locations.append(panel.location)
+        if panel.narration and panel.narration.strip():
+            beats.append(panel.narration.strip())
+        for dialog in panel.dialogs:
+            line = dialog.text.strip()
+            if line:
+                beats.append(f"{dialog.speaker}: {line}")
+    if not beats:
+        beats = [p.scene_description.strip() for p in page.panels if p.scene_description.strip()]
+    digest = " / ".join(beats)
+    if len(digest) > PAGE_SUMMARY_MAX_CHARS:
+        digest = digest[: PAGE_SUMMARY_MAX_CHARS - 1].rstrip() + "…"
+    loc = f" [{', '.join(locations)}]" if locations else ""
+    return f"Page {page.page_number}{loc}: {digest}"
+
+
 def _build_page_prompt(
     config: BdGenInput,
     bd_script: BdGenScript,
@@ -964,7 +1010,9 @@ def _build_page_prompt(
         "locations": [{"id": l.id, "name": l.name, "description": l.description} for l in bd_script.locations],
         "objects": [{"id": o.id, "name": o.name, "description": o.description} for o in bd_script.objects],
     }
-    prior_pages = [p.model_dump(mode="json") for p in bd_script.pages]
+    window = _page_context_window()
+    recent_pages = bd_script.pages[len(bd_script.pages) - window :] if window else []
+    older_pages = bd_script.pages[: len(bd_script.pages) - len(recent_pages)]
 
     preview_note = ""
     if preview_pages is not None and preview_pages < config.structure.page_count:
@@ -986,15 +1034,25 @@ def _build_page_prompt(
         json.dumps(setup, ensure_ascii=False, indent=2),
         "",
     ]
-    if prior_pages:
+    if older_pages:
         parts.extend(
             [
-                "PREVIOUSLY GENERATED PAGES (for narrative continuity, DO NOT regenerate):",
-                json.dumps(prior_pages, ensure_ascii=False, indent=2),
+                "STORY SO FAR (condensed synopsis of earlier pages — for continuity, "
+                "DO NOT regenerate these):",
+                "\n".join(_summarize_page(p) for p in older_pages),
                 "",
             ]
         )
-    else:
+    if recent_pages:
+        parts.extend(
+            [
+                "RECENT PAGES (full detail — keep tight continuity with these, "
+                "DO NOT regenerate):",
+                json.dumps([p.model_dump(mode="json") for p in recent_pages], ensure_ascii=False, indent=2),
+                "",
+            ]
+        )
+    if not older_pages and not recent_pages:
         parts.append("(No previous pages — this is page 1.)")
         parts.append("")
     parts.append(f"Now generate page {page_n} of {target_pages} as a single JSON Page object." + preview_note)
