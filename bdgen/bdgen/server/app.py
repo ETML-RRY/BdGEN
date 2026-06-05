@@ -31,6 +31,8 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from .. import document_text
+from .. import quick_create
 from .. import secret_store
 from .. import style_from_image as style_module
 from .. import trace as trace_module
@@ -53,7 +55,16 @@ from ..service import (
 from ..service import config as svc_config
 from ..service import constants as svc_const
 from ..service import state as svc_state
-from ..models import BackCover, BdGenInput, Cover, Page, ScriptCharacter, ScriptLocation, ScriptObject
+from ..models import (
+    BackCover,
+    BdGenInput,
+    Cover,
+    Page,
+    ScriptCharacter,
+    ScriptLocation,
+    ScriptModelConfig,
+    ScriptObject,
+)
 from .jobs import JobManager
 
 
@@ -1289,6 +1300,34 @@ def _register_api(app: FastAPI) -> None:
             raise HTTPException(502, f"L'extraction a échoué : {e}")
         return result.model_dump(mode="json")
 
+    @app.post("/api/quick-create")
+    async def quick_create_endpoint(
+        prompt: str = Form(""),
+        language: str = Form("fr"),
+        art_style: str = Form(""),
+        files: list[UploadFile] = File(default=[]),
+    ) -> dict:
+        """Turn a free-text idea — optionally grounded in one or more uploaded
+        reference documents (.docx/.pdf/.txt/.md…) — into a partial project
+        config pre-filling the "Nouveau projet" form
+        (metadata/story/style/structure/casting). The frontend merges this onto
+        its DEFAULT_CONFIG before showing the form.
+
+        Sent as ``multipart/form-data`` so documents can ride along. Either a
+        non-empty ``prompt`` or at least one document is required.
+        """
+        model_config = _pick_text_model()  # raises 400 if no key configured
+        try:
+            loaded = [((f.filename or "document"), await f.read()) for f in files]
+            documents_text = document_text.combine_documents(loaded)
+            return quick_create.generate_config(
+                prompt, language, model_config, documents_text=documents_text, art_style=art_style
+            )
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(502, f"La génération a échoué : {e}")
+
     # --- Per-character reference photos ---
 
     @app.put("/api/projects/{name}/characters/{character_id}/photo")
@@ -1444,6 +1483,35 @@ def _check_api_key(provider: str) -> None:
             f"Clé API manquante : {secret_name} est requis pour le provider '{provider}'. "
             "Configurez-la dans le coffre BdGEN.",
         )
+
+
+# Text-model fallback order and default model per provider. The defaults match
+# the first option of each provider in the frontend's SCRIPT_MODEL_OPTIONS and
+# the script_model default of DEFAULT_CONFIG.
+_TEXT_MODEL_FALLBACK: list[tuple[str, str]] = [
+    ("anthropic", "claude-sonnet-4-6"),
+    ("openai", "gpt-5.4"),
+    ("xai", "grok-4.3"),
+]
+
+
+def _pick_text_model() -> ScriptModelConfig:
+    """Pick a text model for prompt-driven generation (e.g. quick-create).
+
+    Prefers Anthropic's default writing model when its key exists, otherwise
+    falls back to the first configured provider in the order
+    Anthropic → OpenAI → xAI. Raises 400 if no provider key is configured.
+    """
+    for provider, model in _TEXT_MODEL_FALLBACK:
+        secret_name = secret_store.PROVIDERS.get(provider)
+        if secret_name and secret_store.get_secret(secret_name):
+            effort = "medium" if provider == "anthropic" else None
+            return ScriptModelConfig(provider=provider, model=model, effort=effort)
+    raise HTTPException(
+        400,
+        "Aucune clé API de modèle de texte n'est configurée. Ajoutez une clé "
+        "Anthropic, OpenAI ou xAI dans le coffre BdGEN.",
+    )
 
 
 def _file_url(project: str, rel: str, full_path: Path) -> str | None:
