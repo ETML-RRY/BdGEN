@@ -23,6 +23,61 @@ from .script import _call_llm
 from .style_from_image import _sanitize, _slugify
 
 
+# Hard cap on the number of pages a quick-created draft may request. The quick
+# path is the "just an idea" entry point, where the LLM would otherwise pick a
+# full 44–48-page album for an epic premise — generating that many pages is slow
+# and costly for someone who isn't watching the count. We both steer the LLM to
+# stay within this budget and clamp defensively. Users who want more raise it
+# themselves on the (detailed, deliberate) preparation form.
+MAX_QUICK_CREATE_PAGES = 10
+
+
+# Canonical art-style presets offered by the "Nouveau projet" form. Kept in
+# sync with the frontend list in
+# ``web/src/components/projectFormPresets.js`` (STYLE_ART_STYLE_PRESETS): the
+# quick-create LLM must pick one of these VERBATIM so the form's style selector
+# lands on a real preset instead of falling back to a free-text custom value.
+ART_STYLE_PRESETS: list[str] = [
+    "Ligne claire",
+    "Franco-belge classique",
+    "Manga shōnen",
+    "Manga shōjo",
+    "Manga seinen",
+    "Comics américain",
+    "Comics indépendant",
+    "Roman graphique réaliste",
+    "Roman graphique stylisé",
+    "Aquarelle douce",
+    "Encre lavée / Lavis",
+    "Crayon de couleur",
+    "Croquis / Carnet de voyage",
+    "Peinture numérique",
+    "Cartoon / Dessin animé",
+    "Caricature",
+    "Style minimaliste / Lineart",
+    "Pixel art",
+    "Album jeunesse illustré",
+    "BD européenne contemporaine",
+    "Noir et blanc encrage fort",
+    "Style graphique géométrique",
+    "Réalisme photographique",
+    "Semi-réaliste",
+    "Style fanzine / underground",
+]
+
+_ART_STYLE_PRESETS_BY_KEY: dict[str, str] = {
+    p.strip().casefold(): p for p in ART_STYLE_PRESETS
+}
+
+
+def _match_art_style_preset(value: str) -> str:
+    """Return the canonical preset matching ``value`` (case/space-insensitive),
+    or ``""`` when none does. The LLM is asked to copy a preset verbatim, but
+    we normalize defensively against stray casing/whitespace.
+    """
+    return _ART_STYLE_PRESETS_BY_KEY.get((value or "").strip().casefold(), "")
+
+
 # --- LLM output schema -------------------------------------------------------
 
 
@@ -54,6 +109,17 @@ class _StoryDraft(BaseModel):
 
 
 class _StyleDraft(BaseModel):
+    art_style_preset: str = Field(
+        default="",
+        description=(
+            "The SINGLE closest-matching visual-style preset, copied VERBATIM "
+            "(exact spelling, accents and casing) from this fixed list — do not "
+            "invent, translate or merge values: "
+            + " | ".join(ART_STYLE_PRESETS)
+            + ". This populates the form's style selector, so it MUST be one of "
+            "these exact strings. Leave empty only if genuinely none fits."
+        ),
+    )
     art_style: str = Field(
         default="",
         description=(
@@ -137,11 +203,11 @@ class _StructureDraft(BaseModel):
     page_count: int = Field(
         default=6,
         description=(
-            "Number of story pages, matching the STANDARD format for the kind of "
-            "story detected (see the pagination standards in the system prompt). "
-            "Gag strip: 1. Short humorous/educational story: 4–8. Mini-récit: "
-            "8–16. Standard franco-belge album: 44–48. Manga chapter: 18–40. "
-            "Pick the value typical of the detected genre/scope, not an arbitrary one."
+            f"Number of story pages, from 1 to {MAX_QUICK_CREATE_PAGES} MAXIMUM "
+            "(see the pagination standards in the system prompt). Gag strip: 1. "
+            f"Short story: 4–8. Longer story: up to {MAX_QUICK_CREATE_PAGES}. Even "
+            "an epic premise must be condensed into a short opening episode here — "
+            f"NEVER exceed {MAX_QUICK_CREATE_PAGES}."
         ),
     )
     panels_per_page_avg: int = Field(
@@ -181,7 +247,8 @@ class _ConfigDraft(BaseModel):
     structure: _StructureDraft = Field(default_factory=_StructureDraft)
 
 
-SYSTEM_PROMPT = dedent("""\
+SYSTEM_PROMPT = (
+    dedent("""\
     You turn a single free-text idea into a complete, coherent brief for a
     comic-book ("bande dessinée") generator. You produce, in one go: a title,
     a story (synopsis + genre/tone/setting/audience), a visual STYLE, a
@@ -198,17 +265,16 @@ SYSTEM_PROMPT = dedent("""\
     - Always fill the casting when the story implies one. A BD almost always
       has at least one or two characters and a main location.
 
-    PAGINATION STANDARDS — choose page_count and panels_per_page_avg to match
-    the STANDARD format of the kind of story you detect, never an arbitrary
-    number:
+    PAGINATION — page_count is HARD-CAPPED at __MAX_PAGES__ pages for this quick
+    draft (it is the cheap "just an idea" entry point; the user can extend it
+    later on the detailed form). NEVER output more than __MAX_PAGES__:
     - Single gag / comic strip → page_format "strip", page_count 1, ~3–4 panels.
     - Short humorous or educational story → 4–8 pages, ~4–6 panels.
-    - Mini-récit / novella → 8–16 pages.
-    - Standard franco-belge album → 44–48 pages (use 46 by default).
-    - Manga chapter → 18–40 pages, ~5–8 panels.
+    - Anything longer or epic in scope → condense it into a self-contained
+      opening episode of at most __MAX_PAGES__ pages; do NOT plan a full album.
     - Graphic-novel / dramatic / cinematic pacing → fewer, larger panels (1–4).
-    Scale page_count to the story's real scope: an epic saga warrants a full
-    album, a quick joke a single strip.
+    Choose panels_per_page_avg to fit the style/pacing (strip 3–4, standard
+    page 4–8, cinematic 1–3). Scale page_count to the story within the cap.
 
     CASTING COMPLETENESS — MANDATORY:
     - Every character, place or significant recurring object that you NAME or
@@ -217,6 +283,44 @@ SYSTEM_PROMPT = dedent("""\
       sidekick, a villain, a key location or a plot-critical object in the
       story without also adding its entry. The casting and the synopsis must be
       fully consistent — no orphan references in either direction.
+
+    OUTPUT SHAPE — your response is a SINGLE JSON object with EXACTLY these
+    keys, all present, using these EXACT field names (no extra keys, no
+    renaming, no translating the keys, no wrapping object):
+      {
+        "title": "...",
+        "author": "",
+        "story": {
+          "synopsis": "...", "genre": "...", "tone": "...",
+          "setting": "...", "target_audience": "..."
+        },
+        "style": {
+          "art_style_preset": "<one preset copied verbatim from the list below, or empty string>",
+          "art_style": "...", "color_palette": "...", "line_work": "...",
+          "mood": "...", "panel_borders": "...", "speech_bubbles": "...",
+          "character_rendering": "..."
+        },
+        "characters": [
+          {"name": "...", "role": "...", "physical_description": "...",
+           "outfit": "...", "personality": "..."}
+        ],
+        "locations": [{"name": "...", "description": "..."}],
+        "objects": [{"name": "...", "description": "..."}],
+        "structure": {
+          "page_count": 6, "panels_per_page_avg": 4, "narrative_pacing": "...",
+          "page_format": "portrait", "include_cover": true,
+          "include_back_cover": true
+        }
+      }
+    Fill EVERY section — the "style" object and the "characters"/"locations"/
+    "objects" arrays must NOT be left empty when the story implies them (it
+    almost always does). The casting arrays hold objects with the exact fields
+    shown; never collapse them to plain strings or rename their fields.
+
+    "art_style_preset" — copy ONE value VERBATIM (exact spelling, accents and
+    casing) from this fixed list, picking the closest match to the style you
+    intend; leave it "" only if genuinely none fits:
+    __ART_STYLE_PRESETS__
 
     HARD CONSTRAINTS — APPLY WITHOUT EXCEPTION:
     - NEVER name a real artist, illustrator, studio, publisher, franchise,
@@ -236,11 +340,20 @@ SYSTEM_PROMPT = dedent("""\
     - The ``author`` field stays empty unless the user explicitly provided
       an author name. Do NOT invent one.
     - ``page_format`` must be EXACTLY one of: portrait, landscape, square, strip.
+    - ``art_style_preset`` MUST be copied verbatim from the preset list in the
+      OUTPUT SHAPE above (it drives the form's style selector). Pick the one
+      closest to the style you intend; leave it empty only if none fits.
     - Style fields will be quoted verbatim into image-generation prompts:
-      art_style must be prescriptive and include negative constraints.
+      art_style must be prescriptive and include negative constraints, and the
+      detailed style fields (color_palette, line_work, character_rendering,
+      mood…) must each be filled — they carry the style detail even when
+      art_style_preset is a short label.
     - All free-text fields are written in the requested response language.
     - Output ONLY the structured JSON object. No commentary, no markdown.
     """)
+    .replace("__ART_STYLE_PRESETS__", " | ".join(ART_STYLE_PRESETS))
+    .replace("__MAX_PAGES__", str(MAX_QUICK_CREATE_PAGES))
+)
 
 
 _VALID_PAGE_FORMATS: set[str] = {"portrait", "landscape", "square", "strip"}
@@ -337,7 +450,7 @@ def generate_config(
     draft = result.value
     assert isinstance(draft, _ConfigDraft)
 
-    return _draft_to_config(draft)
+    return _draft_to_config(draft, art_style_hint=style_hint)
 
 
 # --- Mapping helpers ---------------------------------------------------------
@@ -354,7 +467,31 @@ def _unique_id(name: str, fallback_prefix: str, idx: int, used: set[str]) -> str
     return cid
 
 
-def _draft_to_config(draft: _ConfigDraft) -> dict:
+def _resolve_art_style(style: _StyleDraft, art_style_hint: str = "") -> str:
+    """Pick the value written to ``style.art_style``.
+
+    The form's style selector only shows a preset as *selected* when the value
+    is one of the canonical presets (otherwise it falls back to a free-text
+    custom entry). So we prefer a preset here:
+
+    1. the preset the user explicitly chose in the simplified form (``hint``);
+    2. else the preset the LLM matched (``art_style_preset``);
+    3. else the LLM's free-text ``art_style`` (no preset fit — keep the detail).
+
+    When a preset is used, the prescriptive detail still reaches image
+    generation through the other style fields (color_palette, line_work,
+    character_rendering, mood…), which are all injected into the prompts.
+    """
+    hinted = _match_art_style_preset(art_style_hint)
+    if hinted:
+        return hinted
+    matched = _match_art_style_preset(style.art_style_preset)
+    if matched:
+        return matched
+    return _sanitize(style.art_style)
+
+
+def _draft_to_config(draft: _ConfigDraft, art_style_hint: str = "") -> dict:
     used_char_ids: set[str] = set()
     characters = []
     for idx, c in enumerate(draft.characters, start=1):
@@ -411,7 +548,7 @@ def _draft_to_config(draft: _ConfigDraft) -> dict:
             "target_audience": _sanitize(draft.story.target_audience),
         },
         "style": {
-            "art_style": _sanitize(draft.style.art_style),
+            "art_style": _resolve_art_style(draft.style, art_style_hint),
             "color_palette": _sanitize(draft.style.color_palette),
             "line_work": _sanitize(draft.style.line_work),
             "mood": _sanitize(draft.style.mood),
@@ -420,7 +557,7 @@ def _draft_to_config(draft: _ConfigDraft) -> dict:
             "character_rendering": _sanitize(draft.style.character_rendering),
         },
         "structure": {
-            "page_count": min(60, max(1, int(draft.structure.page_count))),
+            "page_count": min(MAX_QUICK_CREATE_PAGES, max(1, int(draft.structure.page_count))),
             "panels_per_page_avg": min(12, max(1, int(draft.structure.panels_per_page_avg))),
             "narrative_pacing": _sanitize(draft.structure.narrative_pacing),
             "page_format": page_format,

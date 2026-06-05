@@ -96,8 +96,44 @@ def test_draft_to_config_falls_back_to_portrait_for_bad_format() -> None:
 def test_draft_to_config_clamps_structure() -> None:
     draft = _make_draft(structure=_StructureDraft(page_count=500, panels_per_page_avg=99))
     cfg = quick_create._draft_to_config(draft)
-    assert cfg["structure"]["page_count"] == 60
+    # Quick drafts are hard-capped at MAX_QUICK_CREATE_PAGES to bound cost.
+    assert cfg["structure"]["page_count"] == quick_create.MAX_QUICK_CREATE_PAGES
     assert cfg["structure"]["panels_per_page_avg"] == 12
+
+
+def test_draft_to_config_uses_llm_matched_preset() -> None:
+    # When the LLM picks a canonical preset, art_style becomes that preset so
+    # the form's style selector lands on it (detail stays in the other fields).
+    draft = _make_draft(
+        style=_StyleDraft(
+            art_style_preset="Manga shōnen",
+            art_style="grands yeux expressifs, no photorealism",
+        )
+    )
+    cfg = quick_create._draft_to_config(draft)
+    assert cfg["style"]["art_style"] == "Manga shōnen"
+
+
+def test_draft_to_config_normalizes_preset_casing() -> None:
+    draft = _make_draft(style=_StyleDraft(art_style_preset="  manga shōnen  "))
+    cfg = quick_create._draft_to_config(draft)
+    assert cfg["style"]["art_style"] == "Manga shōnen"
+
+
+def test_draft_to_config_falls_back_to_freetext_when_no_preset() -> None:
+    # No preset match → keep the prescriptive free-text art_style.
+    draft = _make_draft(
+        style=_StyleDraft(art_style_preset="", art_style="ligne claire, aplats")
+    )
+    cfg = quick_create._draft_to_config(draft)
+    assert cfg["style"]["art_style"] == "ligne claire, aplats"
+
+
+def test_draft_to_config_hint_overrides_llm_preset() -> None:
+    # An explicit user-chosen preset wins over whatever the LLM picked.
+    draft = _make_draft(style=_StyleDraft(art_style_preset="Cartoon / Dessin animé"))
+    cfg = quick_create._draft_to_config(draft, art_style_hint="Manga shōnen")
+    assert cfg["style"]["art_style"] == "Manga shōnen"
 
 
 def test_generate_config_passes_art_style_hint(monkeypatch: pytest.MonkeyPatch) -> None:

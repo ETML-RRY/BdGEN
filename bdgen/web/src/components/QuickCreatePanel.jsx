@@ -88,7 +88,9 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
     setError(null);
     try {
       const draft = await api.quickCreate(prompt.trim(), { files, artStyle });
-      onGenerated(draft);
+      // Awaited: onGenerated saves the project and navigates, so keep the
+      // spinner up until it resolves (or throws back here).
+      await onGenerated(draft);
     } catch (e) {
       setError(e.message || "La génération a échoué.");
     } finally {
