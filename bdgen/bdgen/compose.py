@@ -539,6 +539,12 @@ def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | 
         dialogs_block = ""
         if panel.dialogs:
             lines = []
+            # Numbered bubbles + per-speaker counts. Image models tend to
+            # assume conversational turn-taking and wrongly hand a second
+            # consecutive bubble to a neighbouring character. An explicit
+            # manifest ("X speaks N bubbles, Y is silent") counters that bias.
+            speech_dialogs = [d for d in panel.dialogs if d.type != "narration"]
+            bubble_no = 0
             for d in panel.dialogs:
                 speaker = script.character_by_id(d.speaker)
                 speaker_name = speaker.name if speaker else d.speaker
@@ -547,22 +553,54 @@ def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | 
                     # rectangular caption box with no tail.
                     lines.append(f'    - CAPTION (narration, no speaker, no tail): "{d.text}"')
                 else:
+                    bubble_no += 1
                     other_names = [
                         script.character_by_id(c).name
                         for c in panel.characters
                         if c != d.speaker and script.character_by_id(c)
                     ]
                     not_from = (
-                        f" MUST NOT point to: {', '.join(other_names)}."
+                        f" The tail MUST NOT point to, touch, or graze: {', '.join(other_names)}."
                         if other_names
                         else ""
                     )
                     lines.append(
-                        f'    - SPEAKER="{speaker_name}" (type={d.type}): "{d.text}"\n'
-                        f"      → Bubble tail MUST originate from {speaker_name}'s mouth area "
+                        f'    - BUBBLE {bubble_no}: SPEAKER="{speaker_name}" (type={d.type}): "{d.text}"\n'
+                        f"      → Bubble {bubble_no}'s tail MUST originate from {speaker_name}'s mouth area "
                         f"(or from {speaker_name}'s head for thought clouds).{not_from}"
                     )
-            dialogs_block = "\n  Dialogs:\n" + "\n".join(lines)
+
+            manifest = ""
+            if speech_dialogs:
+                # Count bubbles per speaker, then list every character in frame
+                # (speakers AND silent ones) so the model cannot redistribute.
+                counts: dict[str, int] = {}
+                for d in speech_dialogs:
+                    sp = script.character_by_id(d.speaker)
+                    counts[sp.name if sp else d.speaker] = counts.get(
+                        sp.name if sp else d.speaker, 0
+                    ) + 1
+                in_frame = [script.character_by_id(c) for c in panel.characters]
+                in_frame_names = [c.name for c in in_frame if c]
+                tally = []
+                for name in in_frame_names:
+                    n = counts.get(name, 0)
+                    if n:
+                        tally.append(f"{name} = {n} bubble(s)")
+                    else:
+                        tally.append(f"{name} = 0 (SILENT: no bubble, no tail toward {name})")
+                # Speakers not listed among in-frame characters (edge case).
+                for name, n in counts.items():
+                    if name not in in_frame_names:
+                        tally.append(f"{name} = {n} bubble(s)")
+                manifest = (
+                    "    BUBBLE ATTRIBUTION (binding — do NOT redistribute across characters): "
+                    + "; ".join(tally)
+                    + f". Total {len(speech_dialogs)} speech bubble(s) in this panel. "
+                    "If one character has several bubbles, ALL of them point to that same "
+                    "character — never assume the characters take turns speaking.\n"
+                )
+            dialogs_block = "\n  Dialogs:\n" + manifest + "\n".join(lines)
 
         narration_block = f"\n  Narration caption: {panel.narration}" if panel.narration else ""
         sfx_block = f"\n  Sound effects: {', '.join(panel.sound_effects)}" if panel.sound_effects else ""
