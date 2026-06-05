@@ -7,11 +7,10 @@ from pathlib import Path
 from textwrap import dedent
 
 from openai import OpenAI
-from PIL import Image
-
 from . import secret_store
 from .feedback import FeedbackStore, feedback_block
 from .image_rules import IMAGE_CONSTRAINTS
+from .pdf_export import assemble_pdf
 from .references import (
     LOCATION_PHOTO_REF_LABEL,
     OBJECT_PHOTO_REF_LABEL,
@@ -1205,13 +1204,5 @@ def _is_complete(path: Path) -> bool:
 
 
 def _assemble_pdf(page_images: list[Path], output_path: Path) -> None:
-    """Save all page PNGs into a single multi-page PDF via Pillow."""
-    if not page_images:
-        raise RuntimeError("No pages to assemble.")
-    images = [Image.open(p).convert("RGB") for p in page_images]
-    images[0].save(
-        output_path,
-        save_all=True,
-        append_images=images[1:],
-        format="PDF",
-    )
+    """Save all page PNGs into a single multi-page PDF without recompression."""
+    assemble_pdf(page_images, output_path)

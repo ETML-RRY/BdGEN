@@ -8,10 +8,9 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
-from PIL import Image
-
 from . import secret_store
 from .models import BdGenScript, UpscaleOptions
+from .pdf_export import assemble_pdf
 from .progress import InterruptFlag, ProgressEvent, ProgressReporter
 from .stats import record_event, start_timer, stop_timer
 
@@ -197,13 +196,7 @@ def _encode_b64(path: Path) -> str:
 def _assemble_pdf(page_images: list[Path], output_path: Path) -> None:
     if not page_images:
         return
-    images = [Image.open(p).convert("RGB") for p in page_images]
-    images[0].save(
-        output_path,
-        save_all=True,
-        append_images=images[1:],
-        format="PDF",
-    )
+    assemble_pdf(page_images, output_path)
 
 
 def _ensure_replicate() -> None:
