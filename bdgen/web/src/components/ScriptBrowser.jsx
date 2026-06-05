@@ -7,7 +7,7 @@ import RefineDialog from "./RefineDialog.jsx";
 import ConfirmDeleteDialog from "./ConfirmDeleteDialog.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 
-const TABS = [
+export const SCRIPT_TABS = [
   { id: "characters", label: "Personnages" },
   { id: "locations", label: "Décors" },
   { id: "objects", label: "Objets" },
@@ -15,6 +15,8 @@ const TABS = [
   { id: "covers", label: "Couvertures" },
   ...(SHOW_COHERENCE_CHECK ? [{ id: "coherence", label: "Cohérence" }] : []),
 ];
+
+const TABS = SCRIPT_TABS;
 
 const DIALOG_TYPES = ["speech", "thought", "shout", "whisper", "narration"];
 
@@ -35,8 +37,16 @@ export default function ScriptBrowser({
   coherenceError = null,
   onCheck = null,
   onApplySuggestion = null,
+  tab: tabProp,
+  onTabChange,
 }) {
-  const [tab, setTab] = useState("characters");
+  // The active sub-section can be driven from outside (left sidebar). When no
+  // controlled value is supplied we fall back to a local state and render the
+  // in-card tab strip ourselves.
+  const [tabState, setTabState] = useState("characters");
+  const controlled = tabProp != null;
+  const tab = controlled ? tabProp : tabState;
+  const setTab = controlled ? onTabChange : setTabState;
   const script = project.script;
   const coherence =
     SHOW_COHERENCE_CHECK && coherenceProp
@@ -56,30 +66,32 @@ export default function ScriptBrowser({
         {readOnly && <span className="chip chip-peach text-xs">Aperçu — édition désactivée</span>}
       </div>
 
-      <div className="border-b border-[var(--color-line)] flex">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={
-              "px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors inline-flex items-center gap-1 " +
-              (tab === t.id
-                ? "border-[var(--color-primary-500)] text-[var(--color-primary-600)]"
-                : "border-transparent text-[var(--color-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-soft)]")
-            }
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {t.id === "coherence" && isDirty && (
-              <span className="w-2 h-2 rounded-full bg-[var(--color-peach-400)] inline-block" />
-            )}
-            {t.id === "coherence" && !isDirty && issueCount > 0 && (
-              <span className="text-xs text-[var(--color-rose-500)]">{issueCount}</span>
-            )}
-          </button>
-        ))}
-      </div>
+      {!controlled && (
+        <div className="border-b border-[var(--color-line)] flex">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              className={
+                "px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors inline-flex items-center gap-1 " +
+                (tab === t.id
+                  ? "border-[var(--color-primary-500)] text-[var(--color-primary-600)]"
+                  : "border-transparent text-[var(--color-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-soft)]")
+              }
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+              {t.id === "coherence" && isDirty && (
+                <span className="w-2 h-2 rounded-full bg-[var(--color-peach-300)] inline-block" />
+              )}
+              {t.id === "coherence" && !isDirty && issueCount > 0 && (
+                <span className="text-xs text-[var(--color-rose-500)]">{issueCount}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
-      <div className="p-5">
+      <div className={controlled ? "p-5 border-t border-[var(--color-line)]" : "p-5"}>
         {tab === "characters" && (
           <CharactersList characters={script.characters} onChanged={onChanged} readOnly={readOnly} />
         )}

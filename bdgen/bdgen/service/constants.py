@@ -10,7 +10,6 @@ Step = Literal["preparation", "script", "references", "compose", "done"]
 Quality = Literal["low", "medium", "high"]
 
 PROJECT_CONFIG_NAME = "bdgen.json"
-QUALITY_INDEX_NAME = "bdgen-quality.json"
 STALE_INDEX_NAME = "bdgen-stale.json"
 COHERENCE_INDEX_NAME = "bdgen-coherence.json"
 STATS_NAME = stats_module.STATS_NAME

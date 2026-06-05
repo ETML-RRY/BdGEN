@@ -1,22 +1,28 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { FaWandMagicSparkles, FaArrowRotateRight, FaListCheck } from "react-icons/fa6";
 import { api } from "../../api.js";
+import { useAppContext } from "../../context/AppContext.jsx";
+import useRegisterShell from "../../hooks/useRegisterShell.js";
+import { projectRibbonGroup } from "../shell/ribbonModel.js";
 import useJobStream from "../useJobStream.js";
 import ProgressPanel from "../ProgressPanel.jsx";
 import RunningBanner from "../RunningBanner.jsx";
-import ScriptBrowser from "../ScriptBrowser.jsx";
+import ScriptBrowser, { SCRIPT_TABS } from "../ScriptBrowser.jsx";
 import ConfirmDialog from "../ConfirmDialog.jsx";
 import { SHOW_COHERENCE_CHECK } from "../../featureFlags.js";
 
 export default function ScriptStep({ project, onChanged }) {
   const { name } = useParams();
-  const navigate = useNavigate();
+  const { projectActions } = useAppContext();
   const stream = useJobStream({ project: name, step: "script" });
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState(null);
   const [confirmingRegenAll, setConfirmingRegenAll] = useState(false);
   const [checkingCoherence, setCheckingCoherence] = useState(false);
   const [coherenceError, setCoherenceError] = useState(null);
+  // Active script sub-section — driven by the left sidebar (like Planches).
+  const [scriptTab, setScriptTab] = useState("characters");
 
   const target = project.config?.structure?.page_count ?? null;
   const written = project.script?.pages?.length ?? 0;
@@ -91,6 +97,114 @@ export default function ScriptStep({ project, onChanged }) {
     }
   }, [stream.events, onChanged]);
 
+  // Publish this step's actions to the ribbon (shared by all render branches).
+  const hasPages = (project.script?.pages?.length ?? 0) > 0;
+
+  const genCommands = [];
+  if (!hasPages) {
+    genCommands.push({
+      id: "write",
+      label: "Lancer l'écriture",
+      icon: <FaWandMagicSparkles />,
+      tone: "primary",
+      onClick: start,
+      disabled: starting || blocked || isRunning,
+    });
+  } else {
+    if (!isComplete) {
+      genCommands.push({
+        id: "resume",
+        label: "Reprendre",
+        icon: <FaWandMagicSparkles />,
+        tone: "primary",
+        onClick: start,
+        disabled: starting || blocked || isRunning,
+      });
+    }
+    genCommands.push({
+      id: "regen-all",
+      label: "Régénérer tout",
+      icon: <FaArrowRotateRight />,
+      tone: "danger",
+      onClick: () => setConfirmingRegenAll(true),
+      disabled: starting || blocked || isRunning,
+      title: "Réécrit tout le scénario de zéro.",
+    });
+  }
+  const ribbonGroups = [{ id: "gen", label: "Scénario", commands: genCommands }];
+  if (hasPages && SHOW_COHERENCE_CHECK) {
+    ribbonGroups.push({
+      id: "coh",
+      label: "Cohérence",
+      commands: [
+        {
+          id: "check",
+          label: "Vérifier",
+          icon: <FaListCheck />,
+          onClick: checkCoherence,
+          active: checkingCoherence,
+          disabled: checkingCoherence || blocked || isRunning,
+          title: "Analyse la cohérence du scénario.",
+        },
+      ],
+    });
+  }
+  const projectGroup = projectRibbonGroup(projectActions);
+  if (projectGroup) ribbonGroups.push(projectGroup);
+
+  // Left sidebar — script sub-sections, shown whenever the browser is on screen
+  // (i.e. some content already exists). Mirrors the Planches phase navigation.
+  const script = project.script;
+  const charCount = script?.characters?.length ?? 0;
+  const pageCount = script?.pages?.length ?? 0;
+  const browserVisible = (isRunning && (charCount > 0 || pageCount > 0)) || pageCount > 0;
+  const coherenceState = project.coherence || { dirty: false, issues: [] };
+  const coherenceIssues = coherenceState.issues?.length ?? 0;
+  const coherenceDirty = !!coherenceState.dirty;
+
+  const sidebar = browserVisible
+    ? {
+        sections: [
+          {
+            id: "script",
+            label: "Scénario",
+            items: SCRIPT_TABS.map((t) => {
+              const item = { id: t.id, label: t.label };
+              if (t.id === "characters") item.badge = charCount || undefined;
+              else if (t.id === "locations") item.badge = script?.locations?.length || undefined;
+              else if (t.id === "objects") item.badge = script?.objects?.length || undefined;
+              else if (t.id === "pages") item.badge = pageCount || undefined;
+              else if (t.id === "coherence") {
+                item.badge = coherenceIssues > 0 ? coherenceIssues : coherenceDirty ? "•" : undefined;
+                item.tone = "peach";
+              }
+              return item;
+            }),
+          },
+        ],
+        activeItem: scriptTab,
+        onSelect: setScriptTab,
+      }
+    : null;
+
+  useRegisterShell({ ribbon: { groups: ribbonGroups }, sidebar }, [
+    hasPages,
+    isComplete,
+    isRunning,
+    blocked,
+    starting,
+    checkingCoherence,
+    projectActions,
+    browserVisible,
+    scriptTab,
+    charCount,
+    pageCount,
+    script?.locations?.length,
+    script?.objects?.length,
+    coherenceIssues,
+    coherenceDirty,
+  ]);
+
   if (isRunning) {
     const hasPartial = (project.script?.characters?.length ?? 0) > 0 || (project.script?.pages?.length ?? 0) > 0;
     return (
@@ -107,6 +221,8 @@ export default function ScriptStep({ project, onChanged }) {
             project={project}
             onChanged={onChanged}
             readOnly
+            tab={scriptTab}
+            onTabChange={setScriptTab}
             coherence={SHOW_COHERENCE_CHECK ? project.coherence : undefined}
             onRegeneratePage={SHOW_COHERENCE_CHECK ? regenerateFlaggedPage : undefined}
           />
@@ -139,6 +255,8 @@ export default function ScriptStep({ project, onChanged }) {
           project={project}
           onChanged={onChanged}
           readOnly={blocked}
+          tab={scriptTab}
+          onTabChange={setScriptTab}
           coherence={SHOW_COHERENCE_CHECK ? coherence : undefined}
           onRegeneratePage={SHOW_COHERENCE_CHECK ? regenerateFlaggedPage : undefined}
           checking={SHOW_COHERENCE_CHECK ? checkingCoherence : false}
@@ -146,21 +264,6 @@ export default function ScriptStep({ project, onChanged }) {
           onCheck={SHOW_COHERENCE_CHECK ? checkCoherence : null}
           onApplySuggestion={SHOW_COHERENCE_CHECK ? applySuggestion : null}
         />
-        <div className="flex items-center justify-between">
-          <button
-            className="btn btn-ghost text-sm"
-            onClick={() => setConfirmingRegenAll(true)}
-            disabled={starting || blocked}
-          >
-            ↻ Régénérer tout le scénario
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => navigate(`/projects/${encodeURIComponent(name)}/references`)}
-          >
-            Continuer vers les références →
-          </button>
-        </div>
         {confirmingRegenAll && (
           <ConfirmDialog
             title="Régénérer tout le scénario ?"

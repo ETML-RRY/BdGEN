@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
-import { Routes, Route, Link, NavLink, useParams, useLocation, useNavigate, Navigate } from "react-router-dom";
-import { FaCopy, FaDownload } from "react-icons/fa6";
+import { Routes, Route, Link, useParams, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { api } from "../api.js";
-import StepNav from "../components/StepNav.jsx";
+import { useAppContext } from "../context/AppContext.jsx";
+import { STEPS } from "../steps.js";
 import PreparationStep from "../components/steps/PreparationStep.jsx";
 import ScriptStep from "../components/steps/ScriptStep.jsx";
 import ReferencesStep from "../components/steps/ReferencesStep.jsx";
@@ -13,50 +13,40 @@ import TracePanel from "../components/TracePanel.jsx";
 import { useDebugEnabled } from "../components/useDebugEnabled.js";
 import { SHOW_UPSCALE } from "../featureFlags.js";
 
-export const STEPS = [
-  { id: "preparation", label: "Préparation" },
-  { id: "script", label: "Écriture" },
-  { id: "references", label: "Références" },
-  { id: "compose", label: "Planches" },
-  ...(SHOW_UPSCALE ? [{ id: "upscale", label: "Upscale", optional: true }] : []),
-];
+export { STEPS };
 
 export default function Wizard() {
   const { name } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const [project, setProject] = useState(null);
-  const [runningJob, setRunningJob] = useState(undefined); // undefined = not yet fetched
+  const [runningJob, setRunningJobLocal] = useState(undefined); // undefined = not yet fetched
   const [error, setError] = useState(null);
-  const [duplicating, setDuplicating] = useState(false);
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
   const debug = useDebugEnabled();
 
+  const { setProjectMeta, setRunningJob, setProjectActions } = useAppContext();
+
   const reload = useCallback(async () => {
     try {
-      const [p, { job }] = await Promise.all([
-        api.getProject(name),
-        api.currentJob(),
-      ]);
+      const [p, { job }] = await Promise.all([api.getProject(name), api.currentJob()]);
       setProject(p);
-      setRunningJob(job); // null when no job is running
+      setRunningJobLocal(job);
+      setRunningJob(job);
       return p;
     } catch (e) {
       setError(e.message);
       return null;
     }
-  }, [name]);
+  }, [name, setRunningJob]);
 
   async function onDuplicate(options) {
-    setDuplicating(true);
     try {
       const { name: newName } = await api.duplicateProject(name, options);
       navigate(`/projects/${encodeURIComponent(newName)}`);
     } catch (e) {
       setError(e.message);
       throw e;
-    } finally {
-      setDuplicating(false);
     }
   }
 
@@ -64,8 +54,7 @@ export default function Wizard() {
     reload();
   }, [reload]);
 
-  // Auto-redirect to the active step when the user lands on /projects/:name (no sub-route).
-  // If a job is currently running for this project, go to the running step directly.
+  // Auto-redirect to the active step on first load
   useEffect(() => {
     if (!project || runningJob === undefined) return;
     const sub = location.pathname.split(`/projects/${encodeURIComponent(name)}`)[1] || "";
@@ -79,6 +68,37 @@ export default function Wizard() {
       navigate(`/projects/${encodeURIComponent(name)}/${targetStep}`, { replace: true });
     }
   }, [project, runningJob, location.pathname, name, navigate]);
+
+  // Sync project metadata to AppBar breadcrumb
+  useEffect(() => {
+    if (!project) return;
+    const activeStep = location.pathname.split("/").pop();
+    setProjectMeta({
+      name,
+      displayName: project.config?.display_name || project.config?.metadata?.title || name,
+      activeStep,
+    });
+  }, [project, location.pathname, name, setProjectMeta]);
+
+  // Publish project-level actions to the ribbon (shared "Projet" tab)
+  useEffect(() => {
+    if (!project) return;
+    setProjectActions({
+      exportUrl: api.exportUrl(name),
+      onDuplicate: () => setShowDuplicateDialog(true),
+      onTrace: debug.enabled
+        ? () => navigate(`/projects/${encodeURIComponent(name)}/trace`)
+        : null,
+    });
+  }, [project, name, debug.enabled, setProjectActions, navigate]);
+
+  // Clear context on unmount
+  useEffect(() => {
+    return () => {
+      setProjectMeta(null);
+      setProjectActions(null);
+    };
+  }, [setProjectMeta, setProjectActions]);
 
   if (error) {
     return (
@@ -96,102 +116,40 @@ export default function Wizard() {
     );
   }
 
-  const activeStep = location.pathname.split("/").pop();
-
   return (
     <div className="max-w-6xl mx-auto px-6 py-6">
-      <header className="mb-6">
-        <div className="flex items-baseline justify-between gap-4 mb-1">
-          <h1 className="text-2xl font-semibold">
-            {project.config?.display_name || project.config?.metadata?.title || project.name}
-          </h1>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="btn btn-ghost text-sm inline-flex items-center gap-2"
-              onClick={() => setShowDuplicateDialog(true)}
-              disabled={duplicating}
-              title="Dupliquer ce projet (choisir les éléments à reprendre)"
-            >
-              <FaCopy aria-hidden />
-              {duplicating ? "Duplication…" : "Dupliquer"}
-            </button>
-            <a
-              href={api.exportUrl(name)}
-              className="btn btn-ghost text-sm inline-flex items-center gap-2"
-              download
-              title="Exporter le projet complet en archive .bdgen"
-            >
-              <FaDownload aria-hidden /> Exporter projet
-            </a>
-            {debug.enabled && (
-              <NavLink
-                to={`/projects/${encodeURIComponent(name)}/trace`}
-                className={({ isActive }) =>
-                  "btn btn-ghost text-sm inline-flex items-center gap-2 " +
-                  (isActive ? "text-[var(--color-primary-700)]" : "")
-                }
-                title="Panneau debug : suivre les prompts et appels modèles"
-              >
-                Trace
-              </NavLink>
-            )}
-          </div>
-        </div>
-        {project.config?.display_name &&
-          project.config?.metadata?.title &&
-          project.config.metadata.title !== project.config.display_name && (
-            <p className="text-sm text-[var(--color-mute)] italic">
-              {project.config.metadata.title}
-            </p>
-          )}
-        {project.config?.metadata?.author && (
-          <p className="text-sm text-[var(--color-ink-soft)]">
-            par {project.config.metadata.author}
-          </p>
+      <Routes>
+        <Route
+          path="preparation"
+          element={<PreparationStep project={project} onSaved={reload} />}
+        />
+        <Route
+          path="script"
+          element={<ScriptStep project={project} onChanged={reload} />}
+        />
+        <Route
+          path="references"
+          element={<ReferencesStep project={project} onChanged={reload} />}
+        />
+        <Route
+          path="compose"
+          element={<ComposeStep project={project} onChanged={reload} />}
+        />
+        <Route
+          path="upscale"
+          element={
+            SHOW_UPSCALE ? (
+              <UpscaleStep project={project} onChanged={reload} />
+            ) : (
+              <Navigate to="../compose" replace />
+            )
+          }
+        />
+        {debug.enabled && (
+          <Route path="trace" element={<TracePanel projectName={name} />} />
         )}
-      </header>
-
-      <StepNav
-        steps={STEPS}
-        active={activeStep}
-        baseUrl={`/projects/${encodeURIComponent(name)}`}
-      />
-
-      <div className="mt-6">
-        <Routes>
-          <Route
-            path="preparation"
-            element={<PreparationStep project={project} onSaved={reload} />}
-          />
-          <Route
-            path="script"
-            element={<ScriptStep project={project} onChanged={reload} />}
-          />
-          <Route
-            path="references"
-            element={<ReferencesStep project={project} onChanged={reload} />}
-          />
-          <Route
-            path="compose"
-            element={<ComposeStep project={project} onChanged={reload} />}
-          />
-          <Route
-            path="upscale"
-            element={
-              SHOW_UPSCALE ? (
-                <UpscaleStep project={project} onChanged={reload} />
-              ) : (
-                <Navigate to="../compose" replace />
-              )
-            }
-          />
-          {debug.enabled && (
-            <Route path="trace" element={<TracePanel projectName={name} />} />
-          )}
-          <Route path="*" element={<Navigate to="preparation" replace />} />
-        </Routes>
-      </div>
+        <Route path="*" element={<Navigate to="preparation" replace />} />
+      </Routes>
 
       {showDuplicateDialog && (
         <DuplicateProjectDialog

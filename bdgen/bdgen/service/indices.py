@@ -7,46 +7,9 @@ from pathlib import Path
 
 from .constants import (
     COHERENCE_INDEX_NAME,
-    QUALITY_INDEX_NAME,
     STALE_INDEX_NAME,
     STALE_STEPS,
 )
-
-
-# --- Per-target quality index ---
-
-
-def _quality_index_path(proj_dir: Path) -> Path:
-    return proj_dir / QUALITY_INDEX_NAME
-
-
-def read_quality_index(proj_dir: Path) -> dict[str, dict[str, str]]:
-    """Return {step: {target_id: quality}} for references and compose.
-
-    A missing entry means the target was never explicitly recorded (typically
-    because it was generated before this index existed). The caller treats
-    missing entries as the project's configured default quality.
-    """
-    p = _quality_index_path(proj_dir)
-    base = {"references": {}, "compose": {}}
-    if not p.exists():
-        return base
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return base
-        for k in ("references", "compose"):
-            if isinstance(data.get(k), dict):
-                base[k] = {str(tid): str(q) for tid, q in data[k].items() if isinstance(q, str)}
-        return base
-    except Exception:
-        return base
-
-
-def write_quality_index(proj_dir: Path, idx: dict[str, dict[str, str]]) -> None:
-    p = _quality_index_path(proj_dir)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(idx, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 # --- Coherence index ---

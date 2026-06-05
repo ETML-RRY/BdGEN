@@ -11,8 +11,25 @@ function _hasDiff(diff) {
     diff.new?.objects?.length > 0 ||
     diff.modified?.characters?.length > 0 ||
     diff.modified?.locations?.length > 0 ||
-    diff.modified?.objects?.length > 0
+    diff.modified?.objects?.length > 0 ||
+    diff.removed?.characters?.length > 0 ||
+    diff.removed?.locations?.length > 0 ||
+    diff.removed?.objects?.length > 0
   );
+}
+
+// Flatten removed entities into rows tagged with their entity kind (plural,
+// matching the backend removals payload keys).
+function _removalRows(diff) {
+  const removed = diff.removed || {};
+  const kindLabels = { characters: "Personnage", locations: "Décor", objects: "Objet" };
+  const rows = [];
+  for (const kind of ["characters", "locations", "objects"]) {
+    for (const e of removed[kind] || []) {
+      rows.push({ ...e, kind, kindLabel: kindLabels[kind] });
+    }
+  }
+  return rows;
 }
 
 function _diffSummaryLines(diff) {
@@ -59,6 +76,24 @@ function _diffSummaryLines(diff) {
 
 function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
   const lines = _diffSummaryLines(diff);
+  const removalRows = _removalRows(diff);
+  // Removals are destructive (they drop & regenerate pages), so each is an
+  // explicit opt-in — nothing is removed unless the user ticks it.
+  const [selected, setSelected] = useState({});
+
+  function toggle(key) {
+    setSelected((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function buildRemovals() {
+    const out = { characters: [], locations: [], objects: [] };
+    for (const row of removalRows) {
+      if (selected[`${row.kind}:${row.id}`]) out[row.kind].push(row.id);
+    }
+    const total = out.characters.length + out.locations.length + out.objects.length;
+    return total > 0 ? out : null;
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="card w-full max-w-lg p-6 space-y-4">
@@ -68,14 +103,59 @@ function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
           sans réécrire l'histoire ni modifier les dialogues existants.
         </p>
 
-        <ul className="space-y-1">
-          {lines.map((l, i) => (
-            <li key={i} className="text-sm flex items-start gap-2">
-              <span className="text-[var(--color-accent)] mt-0.5">•</span>
-              <span>{l}</span>
-            </li>
-          ))}
-        </ul>
+        {lines.length > 0 && (
+          <ul className="space-y-1">
+            {lines.map((l, i) => (
+              <li key={i} className="text-sm flex items-start gap-2">
+                <span className="text-[var(--color-accent)] mt-0.5">•</span>
+                <span>{l}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!syncResult && removalRows.length > 0 && (
+          <div className="rounded-lg bg-[var(--color-peach-100)] border border-[var(--color-peach-300)] p-3 space-y-2">
+            <p className="text-sm font-semibold text-[var(--color-peach-500)]">
+              ⚠️ Éléments retirés de la configuration
+            </p>
+            <p className="text-xs text-[var(--color-mute)]">
+              Cochez ceux à retirer aussi du scénario. Les planches qui les utilisaient seront supprimées et
+              régénérées pour préserver la cohérence. Les éléments non cochés restent dans le scénario.
+            </p>
+            <ul className="space-y-1">
+              {removalRows.map((row) => {
+                const key = `${row.kind}:${row.id}`;
+                return (
+                  <li key={key}>
+                    <label className="flex items-start gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={!!selected[key]}
+                        onChange={() => toggle(key)}
+                        disabled={syncing}
+                      />
+                      <span>
+                        <span className="font-medium">{row.name}</span>{" "}
+                        <span className="text-xs text-[var(--color-mute)]">({row.kindLabel})</span>
+                        <span className="block text-xs text-[var(--color-mute)]">
+                          {row.pages_dropped > 0
+                            ? `${row.pages_dropped} planche${row.pages_dropped > 1 ? "s" : ""} retirée${
+                                row.pages_dropped > 1 ? "s" : ""
+                              } et régénérée${row.pages_dropped > 1 ? "s" : ""} (à partir de la planche ${
+                                row.earliest_affected
+                              }).`
+                            : "Non utilisé dans aucune planche — suppression sans impact."}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {syncResult && (
           <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
@@ -101,12 +181,29 @@ function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
                   );
                 if (c.object_updates)
                   parts.push(`${c.object_updates} objet${c.object_updates > 1 ? "s" : ""} mis à jour`);
+                if (c.character_removals)
+                  parts.push(
+                    `${c.character_removals} personnage${c.character_removals > 1 ? "s" : ""} retiré${c.character_removals > 1 ? "s" : ""}`,
+                  );
+                if (c.location_removals)
+                  parts.push(
+                    `${c.location_removals} décor${c.location_removals > 1 ? "s" : ""} retiré${c.location_removals > 1 ? "s" : ""}`,
+                  );
+                if (c.object_removals)
+                  parts.push(
+                    `${c.object_removals} objet${c.object_removals > 1 ? "s" : ""} retiré${c.object_removals > 1 ? "s" : ""}`,
+                  );
                 if (c.page_updates)
                   parts.push(
                     `${c.page_updates} planche${c.page_updates > 1 ? "s" : ""} mise${c.page_updates > 1 ? "s" : ""} à jour`,
                   );
                 return parts.length ? parts.join(", ") + "." : "";
               })()}
+            {syncResult.pages_dropped > 0 && (
+              <span className="block mt-1">
+                {syncResult.pages_dropped} planche{syncResult.pages_dropped > 1 ? "s" : ""} en cours de régénération…
+              </span>
+            )}
           </div>
         )}
 
@@ -117,7 +214,12 @@ function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
             Continuer sans synchroniser
           </button>
           {!syncResult && (
-            <button type="button" className="btn btn-primary text-sm" onClick={onSync} disabled={syncing}>
+            <button
+              type="button"
+              className="btn btn-primary text-sm"
+              onClick={() => onSync(buildRemovals())}
+              disabled={syncing || (lines.length === 0 && !buildRemovals())}
+            >
               {syncing ? "Synchronisation…" : "Synchroniser le scénario"}
             </button>
           )}
@@ -170,11 +272,11 @@ export default function PreparationStep({ project, onSaved }) {
     navigateToScript();
   }
 
-  async function handleSync() {
+  async function handleSync(removals = null) {
     setSyncing(true);
     setSyncError(null);
     try {
-      const result = await api.syncScriptWithConfig(name);
+      const result = await api.syncScriptWithConfig(name, removals);
       await onSaved(); // Reload project state to reflect script changes.
       setSyncResult(result);
     } catch (e) {

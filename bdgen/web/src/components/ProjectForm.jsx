@@ -1,9 +1,22 @@
 import { useState, useEffect } from "react";
 import { FaPlus, FaTrash, FaPalette, FaChevronDown } from "react-icons/fa6";
 import { api } from "../api.js";
+import useRegisterShell from "../hooks/useRegisterShell.js";
 import StyleFromImageDialog from "./StyleFromImageDialog.jsx";
 import ReferencesBundlePanel from "./ReferencesBundlePanel.jsx";
 import { SHOW_UPSCALE } from "../featureFlags.js";
+
+// Left sub-navigation: one entry per top-level <Section> of the form. The `id`
+// is mirrored onto the section's DOM node so the sidebar can scroll to it and a
+// scroll-spy can highlight the section currently in view.
+const FORM_SECTIONS = [
+  { id: "sec-identite", label: "Identité" },
+  { id: "sec-histoire", label: "Histoire" },
+  { id: "sec-style", label: "Style visuel" },
+  { id: "sec-casting", label: "Casting" },
+  { id: "sec-structure", label: "Structure" },
+  { id: "sec-modeles", label: "Modèles" },
+];
 import {
   STORY_GENRE_PRESETS,
   STORY_TONE_PRESETS,
@@ -327,6 +340,48 @@ export default function ProjectForm({
   useEffect(() => {
     if (initial) setConfig(normalize(initial));
   }, [initial]);
+
+  // ── Left sub-navigation (Préparation only) ────────────────────────────
+  // Jump-to-section list published into the desktop shell sidebar, with a
+  // scroll-spy that highlights whichever section is currently in view. Scoped
+  // to the in-project form (`!isNew`); the standalone "New project" page keeps
+  // its own layout.
+  const [activeSection, setActiveSection] = useState(FORM_SECTIONS[0].id);
+
+  useEffect(() => {
+    if (isNew) return;
+    const els = FORM_SECTIONS.map((s) => document.getElementById(s.id)).filter(Boolean);
+    if (!els.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting);
+        if (!visible.length) return;
+        visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        setActiveSection(visible[0].target.id);
+      },
+      { rootMargin: "-15% 0px -75% 0px", threshold: 0 },
+    );
+    els.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [isNew]);
+
+  function scrollToSection(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveSection(id);
+  }
+
+  useRegisterShell(
+    {
+      sidebar: isNew
+        ? null
+        : {
+            sections: [{ id: "form", label: "Préparation", items: FORM_SECTIONS }],
+            activeItem: activeSection,
+            onSelect: scrollToSection,
+          },
+    },
+    [isNew, activeSection],
+  );
 
   useEffect(() => {
     if (!projectName) return;
@@ -904,7 +959,7 @@ export default function ProjectForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <Section title="Identité du projet">
+      <Section id="sec-identite" title="Identité du projet">
         <Field
           label="Nom du projet (interface)"
           hint="Optionnel — sert uniquement à retrouver le projet dans la liste. N'apparaît jamais dans la BD générée. Si vide, le titre de la BD est affiché."
@@ -956,7 +1011,7 @@ export default function ProjectForm({
         </Grid>
       </Section>
 
-      <Section title="Histoire">
+      <Section id="sec-histoire" title="Histoire">
         <Field label="Synopsis" hint="Présentez l'histoire en quelques phrases.">
           <textarea
             className="textarea min-h-[7rem]"
@@ -1002,6 +1057,7 @@ export default function ProjectForm({
       </Section>
 
       <Section
+        id="sec-style"
         title="Style visuel"
         action={
           <button
@@ -1022,6 +1078,7 @@ export default function ProjectForm({
       </Section>
 
       <Section
+        id="sec-casting"
         title="Casting"
         intro="Personnages, décors et objets — descriptions, photos optionnelles et images de référence. Importez ou exportez un sous-ensemble en .bdrefs pour le réutiliser dans une autre BD (ex. Tome 2)."
         action={
@@ -1294,7 +1351,7 @@ export default function ProjectForm({
         </Subsection>
       </Section>
 
-      <Section title="Structure">
+      <Section id="sec-structure" title="Structure">
         <Grid cols={3}>
           <Field label="Nombre de planches">
             <input
@@ -1375,7 +1432,7 @@ export default function ProjectForm({
         </Field>
       </Section>
 
-      <Section title="Modèles de génération">
+      <Section id="sec-modeles" title="Modèles de génération">
         <Subsection title="Scénario">
           <Grid cols={2}>
             <Field label="Fournisseur du scénario">
@@ -1672,9 +1729,9 @@ export default function ProjectForm({
   );
 }
 
-function Section({ title, intro, action, children }) {
+function Section({ id, title, intro, action, children }) {
   return (
-    <div className="card p-6">
+    <div id={id} className="card p-6 scroll-mt-4">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div className="flex-1 min-w-[12rem]">
           <h3 className="text-base font-semibold">{title}</h3>

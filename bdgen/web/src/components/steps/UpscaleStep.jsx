@@ -7,17 +7,28 @@ export default function UpscaleStep({ project, onChanged }) {
   const options = project.upscale || {};
   const enabled = !!options.enabled;
   const available = !!project.upscale_available;
-  const items = (project.upscaled || []).map((item) => ({
-    id: item.id,
-    label:
+  const items = (project.upscaled || []).map((item) => {
+    const isCover = item.id === "cover" || item.id === "back";
+    const shortLabel =
       item.id === "cover"
-        ? "Couverture upscalée"
+        ? "Couverture"
         : item.id === "back"
-        ? "4ᵉ de couverture upscalée"
-        : `Planche upscalée ${item.id.replace("page_", "")}`,
-    image_url: item.image_url,
-    stale: item.stale,
-  }));
+        ? "4ᵉ de couverture"
+        : `Planche ${item.id.replace("page_", "")}`;
+    return {
+      id: item.id,
+      label:
+        item.id === "cover"
+          ? "Couverture upscalée"
+          : item.id === "back"
+          ? "4ᵉ de couverture upscalée"
+          : `Planche upscalée ${item.id.replace("page_", "")}`,
+      shortLabel,
+      group: isCover ? "Couverture" : "Planches",
+      image_url: item.image_url,
+      stale: item.stale,
+    };
+  });
 
   if (!enabled) {
     return (
@@ -91,6 +102,7 @@ export default function UpscaleStep({ project, onChanged }) {
       items={items}
       layout={project.config?.structure?.page_format || "portrait"}
       allowRefine={false}
+      startLabel="Lancer l'upscale"
       emptyLabel="Aucune planche upscalée pour l'instant."
     />
   );

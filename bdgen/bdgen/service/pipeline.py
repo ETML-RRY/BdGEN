@@ -16,40 +16,9 @@ from ._helpers import _resolve_options
 from ._paths import _composed_path
 from .config import load_config
 from .constants import PROJECT_CONFIG_NAME
-from .indices import (
-    clear_stale,
-    read_quality_index,
-    write_quality_index,
-)
+from .indices import clear_stale
 from .photos import list_character_photos, list_location_photos, list_object_photos
 from .style_refs import attach_existing_reference_images, get_style_reference_path
-
-
-def _record_qualities(
-    proj_dir: Path,
-    step: str,
-    target_to_path: dict[str, Path],
-    pre_existing: set[str],
-    quality: str,
-) -> None:
-    """Update the quality index for targets that were just (re)generated.
-
-    A target is considered "newly generated" if its file exists now AND it
-    wasn't in ``pre_existing`` (the snapshot taken before the engine ran).
-    """
-    idx = read_quality_index(proj_dir)
-    bucket = idx.setdefault(step, {})
-    changed = False
-    for tid, p in target_to_path.items():
-        if not p.exists():
-            continue
-        if tid in pre_existing:
-            continue
-        if bucket.get(tid) != quality:
-            bucket[tid] = quality
-            changed = True
-    if changed:
-        write_quality_index(proj_dir, idx)
 
 
 def _clear_stale_for_regenerated(
@@ -109,7 +78,6 @@ def run_step_references(
     interrupt: InterruptFlag,
     output_root: Path | None = None,
     force_ids: list[str] | None = None,
-    quality_override: str | None = None,
 ) -> BdGenScript:
     from .lifecycle import get_project_dir
 
@@ -126,10 +94,7 @@ def run_step_references(
                 if p.exists():
                     versioning_module.archive_before_write(p, kind="regen")
                     p.unlink()
-    if quality_override:
-        opts.reference_image_model().quality = quality_override
     reference_image_model = opts.reference_image_model()
-    quality_used = reference_image_model.quality
 
     target_paths: dict[str, Path] = {}
     for c in bd_script.characters:
@@ -162,8 +127,7 @@ def run_step_references(
             allow_style_copy=bool(getattr(bd_script, "allow_style_copy", False)),
         )
     finally:
-        # Even on partial completion (interruption), record what landed.
-        _record_qualities(proj_dir, "references", target_paths, pre_existing, quality_used)
+        # Even on partial completion (interruption), clear staleness for what landed.
         _clear_stale_for_regenerated(proj_dir, "references", target_paths, pre_existing, force_ids)
     bd_script.save(script_path)
     return bd_script
@@ -175,7 +139,6 @@ def run_step_compose(
     interrupt: InterruptFlag,
     output_root: Path | None = None,
     force_ids: list[str] | None = None,
-    quality_override: str | None = None,
 ) -> Path:
     from .lifecycle import get_project_dir
 
@@ -191,9 +154,6 @@ def run_step_compose(
             p = _composed_path(pages_dir, fid)
             if p and p.exists():
                 p.unlink()
-    if quality_override:
-        opts.image_model.quality = quality_override
-    quality_used = opts.image_model.quality
 
     target_paths: dict[str, Path] = {}
     if bd_script.cover is not None:
@@ -218,7 +178,6 @@ def run_step_compose(
             stats_project_dir=proj_dir,
         )
     finally:
-        _record_qualities(proj_dir, "compose", target_paths, pre_existing, quality_used)
         _clear_stale_for_regenerated(proj_dir, "compose", target_paths, pre_existing, force_ids)
     return out
 
