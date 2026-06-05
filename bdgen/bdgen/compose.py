@@ -1077,6 +1077,11 @@ def _build_back_prompt(script: BdGenScript, back: BackCover, ref_labels: list[st
         - Character rendering: {style.character_rendering or "consistent with the art style above"}
         {f"- NEGATIVE CONSTRAINTS: {style.negative_constraints}" if style.negative_constraints else ""}
 
+        ALBUM IDENTITY (if you repeat the title or author, use these EXACT
+        strings verbatim — do NOT invent, translate, abbreviate or alter them):
+        - Title: "{script.metadata.title}"
+        - Author: "{script.metadata.author}"
+
         SYNOPSIS BLURB (render this exact text, language: {language}):
         \"\"\"
         {back.synopsis_blurb}
@@ -1105,7 +1110,8 @@ def _build_back_prompt(script: BdGenScript, back: BackCover, ref_labels: list[st
         - The synopsis blurb is the main element, set as readable body text in the
           central area
         - {back.layout_notes or "Standard back-cover layout with reserved zones for the publisher logo (bottom-left) and barcode (bottom-right)"}
-        - Title and author may be subtly repeated at the top
+        - The title and author from ALBUM IDENTITY above may be subtly repeated
+          at the top, using their EXACT spelling
 
         RESERVED EMPTY ZONES — MUST BE LEFT BLANK WHITE:
         - Bottom-right corner: a clean WHITE rectangular space approximately

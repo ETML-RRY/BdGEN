@@ -1351,6 +1351,7 @@ def _anthropic_supports_adaptive_thinking(model: str) -> bool:
             "claude-mythos-preview",
             "claude-opus-4-6",
             "claude-opus-4-7",
+            "claude-opus-4-8",
             "claude-sonnet-4-6",
         )
     )

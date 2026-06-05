@@ -49,6 +49,7 @@ def record_event(
 ) -> None:
     if project_dir is None:
         return
+    speed = _extract_speed(usage)
     usage_payload = normalise_usage(usage)
     event = {
         "id": uuid.uuid4().hex,
@@ -67,7 +68,8 @@ def record_event(
         "prompt_words": word_count(prompt or ""),
         "input_images": input_images,
         "artifact": str(artifact) if artifact is not None else None,
-        "cost_usd": estimate_cost_usd(provider, model, usage_payload),
+        "speed": speed,
+        "cost_usd": estimate_cost_usd(provider, model, usage_payload, speed=speed),
         "cost_is_estimate": True,
         "extra": extra or {},
     }
@@ -130,6 +132,21 @@ def normalise_usage(usage: Any) -> dict[str, int]:
     return {k: v for k, v in out.items() if v}
 
 
+def _extract_speed(usage: Any) -> str | None:
+    """Return the service speed ("fast"/"standard") reported by the provider.
+
+    Anthropic's fast mode reuses the same model id (e.g. ``claude-opus-4-8``)
+    and only signals the tier through ``usage.speed`` in the response, so the
+    model name alone can't tell us which rate card applies.
+    """
+    if usage is None:
+        return None
+    if hasattr(usage, "model_dump"):
+        usage = usage.model_dump()
+    speed = usage.get("speed") if isinstance(usage, dict) else getattr(usage, "speed", None)
+    return speed.lower() if isinstance(speed, str) else None
+
+
 def _dig(data: dict[str, Any], dotted: str) -> Any:
     cur: Any = data
     for part in dotted.split("."):
@@ -139,10 +156,12 @@ def _dig(data: dict[str, Any], dotted: str) -> Any:
     return cur
 
 
-def estimate_cost_usd(provider: str, model: str, usage: dict[str, int]) -> float | None:
+def estimate_cost_usd(
+    provider: str, model: str, usage: dict[str, int], *, speed: str | None = None
+) -> float | None:
     if not usage:
         return None
-    rates = _rates(provider, model)
+    rates = _rates(provider, model, speed=speed)
     if rates is None:
         return None
     cached = usage.get("cached_input_tokens", 0)
@@ -162,7 +181,7 @@ def estimate_cost_usd(provider: str, model: str, usage: dict[str, int]) -> float
     return round(cost, 6)
 
 
-def _rates(provider: str, model: str) -> dict[str, float] | None:
+def _rates(provider: str, model: str, *, speed: str | None = None) -> dict[str, float] | None:
     p = provider.lower()
     m = model.lower()
     if p == "openai":
@@ -184,6 +203,13 @@ def _rates(provider: str, model: str) -> dict[str, float] | None:
             return {"input": 2.5, "cached_input": 1.25, "output": 10.0}
     if p == "anthropic":
         if "opus" in m:
+            # Opus 4.5+ dropped to $5/$25 per M tokens; Opus 4.1 and earlier
+            # stay on the legacy $15/$75 rate card.
+            if any(v in m for v in ("opus-4-5", "opus-4-6", "opus-4-7", "opus-4-8", "opus-4-9")):
+                if speed == "fast":
+                    # Fast mode (research preview): exactly double the standard rate.
+                    return {"input": 10.0, "cache_creation": 12.5, "cached_input": 1.0, "output": 50.0}
+                return {"input": 5.0, "cache_creation": 6.25, "cached_input": 0.5, "output": 25.0}
             return {"input": 15.0, "cache_creation": 18.75, "cached_input": 1.5, "output": 75.0}
         if "sonnet" in m:
             return {"input": 3.0, "cache_creation": 3.75, "cached_input": 0.3, "output": 15.0}

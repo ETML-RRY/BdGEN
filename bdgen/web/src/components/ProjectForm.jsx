@@ -118,6 +118,7 @@ export function slugifyProjectName(source) {
 
 const SCRIPT_MODEL_OPTIONS = {
   anthropic: [
+    { value: "claude-opus-4-8", label: "Claude Opus 4.8" },
     { value: "claude-opus-4-7", label: "Claude Opus 4.7" },
     { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
     { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
@@ -162,6 +163,53 @@ const IMAGE_MODEL_OPTIONS = {
   ],
 };
 
+// Tarifs indicatifs en USD par million de tokens (mode standard, le moins
+// cher). DOIT rester synchronisé avec bdgen/bdgen/stats.py::_rates.
+function modelRates(provider, model) {
+  const p = (provider || "").toLowerCase();
+  const m = (model || "").toLowerCase();
+  if (p === "openai") {
+    if (m.includes("gpt-image-2")) return { input: 5, image_output: 30 };
+    if (m.includes("gpt-image-1")) return { input: 5, output: 0 };
+    if (m.includes("gpt-5.5")) return { input: 5, output: 30 };
+    if (m.includes("gpt-5.4-mini")) return { input: 0.75, output: 4.5 };
+    if (m.includes("gpt-5.4")) return { input: 2.5, output: 15 };
+    if (m.includes("gpt-5")) return { input: 1.25, output: 10 };
+    if (m.includes("gpt-4o-mini")) return { input: 0.15, output: 0.6 };
+    if (m.includes("gpt-4o")) return { input: 2.5, output: 10 };
+    return null;
+  }
+  if (p === "anthropic") {
+    if (m.includes("opus")) {
+      if (["opus-4-5", "opus-4-6", "opus-4-7", "opus-4-8", "opus-4-9"].some((v) => m.includes(v)))
+        return { input: 5, output: 25 };
+      return { input: 15, output: 75 };
+    }
+    if (m.includes("sonnet")) return { input: 3, output: 15 };
+    if (m.includes("haiku-3-5") || m.includes("haiku-3.5")) return { input: 0.8, output: 4 };
+    if (m.includes("haiku")) return { input: 0.25, output: 1.25 };
+    return null;
+  }
+  return null;
+}
+
+function formatModelPrice(provider, model) {
+  const r = modelRates(provider, model);
+  if (!r) return null;
+  const out = r.image_output ?? r.output;
+  const outLabel = r.image_output ? "sortie image" : "sortie";
+  return `≈ ${r.input} $ entrée · ${out} $ ${outLabel} / M tokens`;
+}
+
+// True for Opus variants that offer a premium "fast" tier at double the rate.
+function hasFastTier(provider, model) {
+  const m = (model || "").toLowerCase();
+  return (
+    (provider || "").toLowerCase() === "anthropic" &&
+    ["opus-4-5", "opus-4-6", "opus-4-7", "opus-4-8", "opus-4-9"].some((v) => m.includes(v))
+  );
+}
+
 const QUALITY_OPTIONS = [
   { value: "low", label: "Économique" },
   { value: "medium", label: "Standard" },
@@ -181,6 +229,7 @@ function supportsScriptEffort(provider, model) {
     (model.startsWith("claude-mythos-preview") ||
       model.startsWith("claude-opus-4-6") ||
       model.startsWith("claude-opus-4-7") ||
+      model.startsWith("claude-opus-4-8") ||
       model.startsWith("claude-sonnet-4-6"))
   );
 }
@@ -1836,6 +1885,7 @@ function ModelSelector({ provider, model, optionsByProvider, onChange }) {
   const options = optionsByProvider[provider] || [];
   const known = options.some((option) => option.value === model);
   const selectValue = known ? model : "__custom__";
+  const priceText = formatModelPrice(provider, model);
 
   return (
     <div className="space-y-2">
@@ -1864,6 +1914,16 @@ function ModelSelector({ provider, model, optionsByProvider, onChange }) {
           onChange={(e) => onChange(e.target.value)}
           placeholder="Nom exact du modèle"
         />
+      )}
+      {priceText ? (
+        <p className="text-xs text-[var(--color-mute)]">
+          {priceText}
+          {hasFastTier(provider, model)
+            ? " · mode standard (le moins cher) ; le mode « fast » double ce tarif"
+            : ""}
+        </p>
+      ) : (
+        model && <p className="text-xs text-[var(--color-mute)]">Tarif non estimé pour ce modèle</p>
       )}
     </div>
   );
