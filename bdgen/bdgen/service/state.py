@@ -155,7 +155,10 @@ def derive_state(proj_dir: Path) -> Step:
     """
     config_path = proj_dir / PROJECT_CONFIG_NAME
     script_path = proj_dir / "bdgen-script.json"
-    if not config_path.exists() and not script_path.exists():
+    # No script yet means the project hasn't moved past its initial setup:
+    # land on "preparation" so a freshly created project (config saved, no
+    # script) opens on step 1 rather than skipping ahead to "script".
+    if not script_path.exists():
         return "preparation"
     bd_script = None
     if script_path.exists():

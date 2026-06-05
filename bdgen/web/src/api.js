@@ -62,6 +62,26 @@ export const api = {
   getProject: (name) => request(`/api/projects/${encodeURIComponent(name)}`),
   getProjectStatistics: (name) => request(`/api/projects/${encodeURIComponent(name)}/statistics`),
   createProject: (config) => request("/api/projects", { method: "POST", body: JSON.stringify(config) }),
+  quickCreate: async (prompt, { language = "fr", files = [], artStyle = "" } = {}) => {
+    const fd = new FormData();
+    fd.append("prompt", prompt);
+    fd.append("language", language);
+    fd.append("art_style", artStyle);
+    for (const file of files) fd.append("files", file);
+    const res = await fetch("/api/quick-create", { method: "POST", body: fd });
+    if (!res.ok) {
+      let body;
+      try {
+        body = await res.json();
+      } catch {
+        body = { detail: await res.text() };
+      }
+      const err = new Error(body.detail || res.statusText);
+      err.status = res.status;
+      throw err;
+    }
+    return res.json();
+  },
   updateProject: (name, config) =>
     request(`/api/projects/${encodeURIComponent(name)}`, {
       method: "PUT",

@@ -101,6 +101,21 @@ export const DEFAULT_CONFIG = {
   },
 };
 
+// Derive a filesystem-safe project slug from a human label (display name or
+// title). Mirrors the backend's slugify so the same idea yields the same id.
+// Falls back to "projet" when the source has no usable characters.
+export function slugifyProjectName(source) {
+  return (
+    (source || "projet")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60) || "projet"
+  );
+}
+
 const SCRIPT_MODEL_OPTIONS = {
   anthropic: [
     { value: "claude-opus-4-7", label: "Claude Opus 4.7" },
@@ -815,16 +830,8 @@ export default function ProjectForm({
 
   function prepareConfig() {
     const out = structuredClone(config);
-    const slugSource = out.display_name || out.metadata.title || "projet";
     if (isNew && !out.project) {
-      out.project =
-        slugSource
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[̀-ͯ]/g, "")
-          .replace(/[^a-z0-9]+/g, "_")
-          .replace(/^_+|_+$/g, "")
-          .slice(0, 60) || "projet";
+      out.project = slugifyProjectName(out.display_name || out.metadata.title);
     }
     out.display_name = out.display_name?.trim() || null;
     out.structure.page_count = Number(out.structure.page_count);
