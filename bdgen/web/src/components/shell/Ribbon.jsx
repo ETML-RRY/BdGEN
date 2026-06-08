@@ -1,40 +1,42 @@
 import { NavLink, Link, useLocation } from "react-router-dom";
 import { FiHome } from "react-icons/fi";
+import { useTranslation } from "react-i18next";
 import { useAppContext } from "../../context/AppContext.jsx";
-import { STEPS } from "../../steps.js";
+import { useTranslatedSteps } from "../../hooks/useTranslatedSteps.js";
 
 /**
- * Office-style ribbon. Its tab strip is the project's phase navigation
- * (Préparation ▸ Écriture ▸ Références ▸ Planches). The BD title now lives in
- * the application title bar (AppBar). The body below renders the command groups
- * published by the active phase through the `ribbon` slot:
+ * Office-style ribbon. Its tab strip is the project's phase navigation.
+ * The body below renders the command groups published by the active phase
+ * through the `ribbon` slot:
  *   { groups: [{ id, label, commands: [command] }] }
  *   command = { id, label, icon, onClick, disabled, active, tone, title, size, ref }
  * `ref` (optional) is forwarded to the command's button so a phase can anchor a
  * popover under it (e.g. the targeted-retouch panel).
  *
- * The ribbon belongs to a project — outside one (Home / Réglages) there are no
- * phases, so it renders nothing.
+ * The ribbon belongs to a project — outside one (Home / Settings) it renders
+ * nothing.
  */
 export default function Ribbon() {
   const { ribbon, projectMeta } = useAppContext();
   const location = useLocation();
+  const { t } = useTranslation();
+  const steps = useTranslatedSteps();
 
   if (!projectMeta) return null;
 
   const baseUrl = `/projects/${encodeURIComponent(projectMeta.name)}`;
   const activeStep = location.pathname.split("/").pop();
-  const activeIdx = STEPS.findIndex((s) => s.id === activeStep);
+  const activeIdx = steps.findIndex((s) => s.id === activeStep);
   const groups = ribbon?.groups ?? [];
 
   return (
     <div className="ribbon">
       <div className="ribbon-tabs">
-        <Link to="/" className="ribbon-home" title="Retour à l'accueil" aria-label="Retour à l'accueil">
+        <Link to="/" className="ribbon-home" title={t("ribbon.homeAria")} aria-label={t("ribbon.homeAria")}>
           <FiHome aria-hidden />
         </Link>
-        <div className="ribbon-tablist" role="tablist" aria-label="Phases du projet">
-          {STEPS.map((step, i) => {
+        <div className="ribbon-tablist" role="tablist" aria-label={t("ribbon.phasesAria")}>
+          {steps.map((step, i) => {
             const done = activeIdx >= 0 && i < activeIdx;
             return (
               <NavLink
@@ -47,7 +49,7 @@ export default function Ribbon() {
                   {done ? "✓" : i + 1}
                 </span>
                 <span>{step.label}</span>
-                {step.optional && <span className="phase-tab-opt">(opt.)</span>}
+                {step.optional && <span className="phase-tab-opt">{t("ribbon.optionalMarker")}</span>}
               </NavLink>
             );
           })}

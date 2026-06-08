@@ -1,14 +1,16 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function ConfirmDialog({
   title,
   body,
-  confirmLabel = "Confirmer",
-  cancelLabel = "Annuler",
+  confirmLabel,
+  cancelLabel,
   variant = "primary",
   onConfirm,
   onClose,
 }) {
+  const { t } = useTranslation();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -39,7 +41,7 @@ export default function ConfirmDialog({
             onClick={onClose}
             disabled={submitting}
           >
-            {cancelLabel}
+            {cancelLabel ?? t("common.cancel")}
           </button>
           <button
             type="button"
@@ -47,7 +49,7 @@ export default function ConfirmDialog({
             onClick={handleConfirm}
             disabled={submitting}
           >
-            {submitting ? "En cours…" : confirmLabel}
+            {submitting ? t("dialogs.confirm.inProgress") : confirmLabel ?? t("common.confirm")}
           </button>
         </div>
       </div>

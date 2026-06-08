@@ -1,7 +1,9 @@
+import { useTranslation, Trans } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import ImageStep from "../ImageStep.jsx";
 
 export default function UpscaleStep({ project, onChanged }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { name } = useParams();
   const options = project.upscale || {};
@@ -11,20 +13,20 @@ export default function UpscaleStep({ project, onChanged }) {
     const isCover = item.id === "cover" || item.id === "back";
     const shortLabel =
       item.id === "cover"
-        ? "Couverture"
+        ? t("stepsUi.upscale.cover")
         : item.id === "back"
-        ? "4ᵉ de couverture"
-        : `Planche ${item.id.replace("page_", "")}`;
+        ? t("stepsUi.upscale.backCover")
+        : t("stepsUi.upscale.page", { n: item.id.replace("page_", "") });
     return {
       id: item.id,
       label:
         item.id === "cover"
-          ? "Couverture upscalée"
+          ? t("stepsUi.upscale.coverUpscaled")
           : item.id === "back"
-          ? "4ᵉ de couverture upscalée"
-          : `Planche upscalée ${item.id.replace("page_", "")}`,
+          ? t("stepsUi.upscale.backCoverUpscaled")
+          : t("stepsUi.upscale.pageUpscaled", { n: item.id.replace("page_", "") }),
       shortLabel,
-      group: isCover ? "Couverture" : "Planches",
+      group: isCover ? t("stepsUi.upscale.groupCover") : t("stepsUi.upscale.groupPages"),
       image_url: item.image_url,
       stale: item.stale,
     };
@@ -33,11 +35,9 @@ export default function UpscaleStep({ project, onChanged }) {
   if (!enabled) {
     return (
       <div className="card p-8 text-center">
-        <h2 className="text-lg font-semibold mb-2">Upscale (Pruna)</h2>
+        <h2 className="text-lg font-semibold mb-2">{t("stepsUi.upscale.title")}</h2>
         <p className="text-[var(--color-ink-soft)] max-w-2xl mx-auto mb-4">
-          L'upscale n'est pas activé pour ce projet. Activez-le dans la section
-          Préparation (Modèles de génération &rarr; Upscale local CPU) pour
-          agrandir les planches via le modèle Pruna local.
+          {t("stepsUi.upscale.notEnabled")}
         </p>
         <button
           className="btn btn-secondary"
@@ -47,7 +47,7 @@ export default function UpscaleStep({ project, onChanged }) {
             )
           }
         >
-          Aller à la Préparation
+          {t("stepsUi.upscale.goPreparation")}
         </button>
       </div>
     );
@@ -56,14 +56,14 @@ export default function UpscaleStep({ project, onChanged }) {
   if (!available) {
     return (
       <div className="card p-8 text-center">
-        <h2 className="text-lg font-semibold mb-2">Upscale (Pruna via Replicate)</h2>
+        <h2 className="text-lg font-semibold mb-2">{t("stepsUi.upscale.titleReplicate")}</h2>
         <p className="text-[var(--color-ink-soft)] max-w-2xl mx-auto mb-4">
-          L'upscale est activé mais la clé API Replicate n'est pas configurée
-          sur le serveur. Ajoutez{" "}
-          <code className="text-xs bg-[var(--color-paper-soft)] px-1 py-0.5 rounded">
-            REPLICATE_API_TOKEN
-          </code>{" "}
-          dans le fichier <code className="text-xs bg-[var(--color-paper-soft)] px-1 py-0.5 rounded">.env</code> du serveur.
+          <Trans
+            i18nKey="stepsUi.upscale.missingReplicate"
+            components={{
+              code: <code className="text-xs bg-[var(--color-paper-soft)] px-1 py-0.5 rounded" />,
+            }}
+          />
         </p>
       </div>
     );
@@ -73,10 +73,9 @@ export default function UpscaleStep({ project, onChanged }) {
   if (!hasComposed) {
     return (
       <div className="card p-8 text-center">
-        <h2 className="text-lg font-semibold mb-2">Upscale (Pruna)</h2>
+        <h2 className="text-lg font-semibold mb-2">{t("stepsUi.upscale.title")}</h2>
         <p className="text-[var(--color-ink-soft)] max-w-2xl mx-auto mb-4">
-          Aucune planche composée n'est disponible. Générez d'abord les
-          planches à l'étape précédente avant de lancer l'upscale.
+          {t("stepsUi.upscale.noPages")}
         </p>
         <button
           className="btn btn-secondary"
@@ -86,7 +85,7 @@ export default function UpscaleStep({ project, onChanged }) {
             )
           }
         >
-          Aller aux Planches
+          {t("stepsUi.upscale.goPages")}
         </button>
       </div>
     );
@@ -97,13 +96,13 @@ export default function UpscaleStep({ project, onChanged }) {
       project={project}
       onChanged={onChanged}
       stepId="upscale"
-      title="Upscale (Pruna)"
-      intro="Agrandissement des planches via Pruna P-Image-Upscale (Replicate). Coût : ~$0.005/image (1-4 MP) ou ~$0.01/image (5-8 MP)."
+      title={t("stepsUi.upscale.imageStepTitle")}
+      intro={t("stepsUi.upscale.intro")}
       items={items}
       layout={project.config?.structure?.page_format || "portrait"}
       allowRefine={false}
-      startLabel="Lancer l'upscale"
-      emptyLabel="Aucune planche upscalée pour l'instant."
+      startLabel={t("stepsUi.upscale.startLabel")}
+      emptyLabel={t("stepsUi.upscale.emptyLabel")}
     />
   );
 }

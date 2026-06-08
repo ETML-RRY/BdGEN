@@ -31,9 +31,10 @@ describe("Ribbon", () => {
 
   it("renders the phase tabs as the tab strip and marks the active phase", () => {
     wrapRouter({ ribbon: null, projectMeta: META }, <Ribbon />);
-    // Phases come from STEPS — the route is on "compose" → "Planches" is active.
-    expect(screen.getByRole("tab", { name: "Préparation" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Planches" })).toHaveClass("active");
+    // Phases come from STEPS — the route is on "compose" → "Pages" is active.
+    // i18n is initialised in test/setup.js with lng="en".
+    expect(screen.getByRole("tab", { name: "Preparation" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Pages" })).toHaveClass("active");
   });
 
   it("renders nothing outside a project", () => {

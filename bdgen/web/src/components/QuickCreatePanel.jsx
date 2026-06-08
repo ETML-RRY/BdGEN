@@ -1,26 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
-import { STYLE_ART_STYLE_PRESETS } from "./projectFormPresets.js";
+import { presetsFor } from "./projectFormPresets.js";
+import { formatError } from "../i18n/formatError.js";
 
-const PLACEHOLDER = `Décrivez votre envie, du plus vague au plus précis. Par exemple :
-
-• « Surprends-moi avec une histoire de SF »
-• « La fondation d'une entreprise informatique par deux amis dans un garage, en manga »
-• « Transforme mon support de cours de biologie ci-joint en BD pédagogique »`;
-
-// Formats accepted by the backend (see document_text.SUPPORTED_EXTENSIONS).
 const ACCEPTED = ".txt,.text,.md,.markdown,.rst,.csv,.log,.docx,.pdf";
 const MAX_FILES = 5;
-
-// Reassuring staged messages shown during the (non-streamed) LLM call. The
-// request is a single round-trip, so we can't show true progress — we cycle
-// through plausible stages and a live elapsed counter instead.
-const STAGES = [
-  "Analyse de votre demande…",
-  "Construction de l'histoire…",
-  "Création du casting et du style visuel…",
-  "Mise en forme du formulaire…",
-];
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} o`;
@@ -28,7 +13,19 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
+function useStageMessages() {
+  const { t } = useTranslation();
+  return [
+    t("quickCreate.stageAnalyze"),
+    t("quickCreate.stageStory"),
+    t("quickCreate.stageCasting"),
+    t("quickCreate.stageFormat"),
+  ];
+}
+
 export default function QuickCreatePanel({ onGenerated, onSkip }) {
+  const { t, i18n } = useTranslation();
+  const STAGES = useStageMessages();
   const [prompt, setPrompt] = useState("");
   const [artStyle, setArtStyle] = useState("");
   const [files, setFiles] = useState([]);
@@ -54,7 +51,7 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
       setStage(Math.min(STAGES.length - 1, Math.floor(secs / 4)));
     }, 500);
     return () => clearInterval(timer);
-  }, [loading]);
+  }, [loading, STAGES]);
 
   function addFiles(selected) {
     if (!selected || selected.length === 0) return;
@@ -65,7 +62,7 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
         if (!merged.some((e) => e.name === f.name && e.size === f.size)) merged.push(f);
       }
       if (merged.length > MAX_FILES) {
-        setError(`Maximum ${MAX_FILES} documents.`);
+        setError(t("quickCreate.maxFiles", { max: MAX_FILES }));
         return merged.slice(0, MAX_FILES);
       }
       return merged;
@@ -87,12 +84,18 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
     setLoading(true);
     setError(null);
     try {
-      const draft = await api.quickCreate(prompt.trim(), { files, artStyle });
+      // Pass the current UI language so the backend quick-create prompt is
+      // written in the user's language (not always French).
+      const draft = await api.quickCreate(prompt.trim(), {
+        language: i18n.language,
+        files,
+        artStyle,
+      });
       // Awaited: onGenerated saves the project and navigates, so keep the
       // spinner up until it resolves (or throws back here).
       await onGenerated(draft);
     } catch (e) {
-      setError(e.message || "La génération a échoué.");
+      setError(formatError(e, t) || t("quickCreate.failed"));
     } finally {
       setLoading(false);
     }
@@ -106,22 +109,21 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
     }
   }
 
+  const artStyleOptions = presetsFor("styleArtStyle", i18n.language);
+
   return (
     <div className="card p-6 space-y-4">
       <div className="space-y-1">
-        <h2 className="text-lg font-semibold">Création rapide</h2>
+        <h2 className="text-lg font-semibold">{t("quickCreate.title")}</h2>
         <p className="text-sm text-[var(--color-ink-soft)]">
-          Décrivez votre idée en une phrase ou un paragraphe, et/ou ajoutez des
-          documents de référence (cours, notes…). Nous pré-remplissons le
-          formulaire (histoire, style, structure et casting) ; vous pourrez tout
-          relire et ajuster ensuite.
+          {t("quickCreate.body")}
         </p>
       </div>
 
       <textarea
         className="textarea min-h-[14rem] resize-y leading-relaxed"
         rows={8}
-        placeholder={PLACEHOLDER}
+        placeholder={t("quickCreate.placeholder")}
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         onKeyDown={onKeyDown}
@@ -132,7 +134,7 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
       {/* Visual style */}
       <div className="space-y-1">
         <label htmlFor="qc-style" className="block text-sm font-medium">
-          Style visuel
+          {t("quickCreate.styleLabel")}
         </label>
         <select
           id="qc-style"
@@ -141,15 +143,15 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
           onChange={(e) => setArtStyle(e.target.value)}
           disabled={loading}
         >
-          <option value="">Laisser l'IA choisir selon l'histoire</option>
-          {STYLE_ART_STYLE_PRESETS.map((s) => (
+          <option value="">{t("quickCreate.styleAiOption")}</option>
+          {artStyleOptions.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
         </select>
         <p className="text-xs text-[var(--color-ink-soft)]">
-          Vous pourrez l'affiner en détail dans le formulaire.
+          {t("quickCreate.styleHint")}
         </p>
       </div>
 
@@ -169,10 +171,10 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
           onClick={() => fileInputRef.current?.click()}
           disabled={loading || files.length >= MAX_FILES}
         >
-          + Ajouter des documents
+          {t("quickCreate.addDocs")}
         </button>
         <span className="ml-2 text-xs text-[var(--color-ink-soft)]">
-          Word, PDF, texte (.docx, .pdf, .txt, .md…) — max {MAX_FILES}
+          {t("quickCreate.docsHint", { max: MAX_FILES })}
         </span>
 
         {hasFiles && (
@@ -191,8 +193,8 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
                   className="text-[var(--color-ink-soft)] hover:text-[var(--color-rose-500)]"
                   onClick={() => removeFile(i)}
                   disabled={loading}
-                  aria-label={`Retirer ${f.name}`}
-                  title="Retirer"
+                  aria-label={t("quickCreate.removeFileAria", { name: f.name })}
+                  title={t("quickCreate.removeFileTitle")}
                 >
                   ✕
                 </button>
@@ -223,7 +225,7 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
           onClick={generate}
           disabled={!canGenerate}
         >
-          {loading ? "Génération en cours…" : "Générer le brouillon"}
+          {loading ? t("quickCreate.generating") : t("quickCreate.generate")}
         </button>
         <button
           type="button"
@@ -231,7 +233,7 @@ export default function QuickCreatePanel({ onGenerated, onSkip }) {
           onClick={onSkip}
           disabled={loading}
         >
-          Remplir manuellement
+          {t("quickCreate.manual")}
         </button>
       </div>
     </div>

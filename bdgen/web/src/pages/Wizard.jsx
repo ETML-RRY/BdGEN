@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Routes, Route, Link, useParams, useLocation, useNavigate, Navigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
 import { useAppContext } from "../context/AppContext.jsx";
 import { STEPS } from "../steps.js";
@@ -12,6 +13,7 @@ import DuplicateProjectDialog from "../components/DuplicateProjectDialog.jsx";
 import TracePanel from "../components/TracePanel.jsx";
 import { useDebugEnabled } from "../components/useDebugEnabled.js";
 import { SHOW_UPSCALE } from "../featureFlags.js";
+import { formatError } from "../i18n/formatError.js";
 
 export { STEPS };
 
@@ -19,6 +21,7 @@ export default function Wizard() {
   const { name } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
   const [project, setProject] = useState(null);
   const [runningJob, setRunningJobLocal] = useState(undefined); // undefined = not yet fetched
   const [error, setError] = useState(null);
@@ -35,17 +38,17 @@ export default function Wizard() {
       setRunningJob(job);
       return p;
     } catch (e) {
-      setError(e.message);
+      setError(formatError(e, t));
       return null;
     }
-  }, [name, setRunningJob]);
+  }, [name, setRunningJob, t]);
 
   async function onDuplicate(options) {
     try {
       const { name: newName } = await api.duplicateProject(name, options);
       navigate(`/projects/${encodeURIComponent(newName)}`);
     } catch (e) {
-      setError(e.message);
+      setError(formatError(e, t));
       throw e;
     }
   }
@@ -80,7 +83,7 @@ export default function Wizard() {
     });
   }, [project, location.pathname, name, setProjectMeta]);
 
-  // Publish project-level actions to the ribbon (shared "Projet" tab)
+  // Publish project-level actions to the ribbon (shared "Project" tab)
   useEffect(() => {
     if (!project) return;
     setProjectActions({
@@ -103,15 +106,15 @@ export default function Wizard() {
   if (error) {
     return (
       <div className="max-w-4xl mx-auto px-6 py-8">
-        <p className="card p-4 text-[var(--color-rose-500)]">Erreur : {error}</p>
-        <Link to="/" className="btn btn-secondary mt-4">Retour à l'accueil</Link>
+        <p className="card p-4 text-[var(--color-rose-500)]">{t("wizard.errorPrefix", { error: formatError(error, t) })}</p>
+        <Link to="/" className="btn btn-secondary mt-4">{t("wizard.backToHome")}</Link>
       </div>
     );
   }
   if (!project) {
     return (
       <div className="max-w-4xl mx-auto px-6 py-8 text-[var(--color-mute)]">
-        Chargement…
+        {t("wizard.loading")}
       </div>
     );
   }

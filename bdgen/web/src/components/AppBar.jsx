@@ -1,14 +1,12 @@
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { FiMinus, FiSquare, FiX, FiFolder, FiKey } from "react-icons/fi";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppContext } from "../context/AppContext.jsx";
-
-const PRIMARY_NAV = [
-  { id: "projects", label: "Projets", to: "/", icon: FiFolder, match: (p) => !p.startsWith("/settings") },
-  { id: "keys", label: "Clés API", to: "/settings/secrets", icon: FiKey, match: (p) => p.startsWith("/settings") },
-];
+import LanguageSwitcher from "../i18n/LanguageSwitcher.jsx";
 
 export default function AppBar({ hideNav = false }) {
+  const { t } = useTranslation();
   const isDesktop = Boolean(window.bdgenDesktop);
   const isMac = window.bdgenDesktop?.platform === "darwin";
   const [maximized, setMaximized] = useState(false);
@@ -21,18 +19,26 @@ export default function AppBar({ hideNav = false }) {
     return window.bdgenDesktop.onMaximizedChange(setMaximized);
   }, [isDesktop]);
 
+  const primaryNav = useMemo(
+    () => [
+      { id: "projects", label: t("nav.projects"), to: "/", icon: FiFolder, match: (p) => !p.startsWith("/settings") },
+      { id: "keys", label: t("nav.apiKeys"), to: "/settings/secrets", icon: FiKey, match: (p) => p.startsWith("/settings") },
+    ],
+    [t],
+  );
+
   const leftContent = (
     <div className={`flex items-center gap-3 min-w-0 ${isDesktop ? "desktop-no-drag" : ""}`}>
       <Link
         to="/"
         className="flex items-center gap-2 font-semibold text-sm hover:text-[var(--color-primary-700)] transition-colors flex-shrink-0"
       >
-        <img src="/bd_gen_logo.svg" alt="Logo BdGEN" className="w-7 h-7 object-contain" />
+        <img src="/bd_gen_logo.svg" alt={t("appBar.logoAlt")} className="w-7 h-7 object-contain" />
         <span>BdGEN</span>
       </Link>
       {!hideNav && (
-        <nav className="primary-nav" aria-label="Navigation principale">
-          {PRIMARY_NAV.map((item) => {
+        <nav className="primary-nav" aria-label={t("nav.primaryAria")}>
+          {primaryNav.map((item) => {
             const Icon = item.icon;
             const active = item.match(location.pathname);
             return (
@@ -62,13 +68,14 @@ export default function AppBar({ hideNav = false }) {
   ) : null;
 
   const rightContent = (
-    <div className={`flex h-full items-center gap-1 ${isDesktop ? "desktop-no-drag" : ""}`}>
+    <div className={`flex h-full items-center gap-2 ${isDesktop ? "desktop-no-drag" : ""}`}>
+      <LanguageSwitcher />
       {isDesktop && !isMac && (
         <div className="flex h-full ml-1">
           <button
             type="button"
             className="window-control"
-            title="Minimiser"
+            title={t("appBar.minimize")}
             onClick={() => window.bdgenDesktop.minimize()}
           >
             <FiMinus aria-hidden />
@@ -76,7 +83,7 @@ export default function AppBar({ hideNav = false }) {
           <button
             type="button"
             className="window-control"
-            title={maximized ? "Restaurer" : "Agrandir"}
+            title={maximized ? t("appBar.restore") : t("appBar.maximize")}
             onClick={() => window.bdgenDesktop.toggleMaximize().then(setMaximized)}
           >
             <FiSquare aria-hidden />
@@ -84,7 +91,7 @@ export default function AppBar({ hideNav = false }) {
           <button
             type="button"
             className="window-control window-control-close"
-            title="Fermer"
+            title={t("appBar.close")}
             onClick={() => window.bdgenDesktop.close()}
           >
             <FiX aria-hidden />

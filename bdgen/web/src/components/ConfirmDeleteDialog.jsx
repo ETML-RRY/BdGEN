@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 /**
  * Confirmation dialog for destructive actions on script entities.
@@ -16,8 +17,9 @@ export default function ConfirmDeleteDialog({
   loadPreview,
   onConfirm,
   onClose,
-  confirmLabel = "Supprimer",
+  confirmLabel,
 }) {
+  const { t } = useTranslation();
   const [preview, setPreview] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -54,7 +56,7 @@ export default function ConfirmDeleteDialog({
 
         {loadingPreview && (
           <p className="text-xs text-[var(--color-mute)]">
-            Analyse de l'impact…
+            {t("dialogs.confirmDelete.loadingImpact")}
           </p>
         )}
 
@@ -70,25 +72,20 @@ export default function ConfirmDeleteDialog({
             {cascade ? (
               <>
                 <div className="font-semibold mb-1">
-                  ⚠️ Régénération du scénario nécessaire
+                  {t("dialogs.confirmDelete.cascadeTitle")}
                 </div>
                 <div>
-                  {preview.pages_dropped} planche
-                  {preview.pages_dropped > 1 ? "s" : ""}{" "}
-                  (à partir de la planche {preview.earliest_affected}) seront
-                  supprimées et réécrites pour préserver la cohérence
-                  narrative.
+                  {t("dialogs.confirmDelete.cascadeBody", {
+                    count: preview.pages_dropped,
+                    from: preview.earliest_affected,
+                  })}
                 </div>
                 <div className="mt-1 text-xs">
-                  La couverture et la 4ᵉ de couverture restent inchangées —
-                  vous pourrez les retoucher séparément.
+                  {t("dialogs.confirmDelete.cascadeFootnote")}
                 </div>
               </>
             ) : (
-              <>
-                ✓ Cet élément n'est mentionné dans aucune planche existante. La
-                suppression n'affectera pas le scénario.
-              </>
+              <>{t("dialogs.confirmDelete.noImpact")}</>
             )}
           </div>
         )}
@@ -104,7 +101,7 @@ export default function ConfirmDeleteDialog({
             onClick={onClose}
             disabled={submitting}
           >
-            Annuler
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -113,10 +110,10 @@ export default function ConfirmDeleteDialog({
             disabled={submitting || loadingPreview}
           >
             {submitting
-              ? "Suppression…"
+              ? t("dialogs.confirmDelete.deleting")
               : cascade
-              ? "Supprimer et régénérer"
-              : confirmLabel}
+              ? t("dialogs.confirmDelete.deleteAndRegen")
+              : confirmLabel ?? t("common.delete")}
           </button>
         </div>
       </div>

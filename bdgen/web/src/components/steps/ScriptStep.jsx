@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import { FaWandMagicSparkles, FaArrowRotateRight, FaListCheck } from "react-icons/fa6";
 import { api } from "../../api.js";
@@ -8,11 +9,13 @@ import { projectRibbonGroup } from "../shell/ribbonModel.js";
 import useJobStream from "../useJobStream.js";
 import ProgressPanel from "../ProgressPanel.jsx";
 import RunningBanner from "../RunningBanner.jsx";
-import ScriptBrowser, { SCRIPT_TABS } from "../ScriptBrowser.jsx";
+import ScriptBrowser, { useScriptTabs } from "../ScriptBrowser.jsx";
 import ConfirmDialog from "../ConfirmDialog.jsx";
 import { SHOW_COHERENCE_CHECK } from "../../featureFlags.js";
+import { formatError } from "../../i18n/formatError.js";
 
 export default function ScriptStep({ project, onChanged }) {
+  const { t } = useTranslation();
   const { name } = useParams();
   const { projectActions } = useAppContext();
   const stream = useJobStream({ project: name, step: "script" });
@@ -42,7 +45,7 @@ export default function ScriptStep({ project, onChanged }) {
       // SSE event lands, and the user can click again.
       await stream.refresh();
     } catch (e) {
-      setError(e.message);
+      setError(formatError(e, t));
     } finally {
       setStarting(false);
     }
@@ -55,7 +58,7 @@ export default function ScriptStep({ project, onChanged }) {
       await api.checkScriptCoherence(name);
       await onChanged();
     } catch (e) {
-      setCoherenceError(e.message);
+      setCoherenceError(formatError(e, t));
     } finally {
       setCheckingCoherence(false);
     }
@@ -68,8 +71,10 @@ export default function ScriptStep({ project, onChanged }) {
     const all = [...pageIssues, ...pageSuggestions];
     const feedback =
       all.length > 0
-        ? `Améliore cette planche en tenant compte de ces remarques de cohérence : ${all.map((i) => i.message).join(" ")}`
-        : "Regénère cette planche pour renforcer la cohérence du scénario.";
+        ? t("scriptBrowser.feedbackImprove", {
+            messages: all.map((i) => i.message).join(" "),
+          })
+        : t("scriptBrowser.feedbackRegen");
     await api.refinePage(name, pageNumber, feedback, true);
     await onChanged();
   }
@@ -104,7 +109,7 @@ export default function ScriptStep({ project, onChanged }) {
   if (!hasPages) {
     genCommands.push({
       id: "write",
-      label: "Lancer l'écriture",
+      label: t("scriptBrowser.ribbon.write"),
       icon: <FaWandMagicSparkles />,
       tone: "primary",
       onClick: start,
@@ -114,7 +119,7 @@ export default function ScriptStep({ project, onChanged }) {
     if (!isComplete) {
       genCommands.push({
         id: "resume",
-        label: "Reprendre",
+        label: t("scriptBrowser.ribbon.resume"),
         icon: <FaWandMagicSparkles />,
         tone: "primary",
         onClick: start,
@@ -123,34 +128,40 @@ export default function ScriptStep({ project, onChanged }) {
     }
     genCommands.push({
       id: "regen-all",
-      label: "Régénérer tout",
+      label: t("scriptBrowser.ribbon.regenAll"),
       icon: <FaArrowRotateRight />,
       tone: "danger",
       onClick: () => setConfirmingRegenAll(true),
       disabled: starting || blocked || isRunning,
-      title: "Réécrit tout le scénario de zéro.",
+      title: t("scriptBrowser.ribbon.regenAllTitle"),
     });
   }
-  const ribbonGroups = [{ id: "gen", label: "Scénario", commands: genCommands }];
+  const ribbonGroups = [
+    { id: "gen", label: t("scriptBrowser.ribbon.groupScript"), commands: genCommands },
+  ];
   if (hasPages && SHOW_COHERENCE_CHECK) {
     ribbonGroups.push({
       id: "coh",
-      label: "Cohérence",
+      label: t("scriptBrowser.ribbon.groupCoherence"),
       commands: [
         {
           id: "check",
-          label: "Vérifier",
+          label: t("scriptBrowser.ribbon.check"),
           icon: <FaListCheck />,
           onClick: checkCoherence,
           active: checkingCoherence,
           disabled: checkingCoherence || blocked || isRunning,
-          title: "Analyse la cohérence du scénario.",
+          title: t("scriptBrowser.ribbon.checkTitle"),
         },
       ],
     });
   }
-  const projectGroup = projectRibbonGroup(projectActions);
+  const projectGroup = projectRibbonGroup(projectActions, [], t);
   if (projectGroup) ribbonGroups.push(projectGroup);
+
+  // Script tab labels are language-aware; resolve them via a hook so the
+  // sidebar matches the script browser's own tab strip.
+  const scriptTabs = useScriptTabs();
 
   // Left sidebar — script sub-sections, shown whenever the browser is on screen
   // (i.e. some content already exists). Mirrors the Planches phase navigation.
@@ -167,14 +178,14 @@ export default function ScriptStep({ project, onChanged }) {
         sections: [
           {
             id: "script",
-            label: "Scénario",
-            items: SCRIPT_TABS.map((t) => {
-              const item = { id: t.id, label: t.label };
-              if (t.id === "characters") item.badge = charCount || undefined;
-              else if (t.id === "locations") item.badge = script?.locations?.length || undefined;
-              else if (t.id === "objects") item.badge = script?.objects?.length || undefined;
-              else if (t.id === "pages") item.badge = pageCount || undefined;
-              else if (t.id === "coherence") {
+            label: t("scriptBrowser.ribbon.groupScript"),
+            items: scriptTabs.map((sub) => {
+              const item = { id: sub.id, label: sub.label };
+              if (sub.id === "characters") item.badge = charCount || undefined;
+              else if (sub.id === "locations") item.badge = script?.locations?.length || undefined;
+              else if (sub.id === "objects") item.badge = script?.objects?.length || undefined;
+              else if (sub.id === "pages") item.badge = pageCount || undefined;
+              else if (sub.id === "coherence") {
                 item.badge = coherenceIssues > 0 ? coherenceIssues : coherenceDirty ? "•" : undefined;
                 item.tone = "peach";
               }
@@ -203,6 +214,7 @@ export default function ScriptStep({ project, onChanged }) {
     script?.objects?.length,
     coherenceIssues,
     coherenceDirty,
+    scriptTabs,
   ]);
 
   if (isRunning) {
@@ -210,11 +222,11 @@ export default function ScriptStep({ project, onChanged }) {
     return (
       <div className="space-y-6">
         <ProgressPanel
-          title="Écriture du scénario en cours…"
+          title={t("scriptBrowser.progressTitle")}
           job={stream.job}
           events={stream.events}
           onInterrupt={stream.interrupt}
-          hint="Vous pouvez consulter ce qui a déjà été écrit ci-dessous. Les retouches reviennent dès la fin de la génération."
+          hint={t("scriptBrowser.progressHint")}
         />
         {hasPartial && (
           <ScriptBrowser
@@ -244,10 +256,10 @@ export default function ScriptStep({ project, onChanged }) {
         {!isComplete && target !== null && !blocked && (
           <div className="card p-4 flex items-center justify-between gap-4 bg-[var(--color-peach-100)] border-[var(--color-peach-300)]">
             <span className="text-sm">
-              Scénario partiel ({written}/{target} planches). Vous pouvez reprendre la génération.
+              {t("scriptBrowser.partialScript", { written, target })}
             </span>
             <button className="btn btn-primary" onClick={start} disabled={starting}>
-              Reprendre la génération
+              {t("scriptBrowser.resumeGen")}
             </button>
           </div>
         )}
@@ -266,9 +278,9 @@ export default function ScriptStep({ project, onChanged }) {
         />
         {confirmingRegenAll && (
           <ConfirmDialog
-            title="Régénérer tout le scénario ?"
-            body="Le scénario entier (personnages, décors, objets, couvertures et toutes les planches) sera supprimé et réécrit de zéro par le LLM. Les images existantes (références, planches composées) seront marquées comme obsolètes. Cette action est longue et consomme des crédits API."
-            confirmLabel="Régénérer tout"
+            title={t("scriptBrowser.regenAllConfirmTitle")}
+            body={t("scriptBrowser.regenAllConfirmBody")}
+            confirmLabel={t("scriptBrowser.regenAllConfirm")}
             variant="danger"
             onConfirm={async () => {
               await api.regenerateAll(name, "script");
@@ -289,14 +301,13 @@ export default function ScriptStep({ project, onChanged }) {
         <TerminalBanner terminal={stream.terminal} onClear={stream.clear} />
       )}
       <div className="card p-8 text-center">
-        <h2 className="text-lg font-semibold mb-2">Lancer l'écriture</h2>
+        <h2 className="text-lg font-semibold mb-2">{t("scriptBrowser.emptyTitle")}</h2>
         <p className="text-[var(--color-ink-soft)] max-w-2xl mx-auto mb-6">
-          Le LLM va développer le synopsis en un scénario complet&nbsp;: personnages, décors, couverture, 4ᵉ de
-          couverture, puis chaque planche une à une. Vous pourrez consulter et retoucher chaque élément à la fin.
+          {t("scriptBrowser.emptyBody")}
         </p>
         {error && <p className="text-[var(--color-rose-500)] text-sm mb-3">{error}</p>}
         <button className="btn btn-primary" onClick={start} disabled={starting || blocked}>
-          {starting ? "Démarrage…" : "Lancer l'écriture"}
+          {starting ? t("scriptBrowser.starting") : t("scriptBrowser.ribbon.write")}
         </button>
       </div>
     </div>
@@ -304,6 +315,7 @@ export default function ScriptStep({ project, onChanged }) {
 }
 
 function TerminalBanner({ terminal, onClear }) {
+  const { t } = useTranslation();
   const tone =
     terminal.status === "completed" ? "chip-mint" : terminal.status === "interrupted" ? "chip-peach" : "chip-rose";
   return (
@@ -313,7 +325,7 @@ function TerminalBanner({ terminal, onClear }) {
         {terminal.message}
       </div>
       <button className="btn btn-ghost text-sm" onClick={onClear}>
-        OK
+        {t("scriptBrowser.ok")}
       </button>
     </div>
   );

@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { useTranslation, Trans } from "react-i18next";
 import { slugify, sanitizeSlugInput } from "../utils/slugify.js";
 
 /**
  * Dialog asking the user which elements of the source project to carry over
- * into the duplicate. The script, planches, PDF and feedback are never copied
- * — the duplicate restarts at the "Préparation" step.
+ * into the duplicate. The script, pages, PDF and feedback are never copied
+ * — the duplicate restarts at the "Preparation" step.
  *
  * Props:
  *   - sourceLabel: friendly name shown in the title
@@ -16,6 +17,7 @@ export default function DuplicateProjectDialog({
   onClose,
   onConfirm,
 }) {
+  const { t } = useTranslation();
   const [newTitle, setNewTitle] = useState("");
   const [manualSlug, setManualSlug] = useState("");
   const [slugIsManual, setSlugIsManual] = useState(false);
@@ -65,28 +67,35 @@ export default function DuplicateProjectDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
       <div className="card p-6 w-full max-w-lg space-y-4">
         <div>
-          <h3 className="text-lg font-semibold">Dupliquer ce projet</h3>
+          <h3 className="text-lg font-semibold">{t("dialogs.duplicate.title")}</h3>
           {sourceLabel && (
             <p className="text-sm text-[var(--color-ink-soft)] mt-1">
-              Source&nbsp;: <span className="italic">« {sourceLabel} »</span>
+              <Trans
+                i18nKey="dialogs.duplicate.source"
+                values={{ label: sourceLabel }}
+                components={{ em: <span className="italic" /> }}
+              />
             </p>
           )}
         </div>
 
         <fieldset className="space-y-3">
           <legend className="text-sm font-semibold mb-1">
-            Identité de la copie
+            {t("dialogs.duplicate.identityLegend")}
           </legend>
 
           <div>
             <label className="block text-xs font-medium mb-1" htmlFor="dup-title">
-              Titre <span className="text-[var(--color-mute)] font-normal">(affiché dans la liste)</span>
+              <Trans
+                i18nKey="dialogs.duplicate.titleLabel"
+                components={{ span: <span className="text-[var(--color-mute)] font-normal" /> }}
+              />
             </label>
             <input
               id="dup-title"
               type="text"
               className="input w-full"
-              placeholder={sourceLabel ? `${sourceLabel} (copie)` : "Titre de la copie"}
+              placeholder={sourceLabel ? t("dialogs.duplicate.titlePlaceholderWithSource", { source: sourceLabel }) : t("dialogs.duplicate.titlePlaceholder")}
               value={newTitle}
               onChange={handleTitleChange}
               disabled={submitting}
@@ -95,41 +104,40 @@ export default function DuplicateProjectDialog({
 
           <div>
             <label className="block text-xs font-medium mb-1" htmlFor="dup-slug">
-              Identifiant{" "}
-              <span className="text-[var(--color-mute)] font-normal">(slug du dossier)</span>
+              <Trans
+                i18nKey="dialogs.duplicate.slugLabel"
+                components={{ span: <span className="text-[var(--color-mute)] font-normal" /> }}
+              />
             </label>
             <input
               id="dup-slug"
               type="text"
               className="input w-full font-mono text-sm"
-              placeholder="Identifiant du dossier"
+              placeholder={t("dialogs.duplicate.slugPlaceholder")}
               value={slugValue}
               onChange={handleSlugChange}
               disabled={submitting}
             />
             <p className="mt-1 text-xs text-[var(--color-mute)]">
-              Lettres minuscules, chiffres et underscores uniquement.
-              {!slugIsManual && derivedSlug && " Dérivé du titre — modifiable."}
+              {t("dialogs.duplicate.slugHint")}
+              {!slugIsManual && derivedSlug && t("dialogs.duplicate.slugDerived")}
             </p>
           </div>
         </fieldset>
 
         <div className="text-sm rounded-md p-3 bg-[var(--color-mint-100)] border border-[var(--color-mint-200)] text-[var(--color-mint-700)]">
-          <div className="font-semibold mb-1">Toujours repris</div>
+          <div className="font-semibold mb-1">{t("dialogs.duplicate.alwaysIncluded")}</div>
           <ul className="list-disc list-inside space-y-0.5">
-            <li>Métadonnées, options de génération</li>
-            <li>Style et description du scénario</li>
-            <li>Personnages, décors et objets (définitions)</li>
+            <li>{t("dialogs.duplicate.alwaysListMeta")}</li>
+            <li>{t("dialogs.duplicate.alwaysListStyle")}</li>
+            <li>{t("dialogs.duplicate.alwaysListCasting")}</li>
           </ul>
-          <div className="mt-2 text-xs">
-            Le scénario, les planches, le PDF et les retours ne sont jamais
-            copiés&nbsp;: la copie redémarre à l'étape «&nbsp;Préparation&nbsp;».
-          </div>
+          <div className="mt-2 text-xs">{t("dialogs.duplicate.alwaysNote")}</div>
         </div>
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-semibold mb-1">
-            Éléments optionnels à reprendre
+            {t("dialogs.duplicate.optionalLegend")}
           </legend>
 
           <label className="flex items-start gap-2 text-sm cursor-pointer">
@@ -140,10 +148,9 @@ export default function DuplicateProjectDialog({
               onChange={(e) => setIncludePhotos(e.target.checked)}
             />
             <span>
-              <span className="font-medium">Photos importées</span>
+              <span className="font-medium">{t("dialogs.duplicate.photosLabel")}</span>
               <span className="block text-xs text-[var(--color-ink-soft)]">
-                Photos de référence des personnages, décors et objets
-                téléversées par l'utilisateur.
+                {t("dialogs.duplicate.photosDesc")}
               </span>
             </span>
           </label>
@@ -156,9 +163,9 @@ export default function DuplicateProjectDialog({
               onChange={(e) => setIncludeStyleReference(e.target.checked)}
             />
             <span>
-              <span className="font-medium">Image de référence du style</span>
+              <span className="font-medium">{t("dialogs.duplicate.styleRefLabel")}</span>
               <span className="block text-xs text-[var(--color-ink-soft)]">
-                Image associée au style graphique (si elle existe).
+                {t("dialogs.duplicate.styleRefDesc")}
               </span>
             </span>
           </label>
@@ -171,12 +178,9 @@ export default function DuplicateProjectDialog({
               onChange={(e) => setIncludeReferences(e.target.checked)}
             />
             <span>
-              <span className="font-medium">
-                Images de référence générées par l'IA
-              </span>
+              <span className="font-medium">{t("dialogs.duplicate.aiRefsLabel")}</span>
               <span className="block text-xs text-[var(--color-ink-soft)]">
-                Conserver les références déjà générées (utile pour un
-                Tome&nbsp;2 — pas besoin de les régénérer).
+                {t("dialogs.duplicate.aiRefsDesc")}
               </span>
             </span>
           </label>
@@ -193,7 +197,7 @@ export default function DuplicateProjectDialog({
             onClick={onClose}
             disabled={submitting}
           >
-            Annuler
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -201,7 +205,7 @@ export default function DuplicateProjectDialog({
             onClick={handleConfirm}
             disabled={submitting}
           >
-            {submitting ? "Duplication…" : "Dupliquer"}
+            {submitting ? t("dialogs.duplicate.duplicating") : t("dialogs.duplicate.duplicate")}
           </button>
         </div>
       </div>

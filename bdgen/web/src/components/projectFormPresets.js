@@ -1,10 +1,275 @@
 // Preset lists used by the ComboBox fields in ProjectForm.
-// Each value is the literal string written to the project config.
-// Users can always pick "Saisir manuellement…" to keep typing free-form,
-// and any pre-existing value not present in the list is preserved as a
-// custom entry on edit.
+//
+// Each list is exposed twice: a French array (legacy) and an English array
+// (the locale of the UI). The English array is the canonical one — that's
+// what the UI dropdown shows when the user is in English mode. The French
+// array is preserved verbatim so a project saved with French values (the
+// pre-i18n behaviour) is still recognised: the ComboBox accepts them as
+// custom entries and `isAllowedPresetValue` lets them through.
+//
+// The `<ComboBox>` already accepts any string the user types — even one not
+// in the list — so the legacy values are first-class citizens for as long
+// as we have projects written before the i18n migration.
 
 export const STORY_GENRE_PRESETS = [
+  "Adventure",
+  "Action",
+  "Mystery / Detective",
+  "Thriller",
+  "Sci-Fi",
+  "Fantasy / Heroic fantasy",
+  "Fantasy / Supernatural",
+  "Horror",
+  "Comedy",
+  "Romantic comedy",
+  "Romance",
+  "Drama",
+  "Family drama",
+  "Slice of life",
+  "Western",
+  "Historical",
+  "Biography / Autobiography",
+  "Documentary",
+  "Reportage / BD journalism",
+  "Tale / Fable",
+  "Superhero",
+  "Spy / Espionage",
+  "Cyberpunk",
+  "Steampunk",
+  "Post-apocalyptic",
+  "Dystopia",
+  "Uchronia",
+  "Children",
+  "Educational",
+];
+
+export const STORY_TONE_PRESETS = [
+  "Light / Humorous",
+  "Comic / Burlesque",
+  "Satirical",
+  "Ironic",
+  "Tender",
+  "Melancholic",
+  "Nostalgic",
+  "Contemplative",
+  "Dreamy / Poetic",
+  "Dark",
+  "Unsettling / Distressing",
+  "Tragic",
+  "Epic",
+  "Heroic",
+  "Serious",
+  "Solemn",
+  "Dramatic",
+  "Romantic",
+  "Optimistic",
+  "Pessimistic",
+  "Bitter / Absurd",
+  "Realistic / Documentary",
+  "Lyrical",
+];
+
+export const STORY_SETTING_PRESETS = [
+  "Prehistory",
+  "Antiquity — Ancient Egypt",
+  "Antiquity — Ancient Greece",
+  "Antiquity — Ancient Rome",
+  "Middle Ages",
+  "Renaissance",
+  "Victorian era / 19th century",
+  "Belle Époque (1900–1914)",
+  "Roaring Twenties (1920s)",
+  "1930s",
+  "World War II",
+  "1950s",
+  "1960s",
+  "1970s",
+  "1980s",
+  "1990s",
+  "2000s",
+  "Contemporary era",
+  "Near future",
+  "Far future",
+  "Post-apocalyptic world",
+  "Space / Interstellar travel",
+  "Medieval-fantasy world",
+  "Steampunk universe",
+  "Cyberpunk universe",
+  "Deserted island",
+  "Forest / Wilderness",
+  "Large modern city",
+  "Rural village",
+  "Seaside / Coast",
+  "Mountain / Alps",
+  "Desert",
+  "Underwater / Oceans",
+  "Farm / Countryside",
+  "School / University",
+];
+
+export const STORY_AUDIENCE_PRESETS = [
+  "Children (3–6)",
+  "Children (7–10)",
+  "Pre-teens (10–13)",
+  "Teens (13–17)",
+  "Young adults (18–25)",
+  "Adult",
+  "All audiences / Family",
+  "Teen-adult",
+  "Discerning reader",
+  "School audience",
+  "Specialized / niche audience",
+];
+
+export const STYLE_ART_STYLE_PRESETS = [
+  "Clear line",
+  "Classic Franco-Belgian",
+  "Shōnen manga",
+  "Shōjo manga",
+  "Seinen manga",
+  "American comics",
+  "Indie comics",
+  "Realistic graphic novel",
+  "Stylized graphic novel",
+  "Soft watercolor",
+  "Washed ink / Wash",
+  "Colored pencil",
+  "Sketch / Travel journal",
+  "Digital painting",
+  "Cartoon / Animated",
+  "Caricature",
+  "Minimalist / Lineart",
+  "Pixel art",
+  "Illustrated children's book",
+  "Contemporary European BD",
+  "Strong black-and-white inking",
+  "Geometric graphic style",
+  "Photorealism",
+  "Semi-realistic",
+  "Fanzine / Underground",
+];
+
+export const STYLE_COLOR_PALETTE_PRESETS = [
+  "Vivid and saturated colors",
+  "Soft pastels",
+  "Sepia / Vintage tones",
+  "Black and white",
+  "Greyscale",
+  "Two-tone (black + one color)",
+  "Limited trichromy",
+  "Warm colors",
+  "Cool colors",
+  "Autumn palette",
+  "Summer palette",
+  "Winter palette",
+  "Spring palette",
+  "Desaturated / Faded palette",
+  "Neon / Fluo palette",
+  "Earthy / Natural tones",
+  "Monochrome blue",
+  "Monochrome red",
+  "Dawn colors",
+  "Nocturnal / Chiaroscuro colors",
+  "Transparent watercolor",
+  "Retro 80s palette",
+];
+
+export const STYLE_LINE_WORK_PRESETS = [
+  "Thin and precise line",
+  "Thick and expressive line",
+  "Variable / Uneven inking",
+  "Nervous / Hatched line",
+  "Cross-hatching",
+  "No outline / Flat areas",
+  "Visible pencil sketch",
+  "Pen line",
+  "Marker line",
+  "Brush line",
+  "Clean digital lineart",
+  "Trembling / Organic line",
+  "Regular geometric line",
+  "Minimalist inking",
+  "Calligraphic line",
+];
+
+export const STYLE_MOOD_PRESETS = [
+  "Bright and joyful",
+  "Warm and friendly",
+  "Calm and soothing",
+  "Melancholic and soft",
+  "Dreamy and poetic",
+  "Mysterious",
+  "Tense / Suspenseful",
+  "Distressing / Oppressive",
+  "Dramatic",
+  "Epic and grand",
+  "Energetic / Dynamic",
+  "Comic / Light",
+  "Surreal / Strange",
+  "Nostalgic / Childhood memories",
+  "Romantic",
+  "Wintry / Icy",
+  "Summer / Sunny",
+  "Twilight",
+  "Nocturnal / Moonlit",
+  "Industrial / Cold",
+  "Lush nature",
+];
+
+export const STYLE_PANEL_BORDERS_PRESETS = [
+  "Thin regular black border",
+  "Thick black border",
+  "Slightly irregular border",
+  "Hand-drawn, trembling border",
+  "Colored border matching the scene",
+  "No border / Open panels",
+  "Rounded border",
+  "Sharp rectangular border",
+  "Double-line border",
+  "Thin grey minimalist border",
+  "Raw brush border",
+];
+
+export const STYLE_SPEECH_BUBBLES_PRESETS = [
+  "White bubbles, thin outline",
+  "White bubbles, thick outline",
+  "Classic rounded bubbles",
+  "Oval bubbles",
+  "Rectangular bubbles (narrators)",
+  "Dynamic pointed-tail bubbles",
+  "Hand-drawn, irregular bubbles",
+  "Transparent bubbles",
+  "Character-colored bubbles",
+  "Thoughts in cloud bubbles",
+  "Shouts in torn / burst bubbles",
+  "Minimalist borderless bubbles",
+];
+
+export const STYLE_CHARACTER_RENDERING_PRESETS = [
+  "Round faces, soft expressions",
+  "Angular faces, sharp features",
+  "Dot eyes",
+  "Big expressive eyes (manga style)",
+  "Realistic eyes",
+  "Simple flat hair",
+  "Detailed hair",
+  "Stylized / cartoon silhouettes",
+  "Realistic proportions",
+  "Caricatured proportions",
+  "Few shadows, flat areas",
+  "Detailed shadows / chiaroscuro",
+  "Hatched shadows",
+  "Chibi / cute style",
+  "Detailed anatomy",
+  "Graphic / minimalist characters",
+];
+
+// Legacy French arrays kept verbatim so a project saved before the i18n
+// migration is still readable in English mode. They are NOT exposed to the
+// UI; `isAllowedPresetValue` only uses them to decide whether a stored value
+// should be preserved as a custom entry.
+
+const FR_STORY_GENRE = [
   "Aventure",
   "Action",
   "Mystère / Polar",
@@ -36,7 +301,7 @@ export const STORY_GENRE_PRESETS = [
   "Éducatif",
 ];
 
-export const STORY_TONE_PRESETS = [
+const FR_STORY_TONE = [
   "Léger / Humoristique",
   "Comique / Burlesque",
   "Satirique",
@@ -62,7 +327,7 @@ export const STORY_TONE_PRESETS = [
   "Lyrique",
 ];
 
-export const STORY_SETTING_PRESETS = [
+const FR_STORY_SETTING = [
   "Préhistoire",
   "Antiquité — Égypte ancienne",
   "Antiquité — Grèce antique",
@@ -100,7 +365,7 @@ export const STORY_SETTING_PRESETS = [
   "École / Université",
 ];
 
-export const STORY_AUDIENCE_PRESETS = [
+const FR_STORY_AUDIENCE = [
   "Enfants (3–6 ans)",
   "Enfants (7–10 ans)",
   "Pré-ados (10–13 ans)",
@@ -114,7 +379,7 @@ export const STORY_AUDIENCE_PRESETS = [
   "Public spécialisé / niche",
 ];
 
-export const STYLE_ART_STYLE_PRESETS = [
+const FR_STYLE_ART_STYLE = [
   "Ligne claire",
   "Franco-belge classique",
   "Manga shōnen",
@@ -142,7 +407,7 @@ export const STYLE_ART_STYLE_PRESETS = [
   "Style fanzine / underground",
 ];
 
-export const STYLE_COLOR_PALETTE_PRESETS = [
+const FR_STYLE_COLOR_PALETTE = [
   "Couleurs vives et saturées",
   "Pastel doux",
   "Tons sépia / Vintage",
@@ -167,7 +432,7 @@ export const STYLE_COLOR_PALETTE_PRESETS = [
   "Palette rétro années 80",
 ];
 
-export const STYLE_LINE_WORK_PRESETS = [
+const FR_STYLE_LINE_WORK = [
   "Trait fin et précis",
   "Trait épais et expressif",
   "Encrage variable / inégal",
@@ -185,7 +450,7 @@ export const STYLE_LINE_WORK_PRESETS = [
   "Trait calligraphique",
 ];
 
-export const STYLE_MOOD_PRESETS = [
+const FR_STYLE_MOOD = [
   "Lumineuse et joyeuse",
   "Chaleureuse et conviviale",
   "Calme et apaisante",
@@ -209,7 +474,7 @@ export const STYLE_MOOD_PRESETS = [
   "Nature luxuriante",
 ];
 
-export const STYLE_PANEL_BORDERS_PRESETS = [
+const FR_STYLE_PANEL_BORDERS = [
   "Cadre noir fin et régulier",
   "Cadre noir épais",
   "Cadre légèrement irrégulier",
@@ -223,7 +488,7 @@ export const STYLE_PANEL_BORDERS_PRESETS = [
   "Cadre brut au pinceau",
 ];
 
-export const STYLE_SPEECH_BUBBLES_PRESETS = [
+const FR_STYLE_SPEECH_BUBBLES = [
   "Bulles blanches contour fin",
   "Bulles blanches contour épais",
   "Bulles arrondies classiques",
@@ -238,7 +503,7 @@ export const STYLE_SPEECH_BUBBLES_PRESETS = [
   "Bulles minimalistes sans contour",
 ];
 
-export const STYLE_CHARACTER_RENDERING_PRESETS = [
+const FR_STYLE_CHARACTER_RENDERING = [
   "Visages ronds, expressions douces",
   "Visages anguleux, traits marqués",
   "Yeux en points",
@@ -256,3 +521,44 @@ export const STYLE_CHARACTER_RENDERING_PRESETS = [
   "Anatomie détaillée",
   "Personnages graphiques / minimalistes",
 ];
+
+// Map from public preset key to {en, fr} pair. Used by the ComboBox to
+// pick the right list for the current language and by
+// `isAllowedPresetValue` to recognise legacy French values.
+export const PRESET_KEYS = {
+  storyGenre: { en: STORY_GENRE_PRESETS, fr: FR_STORY_GENRE },
+  storyTone: { en: STORY_TONE_PRESETS, fr: FR_STORY_TONE },
+  storySetting: { en: STORY_SETTING_PRESETS, fr: FR_STORY_SETTING },
+  storyAudience: { en: STORY_AUDIENCE_PRESETS, fr: FR_STORY_AUDIENCE },
+  styleArtStyle: { en: STYLE_ART_STYLE_PRESETS, fr: FR_STYLE_ART_STYLE },
+  styleColorPalette: { en: STYLE_COLOR_PALETTE_PRESETS, fr: FR_STYLE_COLOR_PALETTE },
+  styleLineWork: { en: STYLE_LINE_WORK_PRESETS, fr: FR_STYLE_LINE_WORK },
+  styleMood: { en: STYLE_MOOD_PRESETS, fr: FR_STYLE_MOOD },
+  stylePanelBorders: { en: STYLE_PANEL_BORDERS_PRESETS, fr: FR_STYLE_PANEL_BORDERS },
+  styleSpeechBubbles: { en: STYLE_SPEECH_BUBBLES_PRESETS, fr: FR_STYLE_SPEECH_BUBBLES },
+  styleCharacterRendering: {
+    en: STYLE_CHARACTER_RENDERING_PRESETS,
+    fr: FR_STYLE_CHARACTER_RENDERING,
+  },
+};
+
+// Returns the preset list for `key` in the current language ("en" by
+// default). Unknown keys are returned as an empty array.
+export function presetsFor(key, language = "en") {
+  const entry = PRESET_KEYS[key];
+  if (!entry) return [];
+  return entry[language] || entry.en || [];
+}
+
+// Returns true when `value` is one of the canonical English presets for
+// `key` OR a legacy French value still found in some projects. The
+// ComboBox keeps free-form input working, but this helper lets a project
+// validator flag obviously bogus values (e.g. when a fix-up script wants to
+// move old projects to the English set).
+export function isAllowedPresetValue(key, value) {
+  if (value == null) return true;
+  const entry = PRESET_KEYS[key];
+  if (!entry) return true;
+  const all = new Set([...(entry.en || []), ...(entry.fr || [])]);
+  return all.has(value);
+}

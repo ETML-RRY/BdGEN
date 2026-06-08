@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../../api.js";
 import ProjectForm from "../ProjectForm.jsx";
+import { formatError } from "../../i18n/formatError.js";
 
 function _hasDiff(diff) {
   if (!diff) return false;
@@ -20,9 +22,13 @@ function _hasDiff(diff) {
 
 // Flatten removed entities into rows tagged with their entity kind (plural,
 // matching the backend removals payload keys).
-function _removalRows(diff) {
+function _removalRows(diff, t) {
   const removed = diff.removed || {};
-  const kindLabels = { characters: "Personnage", locations: "Décor", objects: "Objet" };
+  const kindLabels = {
+    characters: t("stepsUi.preparation.kindCharacter"),
+    locations: t("stepsUi.preparation.kindLocation"),
+    objects: t("stepsUi.preparation.kindObject"),
+  };
   const rows = [];
   for (const kind of ["characters", "locations", "objects"]) {
     for (const e of removed[kind] || []) {
@@ -32,51 +38,40 @@ function _removalRows(diff) {
   return rows;
 }
 
-function _diffSummaryLines(diff) {
+function _diffSummaryLines(diff, t) {
   const lines = [];
   const { new: added, modified } = diff;
   if (added.characters?.length) {
     const names = added.characters.map((c) => c.name).join(", ");
-    lines.push(
-      `${added.characters.length} personnage${added.characters.length > 1 ? "s" : ""} ajouté${added.characters.length > 1 ? "s" : ""} : ${names}`,
-    );
+    lines.push(t("stepsUi.preparation.diffCharactersAdded", { count: added.characters.length, names }));
   }
   if (added.locations?.length) {
     const names = added.locations.map((l) => l.name).join(", ");
-    lines.push(
-      `${added.locations.length} décor${added.locations.length > 1 ? "s" : ""} ajouté${added.locations.length > 1 ? "s" : ""} : ${names}`,
-    );
+    lines.push(t("stepsUi.preparation.diffLocationsAdded", { count: added.locations.length, names }));
   }
   if (added.objects?.length) {
     const names = added.objects.map((o) => o.name).join(", ");
-    lines.push(
-      `${added.objects.length} objet${added.objects.length > 1 ? "s" : ""} ajouté${added.objects.length > 1 ? "s" : ""} : ${names}`,
-    );
+    lines.push(t("stepsUi.preparation.diffObjectsAdded", { count: added.objects.length, names }));
   }
   if (modified.characters?.length) {
     const names = modified.characters.map((c) => c.name).join(", ");
-    lines.push(
-      `${modified.characters.length} personnage${modified.characters.length > 1 ? "s" : ""} modifié${modified.characters.length > 1 ? "s" : ""} : ${names}`,
-    );
+    lines.push(t("stepsUi.preparation.diffCharactersModified", { count: modified.characters.length, names }));
   }
   if (modified.locations?.length) {
     const names = modified.locations.map((l) => l.name).join(", ");
-    lines.push(
-      `${modified.locations.length} décor${modified.locations.length > 1 ? "s" : ""} modifié${modified.locations.length > 1 ? "s" : ""} : ${names}`,
-    );
+    lines.push(t("stepsUi.preparation.diffLocationsModified", { count: modified.locations.length, names }));
   }
   if (modified.objects?.length) {
     const names = modified.objects.map((o) => o.name).join(", ");
-    lines.push(
-      `${modified.objects.length} objet${modified.objects.length > 1 ? "s" : ""} modifié${modified.objects.length > 1 ? "s" : ""} : ${names}`,
-    );
+    lines.push(t("stepsUi.preparation.diffObjectsModified", { count: modified.objects.length, names }));
   }
   return lines;
 }
 
 function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
-  const lines = _diffSummaryLines(diff);
-  const removalRows = _removalRows(diff);
+  const { t } = useTranslation();
+  const lines = _diffSummaryLines(diff, t);
+  const removalRows = _removalRows(diff, t);
   // Removals are destructive (they drop & regenerate pages), so each is an
   // explicit opt-in — nothing is removed unless the user ticks it.
   const [selected, setSelected] = useState({});
@@ -97,11 +92,8 @@ function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="card w-full max-w-lg p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Scénario existant détecté</h2>
-        <p className="text-sm text-[var(--color-mute)]">
-          La configuration a changé depuis la dernière écriture du scénario. Le modèle peut intégrer ces changements
-          sans réécrire l'histoire ni modifier les dialogues existants.
-        </p>
+        <h2 className="text-lg font-semibold">{t("stepsUi.preparation.syncTitle")}</h2>
+        <p className="text-sm text-[var(--color-mute)]">{t("stepsUi.preparation.syncBody")}</p>
 
         {lines.length > 0 && (
           <ul className="space-y-1">
@@ -117,12 +109,9 @@ function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
         {!syncResult && removalRows.length > 0 && (
           <div className="rounded-lg bg-[var(--color-peach-100)] border border-[var(--color-peach-300)] p-3 space-y-2">
             <p className="text-sm font-semibold text-[var(--color-peach-500)]">
-              ⚠️ Éléments retirés de la configuration
+              {t("stepsUi.preparation.removedTitle")}
             </p>
-            <p className="text-xs text-[var(--color-mute)]">
-              Cochez ceux à retirer aussi du scénario. Les planches qui les utilisaient seront supprimées et
-              régénérées pour préserver la cohérence. Les éléments non cochés restent dans le scénario.
-            </p>
+            <p className="text-xs text-[var(--color-mute)]">{t("stepsUi.preparation.removedBody")}</p>
             <ul className="space-y-1">
               {removalRows.map((row) => {
                 const key = `${row.kind}:${row.id}`;
@@ -141,12 +130,11 @@ function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
                         <span className="text-xs text-[var(--color-mute)]">({row.kindLabel})</span>
                         <span className="block text-xs text-[var(--color-mute)]">
                           {row.pages_dropped > 0
-                            ? `${row.pages_dropped} planche${row.pages_dropped > 1 ? "s" : ""} retirée${
-                                row.pages_dropped > 1 ? "s" : ""
-                              } et régénérée${row.pages_dropped > 1 ? "s" : ""} (à partir de la planche ${
-                                row.earliest_affected
-                              }).`
-                            : "Non utilisé dans aucune planche — suppression sans impact."}
+                            ? t("stepsUi.preparation.removedImpact", {
+                                count: row.pages_dropped,
+                                from: row.earliest_affected,
+                              })
+                            : t("stepsUi.preparation.removedNoImpact")}
                         </span>
                       </span>
                     </label>
@@ -159,49 +147,33 @@ function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
 
         {syncResult && (
           <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
-            Synchronisation appliquée.{" "}
+            {t("stepsUi.preparation.syncSuccess")}{" "}
             {syncResult.changes &&
               (() => {
                 const c = syncResult.changes;
                 const parts = [];
                 if (c.character_additions)
-                  parts.push(
-                    `${c.character_additions} personnage${c.character_additions > 1 ? "s" : ""} ajouté${c.character_additions > 1 ? "s" : ""}`,
-                  );
-                if (c.character_updates) parts.push(`${c.character_updates} mis à jour`);
+                  parts.push(t("stepsUi.preparation.syncCounts.charsAdded", { count: c.character_additions }));
+                if (c.character_updates) parts.push(t("stepsUi.preparation.syncCounts.charsUpdated", { count: c.character_updates }));
                 if (c.location_additions)
-                  parts.push(
-                    `${c.location_additions} décor${c.location_additions > 1 ? "s" : ""} ajouté${c.location_additions > 1 ? "s" : ""}`,
-                  );
-                if (c.location_updates)
-                  parts.push(`${c.location_updates} décor${c.location_updates > 1 ? "s" : ""} mis à jour`);
+                  parts.push(t("stepsUi.preparation.syncCounts.locsAdded", { count: c.location_additions }));
+                if (c.location_updates) parts.push(t("stepsUi.preparation.syncCounts.locsUpdated", { count: c.location_updates }));
                 if (c.object_additions)
-                  parts.push(
-                    `${c.object_additions} objet${c.object_additions > 1 ? "s" : ""} ajouté${c.object_additions > 1 ? "s" : ""}`,
-                  );
-                if (c.object_updates)
-                  parts.push(`${c.object_updates} objet${c.object_updates > 1 ? "s" : ""} mis à jour`);
+                  parts.push(t("stepsUi.preparation.syncCounts.objsAdded", { count: c.object_additions }));
+                if (c.object_updates) parts.push(t("stepsUi.preparation.syncCounts.objsUpdated", { count: c.object_updates }));
                 if (c.character_removals)
-                  parts.push(
-                    `${c.character_removals} personnage${c.character_removals > 1 ? "s" : ""} retiré${c.character_removals > 1 ? "s" : ""}`,
-                  );
+                  parts.push(t("stepsUi.preparation.syncCounts.charsRemoved", { count: c.character_removals }));
                 if (c.location_removals)
-                  parts.push(
-                    `${c.location_removals} décor${c.location_removals > 1 ? "s" : ""} retiré${c.location_removals > 1 ? "s" : ""}`,
-                  );
+                  parts.push(t("stepsUi.preparation.syncCounts.locsRemoved", { count: c.location_removals }));
                 if (c.object_removals)
-                  parts.push(
-                    `${c.object_removals} objet${c.object_removals > 1 ? "s" : ""} retiré${c.object_removals > 1 ? "s" : ""}`,
-                  );
+                  parts.push(t("stepsUi.preparation.syncCounts.objsRemoved", { count: c.object_removals }));
                 if (c.page_updates)
-                  parts.push(
-                    `${c.page_updates} planche${c.page_updates > 1 ? "s" : ""} mise${c.page_updates > 1 ? "s" : ""} à jour`,
-                  );
+                  parts.push(t("stepsUi.preparation.syncCounts.pagesUpdated", { count: c.page_updates }));
                 return parts.length ? parts.join(", ") + "." : "";
               })()}
             {syncResult.pages_dropped > 0 && (
               <span className="block mt-1">
-                {syncResult.pages_dropped} planche{syncResult.pages_dropped > 1 ? "s" : ""} en cours de régénération…
+                {t("stepsUi.preparation.regenPending", { count: syncResult.pages_dropped })}
               </span>
             )}
           </div>
@@ -211,7 +183,7 @@ function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
 
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" className="btn btn-ghost text-sm" onClick={onSkip} disabled={syncing}>
-            Continuer sans synchroniser
+            {t("stepsUi.preparation.skipSync")}
           </button>
           {!syncResult && (
             <button
@@ -220,12 +192,12 @@ function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
               onClick={() => onSync(buildRemovals())}
               disabled={syncing || (lines.length === 0 && !buildRemovals())}
             >
-              {syncing ? "Synchronisation…" : "Synchroniser le scénario"}
+              {syncing ? t("stepsUi.preparation.syncing") : t("stepsUi.preparation.syncSubmit")}
             </button>
           )}
           {syncResult && (
             <button type="button" className="btn btn-primary text-sm" onClick={onSkip}>
-              Continuer
+              {t("stepsUi.preparation.continueAfter")}
             </button>
           )}
         </div>
@@ -235,6 +207,7 @@ function SyncDialog({ diff, onSync, onSkip, syncing, syncError, syncResult }) {
 }
 
 export default function PreparationStep({ project, onSaved }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { name } = useParams();
 
@@ -244,7 +217,7 @@ export default function PreparationStep({ project, onSaved }) {
   const [syncResult, setSyncResult] = useState(null);
 
   if (!project.config) {
-    return <div className="card p-6 text-[var(--color-mute)]">Pas de configuration enregistrée pour ce projet.</div>;
+    return <div className="card p-6 text-[var(--color-mute)]">{t("stepsUi.preparation.noConfig")}</div>;
   }
 
   function navigateToScript() {
@@ -280,7 +253,7 @@ export default function PreparationStep({ project, onSaved }) {
       await onSaved(); // Reload project state to reflect script changes.
       setSyncResult(result);
     } catch (e) {
-      setSyncError(e.message || "La synchronisation a échoué.");
+      setSyncError(formatError(e, t) || t("stepsUi.preparation.syncFailed"));
     } finally {
       setSyncing(false);
     }
@@ -322,9 +295,9 @@ export default function PreparationStep({ project, onSaved }) {
         initialReferenceImages={project.reference_images || {}}
         onSubmit={onSubmit}
         onReferencesImported={onSaved}
-        submitLabel="Enregistrer & passer à l'écriture"
+        submitLabel={t("stepsUi.preparation.submitLabel")}
         onApplyStyleOnly={hasScript ? onApplyStyleOnly : null}
-        applyStyleOnlyLabel="Restyler sans réécrire"
+        applyStyleOnlyLabel={t("stepsUi.preparation.applyStyleOnlyLabel")}
       />
     </>
   );

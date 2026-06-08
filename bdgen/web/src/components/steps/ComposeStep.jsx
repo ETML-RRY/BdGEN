@@ -1,20 +1,22 @@
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { FaFilePdf } from "react-icons/fa6";
 import ImageStep from "../ImageStep.jsx";
 import { SHOW_UPSCALE } from "../../featureFlags.js";
 
-function composeMeta(id) {
-  if (id === "cover") return { group: "Couverture", shortLabel: "Couverture", label: "Couverture" };
-  if (id === "back") return { group: "Couverture", shortLabel: "4ᵉ de couverture", label: "4ᵉ de couverture" };
+function composeMeta(id, t) {
+  if (id === "cover") return { group: t("stepsUi.compose.cover"), shortLabel: t("stepsUi.compose.cover"), label: t("stepsUi.compose.cover") };
+  if (id === "back") return { group: t("stepsUi.compose.cover"), shortLabel: t("stepsUi.compose.backCover"), label: t("stepsUi.compose.backCover") };
   const n = id.replace("page_", "");
-  return { group: "Planches", shortLabel: `Planche ${n}`, label: `Planche ${n}` };
+  return { group: t("stepsUi.compose.title"), shortLabel: t("stepsUi.compose.page", { n }), label: t("stepsUi.compose.page", { n }) };
 }
 
 export default function ComposeStep({ project, onChanged }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { name } = useParams();
   const items = project.composed.map((w) => {
-    const meta = composeMeta(w.id);
+    const meta = composeMeta(w.id, t);
     return {
       id: w.id,
       label: meta.label,
@@ -29,7 +31,7 @@ export default function ComposeStep({ project, onChanged }) {
     ? [
         {
           id: "pdf",
-          label: "Télécharger le PDF",
+          label: t("stepsUi.compose.downloadPdf"),
           icon: <FaFilePdf />,
           onClick: () => {
             const a = document.createElement("a");
@@ -39,7 +41,7 @@ export default function ComposeStep({ project, onChanged }) {
             a.click();
             a.remove();
           },
-          title: "Toutes les planches assemblées en album PDF.",
+          title: t("stepsUi.compose.downloadPdfTitle"),
         },
       ]
     : null;
@@ -49,17 +51,17 @@ export default function ComposeStep({ project, onChanged }) {
       project={project}
       onChanged={onChanged}
       stepId="compose"
-      title="Planches finales"
-      intro="Génération de chaque planche en pleine page avec bulles, texte, couleurs et finitions. Étape la plus longue et la plus coûteuse en API — la qualité utilisée est celle définie en phase de préparation."
+      title={t("stepsUi.compose.title")}
+      intro={t("stepsUi.compose.intro")}
       items={items}
       layout={project.config?.structure?.page_format || "portrait"}
-      genGroupLabel="Planches"
-      startLabel="Générer les planches"
+      genGroupLabel={t("stepsUi.compose.groupLabel")}
+      startLabel={t("stepsUi.compose.startLabel")}
       projectExtraCommands={projectExtraCommands}
       onContinue={
         SHOW_UPSCALE ? () => navigate(`/projects/${encodeURIComponent(name)}/upscale`) : undefined
       }
-      continueLabel={SHOW_UPSCALE ? "Continuer vers l'upscale →" : undefined}
+      continueLabel={SHOW_UPSCALE ? t("stepsUi.compose.continueLabel") : undefined}
     />
   );
 }

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { FiEdit2 } from "react-icons/fi";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api.js";
@@ -7,16 +8,25 @@ import RefineDialog from "./RefineDialog.jsx";
 import ConfirmDeleteDialog from "./ConfirmDeleteDialog.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 
-export const SCRIPT_TABS = [
-  { id: "characters", label: "Personnages" },
-  { id: "locations", label: "Décors" },
-  { id: "objects", label: "Objets" },
-  { id: "pages", label: "Planches" },
-  { id: "covers", label: "Couvertures" },
-  ...(SHOW_COHERENCE_CHECK ? [{ id: "coherence", label: "Cohérence" }] : []),
-];
+// Tab ids are stable across languages; the human label is resolved by the
+// `useScriptTabs` hook so consumers (this file + the left sidebar in
+// ScriptStep) render the right label for the active language.
+export const SCRIPT_TAB_IDS = ["characters", "locations", "objects", "pages", "covers", "coherence"];
 
-const TABS = SCRIPT_TABS;
+export function useScriptTabs() {
+  const { t } = useTranslation();
+  return useMemo(
+    () => [
+      { id: "characters", label: t("scriptBrowser.tabs.characters") },
+      { id: "locations", label: t("scriptBrowser.tabs.locations") },
+      { id: "objects", label: t("scriptBrowser.tabs.objects") },
+      { id: "pages", label: t("scriptBrowser.tabs.pages") },
+      { id: "covers", label: t("scriptBrowser.tabs.covers") },
+      ...(SHOW_COHERENCE_CHECK ? [{ id: "coherence", label: t("scriptBrowser.tabs.coherence") }] : []),
+    ],
+    [t],
+  );
+}
 
 const DIALOG_TYPES = ["speech", "thought", "shout", "whisper", "narration"];
 
@@ -40,6 +50,8 @@ export default function ScriptBrowser({
   tab: tabProp,
   onTabChange,
 }) {
+  const { t } = useTranslation();
+  const tabs = useScriptTabs();
   // The active sub-section can be driven from outside (left sidebar). When no
   // controlled value is supplied we fall back to a local state and render the
   // in-card tab strip ourselves.
@@ -60,30 +72,34 @@ export default function ScriptBrowser({
     <div className="card overflow-hidden">
       <div className="px-5 pt-4 pb-3 flex items-center justify-between gap-3">
         <p className="text-sm text-[var(--color-ink-soft)]">
-          {script.characters.length} personnages · {script.locations.length} décors · {script.objects?.length ?? 0}{" "}
-          objets · {script.pages.length} planches
+          {t("scriptBrowser.summary", {
+            characters: script.characters.length,
+            locations: script.locations.length,
+            objects: script.objects?.length ?? 0,
+            pages: script.pages.length,
+          })}
         </p>
-        {readOnly && <span className="chip chip-peach text-xs">Aperçu — édition désactivée</span>}
+        {readOnly && <span className="chip chip-peach text-xs">{t("scriptBrowser.previewChip")}</span>}
       </div>
 
       {!controlled && (
         <div className="border-b border-[var(--color-line)] flex">
-          {TABS.map((t) => (
+          {tabs.map((tabDef) => (
             <button
-              key={t.id}
+              key={tabDef.id}
               className={
                 "px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors inline-flex items-center gap-1 " +
-                (tab === t.id
+                (tab === tabDef.id
                   ? "border-[var(--color-primary-500)] text-[var(--color-primary-600)]"
                   : "border-transparent text-[var(--color-mute)] hover:text-[var(--color-ink)] hover:bg-[var(--color-paper-soft)]")
               }
-              onClick={() => setTab(t.id)}
+              onClick={() => setTab(tabDef.id)}
             >
-              {t.label}
-              {t.id === "coherence" && isDirty && (
+              {tabDef.label}
+              {tabDef.id === "coherence" && isDirty && (
                 <span className="w-2 h-2 rounded-full bg-[var(--color-peach-300)] inline-block" />
               )}
-              {t.id === "coherence" && !isDirty && issueCount > 0 && (
+              {tabDef.id === "coherence" && !isDirty && issueCount > 0 && (
                 <span className="text-xs text-[var(--color-rose-500)]">{issueCount}</span>
               )}
             </button>
@@ -126,6 +142,7 @@ export default function ScriptBrowser({
 }
 
 function CharactersList({ characters, onChanged, readOnly = false }) {
+  const { t } = useTranslation();
   const { name } = useParams();
   const navigate = useNavigate();
   const [refining, setRefining] = useState(null);
@@ -165,11 +182,11 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
       {!readOnly && (
         <div className="flex justify-end">
           <button className="btn btn-secondary text-sm" onClick={() => setAdding(true)}>
-            Ajouter un personnage
+            {t("scriptBrowser.characters.add")}
           </button>
         </div>
       )}
-      {characters.length === 0 && <p className="text-sm text-[var(--color-mute)]">Aucun personnage.</p>}
+      {characters.length === 0 && <p className="text-sm text-[var(--color-mute)]">{t("scriptBrowser.characters.empty")}</p>}
       <ul className="space-y-3">
         {characters.map((c) => (
           <li key={c.id} className="card p-4 bg-[var(--color-paper-soft)]/40">
@@ -177,7 +194,7 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
               <div>
                 <div className="font-semibold editable-heading">
                   <EditableText
-                    label={`Personnage ${c.id} - Nom`}
+                    label={t("scriptBrowser.editor.fieldLabel", { id: c.id })}
                     value={c.name}
                     readOnly={readOnly}
                     multiline={false}
@@ -198,20 +215,20 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
               {!readOnly && (
                 <div className="flex gap-1">
                   <button className="btn btn-ghost text-xs" onClick={() => setRegenerating(c)}>
-                    ↻ Régénérer
+                    ↻ {t("common.regenerate")}
                   </button>
                   <button className="btn btn-ghost text-xs" onClick={() => setRefining(c)}>
-                    Retoucher
+                    {t("common.retouch")}
                   </button>
                   <button className="btn btn-ghost text-xs text-[var(--color-rose-500)]" onClick={() => setDeleting(c)}>
-                    Supprimer
+                    {t("common.delete")}
                   </button>
                 </div>
               )}
             </div>
             <div className="text-sm whitespace-pre-wrap">
               <EditableText
-                label={`Personnage ${c.id} - Description physique`}
+                label={t("scriptBrowser.editor.fieldLabel", { id: c.id })}
                 value={c.physical_description}
                 readOnly={readOnly}
                 saving={savingField === `${c.id}_physical_description`}
@@ -227,11 +244,13 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
               />
             </div>
             <div className="text-sm text-[var(--color-ink-soft)] mt-2">
-              <span className="text-xs uppercase tracking-wide text-[var(--color-mute)]">Tenue — </span>
+              <span className="text-xs uppercase tracking-wide text-[var(--color-mute)]">
+                {t("scriptBrowser.characters.outfitLabel")}
+              </span>
               <EditableText
-                label={`Personnage ${c.id} - Tenue`}
+                label={t("scriptBrowser.editor.fieldLabel", { id: c.id })}
                 value={c.outfit || ""}
-                placeholder="Aucune tenue."
+                placeholder={t("scriptBrowser.characters.outfitPlaceholder")}
                 readOnly={readOnly}
                 saving={savingField === `${c.id}_outfit`}
                 onSave={(value) =>
@@ -248,19 +267,23 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
           </li>
         ))}
       </ul>
-      {manualError && <p className="text-sm text-[var(--color-rose-500)]">Sauvegarde impossible : {manualError}</p>}
+      {manualError && (
+        <p className="text-sm text-[var(--color-rose-500)]">
+          {t("scriptBrowser.characters.saveError", { error: manualError })}
+        </p>
+      )}
       {adding && (
         <AddScriptItemDialog
           type="character"
-          title="Ajouter un personnage"
+          title={t("scriptBrowser.characters.addDialogTitle")}
           onClose={() => setAdding(false)}
           onSubmit={addCharacter}
         />
       )}
       {refining && (
         <RefineDialog
-          title={`Retoucher « ${refining.name} »`}
-          hint="Décrivez la modification à apporter au personnage. Le LLM mettra à jour ce personnage uniquement."
+          title={t("scriptBrowser.characters.refineTitle", { name: refining.name })}
+          hint={t("scriptBrowser.characters.refineHint")}
           onClose={() => setRefining(null)}
           onSubmit={async (text) => {
             await api.refineCharacter(name, refining.id, text);
@@ -270,10 +293,11 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
       )}
       {regenerating && (
         <ConfirmDialog
-          title={`Régénérer « ${regenerating.name} » ?`}
-          body="La description de ce personnage sera réécrite par le LLM. Cette action consomme des crédits API."
-          confirmLabel="Régénérer"
+          title={t("scriptBrowser.characters.regenTitle", { name: regenerating.name })}
+          body={t("scriptBrowser.characters.regenBody")}
+          confirmLabel={t("common.regenerate")}
           onConfirm={async () => {
+            // LLM prompt — not localized
             await api.refineCharacter(
               name,
               regenerating.id,
@@ -286,10 +310,10 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
       )}
       {deleting && (
         <ConfirmDeleteDialog
-          title={`Supprimer « ${deleting.name} » ?`}
-          body="Ce personnage et toutes ses apparitions vont être retirés du scénario."
+          title={t("scriptBrowser.characters.deleteTitle", { name: deleting.name })}
+          body={t("scriptBrowser.characters.deleteBody")}
           loadPreview={() => api.previewDeleteCharacter(name, deleting.id)}
-          confirmLabel="Supprimer"
+          confirmLabel={t("common.delete")}
           onClose={() => setDeleting(null)}
           onConfirm={async () => {
             const info = await api.deleteCharacter(name, deleting.id, true);
@@ -305,6 +329,7 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
 }
 
 function LocationsList({ locations, onChanged, readOnly = false }) {
+  const { t } = useTranslation();
   const { name } = useParams();
   const navigate = useNavigate();
   const [refining, setRefining] = useState(null);
@@ -344,11 +369,11 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
       {!readOnly && (
         <div className="flex justify-end">
           <button className="btn btn-secondary text-sm" onClick={() => setAdding(true)}>
-            Ajouter un decor
+            {t("scriptBrowser.locations.add")}
           </button>
         </div>
       )}
-      {locations.length === 0 && <p className="text-sm text-[var(--color-mute)]">Aucun decor.</p>}
+      {locations.length === 0 && <p className="text-sm text-[var(--color-mute)]">{t("scriptBrowser.locations.empty")}</p>}
       <ul className="space-y-3">
         {locations.map((l) => (
           <li key={l.id} className="card p-4 bg-[var(--color-paper-soft)]/40">
@@ -356,7 +381,7 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
               <div>
                 <div className="font-semibold editable-heading">
                   <EditableText
-                    label={`Décor ${l.id} - Nom`}
+                    label={t("scriptBrowser.editor.fieldLabel", { id: l.id })}
                     value={l.name}
                     readOnly={readOnly}
                     multiline={false}
@@ -377,20 +402,20 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
               {!readOnly && (
                 <div className="flex gap-1">
                   <button className="btn btn-ghost text-xs" onClick={() => setRegenerating(l)}>
-                    ↻ Régénérer
+                    ↻ {t("common.regenerate")}
                   </button>
                   <button className="btn btn-ghost text-xs" onClick={() => setRefining(l)}>
-                    Retoucher
+                    {t("common.retouch")}
                   </button>
                   <button className="btn btn-ghost text-xs text-[var(--color-rose-500)]" onClick={() => setDeleting(l)}>
-                    Supprimer
+                    {t("common.delete")}
                   </button>
                 </div>
               )}
             </div>
             <div className="text-sm whitespace-pre-wrap">
               <EditableText
-                label={`Décor ${l.id} - Description`}
+                label={t("scriptBrowser.editor.fieldLabel", { id: l.id })}
                 value={l.description}
                 readOnly={readOnly}
                 saving={savingField === `${l.id}_description`}
@@ -408,19 +433,23 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
           </li>
         ))}
       </ul>
-      {manualError && <p className="text-sm text-[var(--color-rose-500)]">Sauvegarde impossible : {manualError}</p>}
+      {manualError && (
+        <p className="text-sm text-[var(--color-rose-500)]">
+          {t("scriptBrowser.locations.saveError", { error: manualError })}
+        </p>
+      )}
       {adding && (
         <AddScriptItemDialog
           type="location"
-          title="Ajouter un decor"
+          title={t("scriptBrowser.locations.addDialogTitle")}
           onClose={() => setAdding(false)}
           onSubmit={addLocation}
         />
       )}
       {refining && (
         <RefineDialog
-          title={`Retoucher « ${refining.name} »`}
-          hint="Décrivez la modification à apporter au décor. Le LLM mettra à jour ce décor uniquement."
+          title={t("scriptBrowser.locations.refineTitle", { name: refining.name })}
+          hint={t("scriptBrowser.locations.refineHint")}
           onClose={() => setRefining(null)}
           onSubmit={async (text) => {
             await api.refineLocation(name, refining.id, text);
@@ -430,10 +459,11 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
       )}
       {regenerating && (
         <ConfirmDialog
-          title={`Régénérer « ${regenerating.name} » ?`}
-          body="La description de ce décor sera réécrite par le LLM. Cette action consomme des crédits API."
-          confirmLabel="Régénérer"
+          title={t("scriptBrowser.locations.regenTitle", { name: regenerating.name })}
+          body={t("scriptBrowser.locations.regenBody")}
+          confirmLabel={t("common.regenerate")}
           onConfirm={async () => {
+            // LLM prompt — not localized
             await api.refineLocation(
               name,
               regenerating.id,
@@ -446,10 +476,10 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
       )}
       {deleting && (
         <ConfirmDeleteDialog
-          title={`Supprimer « ${deleting.name} » ?`}
-          body="Ce décor et toutes les scènes qui s'y déroulent vont être retirés du scénario."
+          title={t("scriptBrowser.locations.deleteTitle", { name: deleting.name })}
+          body={t("scriptBrowser.locations.deleteBody")}
           loadPreview={() => api.previewDeleteLocation(name, deleting.id)}
-          confirmLabel="Supprimer"
+          confirmLabel={t("common.delete")}
           onClose={() => setDeleting(null)}
           onConfirm={async () => {
             const info = await api.deleteLocation(name, deleting.id, true);
@@ -465,6 +495,7 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
 }
 
 function ObjectsList({ objects, onChanged, readOnly = false }) {
+  const { t } = useTranslation();
   const { name } = useParams();
   const navigate = useNavigate();
   const [refining, setRefining] = useState(null);
@@ -504,13 +535,11 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
       {!readOnly && (
         <div className="flex justify-end">
           <button className="btn btn-secondary text-sm" onClick={() => setAdding(true)}>
-            Ajouter un objet
+            {t("scriptBrowser.objects.add")}
           </button>
         </div>
       )}
-      {objects.length === 0 && (
-        <p className="text-sm text-[var(--color-mute)]">Aucun objet / produit / reference pour ce projet.</p>
-      )}
+      {objects.length === 0 && <p className="text-sm text-[var(--color-mute)]">{t("scriptBrowser.objects.empty")}</p>}
       <ul className="space-y-3">
         {objects.map((o) => (
           <li key={o.id} className="card p-4 bg-[var(--color-paper-soft)]/40">
@@ -518,7 +547,7 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
               <div>
                 <div className="font-semibold editable-heading">
                   <EditableText
-                    label={`Objet ${o.id} - Nom`}
+                    label={t("scriptBrowser.editor.fieldLabel", { id: o.id })}
                     value={o.name}
                     readOnly={readOnly}
                     multiline={false}
@@ -539,20 +568,20 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
               {!readOnly && (
                 <div className="flex gap-1">
                   <button className="btn btn-ghost text-xs" onClick={() => setRegenerating(o)}>
-                    ↻ Régénérer
+                    ↻ {t("common.regenerate")}
                   </button>
                   <button className="btn btn-ghost text-xs" onClick={() => setRefining(o)}>
-                    Retoucher
+                    {t("common.retouch")}
                   </button>
                   <button className="btn btn-ghost text-xs text-[var(--color-rose-500)]" onClick={() => setDeleting(o)}>
-                    Supprimer
+                    {t("common.delete")}
                   </button>
                 </div>
               )}
             </div>
             <div className="text-sm whitespace-pre-wrap">
               <EditableText
-                label={`Objet ${o.id} - Description`}
+                label={t("scriptBrowser.editor.fieldLabel", { id: o.id })}
                 value={o.description}
                 readOnly={readOnly}
                 saving={savingField === `${o.id}_description`}
@@ -570,19 +599,23 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
           </li>
         ))}
       </ul>
-      {manualError && <p className="text-sm text-[var(--color-rose-500)]">Sauvegarde impossible : {manualError}</p>}
+      {manualError && (
+        <p className="text-sm text-[var(--color-rose-500)]">
+          {t("scriptBrowser.objects.saveError", { error: manualError })}
+        </p>
+      )}
       {adding && (
         <AddScriptItemDialog
           type="object"
-          title="Ajouter un objet"
+          title={t("scriptBrowser.objects.addDialogTitle")}
           onClose={() => setAdding(false)}
           onSubmit={addObject}
         />
       )}
       {refining && (
         <RefineDialog
-          title={`Retoucher « ${refining.name} »`}
-          hint="Décrivez la modification à apporter à l'objet. Le LLM mettra à jour cet objet uniquement."
+          title={t("scriptBrowser.objects.refineTitle", { name: refining.name })}
+          hint={t("scriptBrowser.objects.refineHint")}
           onClose={() => setRefining(null)}
           onSubmit={async (text) => {
             await api.refineObject(name, refining.id, text);
@@ -592,10 +625,11 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
       )}
       {regenerating && (
         <ConfirmDialog
-          title={`Régénérer « ${regenerating.name} » ?`}
-          body="La description de cet objet sera réécrite par le LLM. Cette action consomme des crédits API."
-          confirmLabel="Régénérer"
+          title={t("scriptBrowser.objects.regenTitle", { name: regenerating.name })}
+          body={t("scriptBrowser.objects.regenBody")}
+          confirmLabel={t("common.regenerate")}
           onConfirm={async () => {
+            // LLM prompt — not localized
             await api.refineObject(
               name,
               regenerating.id,
@@ -608,10 +642,10 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
       )}
       {deleting && (
         <ConfirmDeleteDialog
-          title={`Supprimer « ${deleting.name} » ?`}
-          body="Cet objet et toutes les cases qui s'y réfèrent vont être retirés du scénario."
+          title={t("scriptBrowser.objects.deleteTitle", { name: deleting.name })}
+          body={t("scriptBrowser.objects.deleteBody")}
           loadPreview={() => api.previewDeleteObject(name, deleting.id)}
-          confirmLabel="Supprimer"
+          confirmLabel={t("common.delete")}
           onClose={() => setDeleting(null)}
           onConfirm={async () => {
             const info = await api.deleteObject(name, deleting.id, true);
@@ -627,6 +661,7 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
 }
 
 function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly = false }) {
+  const { t } = useTranslation();
   const { name } = useParams();
   const [idx, setIdx] = useState(0);
   const [refining, setRefining] = useState(false);
@@ -634,7 +669,7 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
   const [savingField, setSavingField] = useState(null);
   const [manualError, setManualError] = useState(null);
   const pages = script.pages;
-  if (pages.length === 0) return <p className="text-sm text-[var(--color-mute)]">Aucune planche.</p>;
+  if (pages.length === 0) return <p className="text-sm text-[var(--color-mute)]">{t("scriptBrowser.pages.empty")}</p>;
   const currentIdx = Math.min(idx, pages.length - 1);
   const page = pages[currentIdx];
   const pageCoherenceIssues = (coherence?.issues || []).filter((issue) => issue.page_number === page.page_number);
@@ -670,7 +705,7 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-[var(--color-rose-500)]">
-                  Erreurs de cohérence sur cette planche
+                  {t("scriptBrowser.pages.issuesTitle")}
                 </p>
                 <ul className="mt-1 list-disc pl-5 text-xs text-[var(--color-ink-soft)]">
                   {pageCoherenceIssues.map((issue, issueIndex) => (
@@ -680,7 +715,7 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
               </div>
               {!readOnly && (
                 <button className="btn btn-secondary text-xs" onClick={() => onRegeneratePage(page.page_number)}>
-                  Régénérer la planche
+                  {t("scriptBrowser.pages.regenPage")}
                 </button>
               )}
             </div>
@@ -690,7 +725,7 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
           <div className="mb-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-paper-soft)] p-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-sm font-semibold">Suggestions pour cette planche</p>
+                <p className="text-sm font-semibold">{t("scriptBrowser.pages.suggestionsTitle")}</p>
                 <ul className="mt-1 list-disc pl-5 text-xs text-[var(--color-ink-soft)]">
                   {pageCoherenceSuggestions.map((s, i) => (
                     <li key={`${s.kind}_${s.target}_${i}`}>{s.message}</li>
@@ -699,7 +734,7 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
               </div>
               {!readOnly && (
                 <button className="btn btn-ghost text-xs" onClick={() => onRegeneratePage(page.page_number)}>
-                  Améliorer la planche
+                  {t("scriptBrowser.pages.improvePage")}
                 </button>
               )}
             </div>
@@ -708,21 +743,21 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
         {!readOnly && (
           <div className="script-page-actions">
             <button className="btn btn-ghost text-xs" onClick={() => setRegenerating(true)}>
-              ↻ Régénérer
+              ↻ {t("common.regenerate")}
             </button>
             <button className="btn btn-ghost text-xs" onClick={() => setRefining(true)}>
-              Retoucher la planche
+              {t("scriptBrowser.pages.refineTitle", { n: page.page_number })}
             </button>
           </div>
         )}
 
         <div className="script-layout-block">
           <div className="min-w-0">
-            <p className="script-layout-title">Découpage</p>
+            <p className="script-layout-title">{t("scriptBrowser.pages.layout")}</p>
             <EditableText
-              label="Découpage"
+              label={t("scriptBrowser.pages.layout")}
               value={page.layout || ""}
-              placeholder="Aucun découpage renseigné."
+              placeholder={t("scriptBrowser.pages.layoutPlaceholder")}
               readOnly={readOnly}
               saving={savingField === "layout"}
               onSave={(value) =>
@@ -738,19 +773,19 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
             <li key={p.panel_number} className="script-panel">
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div>
-                  <h3 className="text-base font-semibold">Case {p.panel_number}</h3>
+                  <h3 className="text-base font-semibold">{t("scriptBrowser.pages.panel", { n: p.panel_number })}</h3>
                 </div>
                 {p.sound_effects?.length > 0 && <span className="script-sfx-chip">{p.sound_effects.join(", ")}</span>}
               </div>
 
               <dl className="script-panel-facts">
                 <div>
-                  <dt>Taille</dt>
+                  <dt>{t("scriptBrowser.pages.size")}</dt>
                   <dd>
                     <EditableText
-                      label={`Case ${p.panel_number} - Taille`}
+                      label={t("scriptBrowser.pages.size")}
                       value={p.size || ""}
-                      placeholder="medium"
+                      placeholder={t("scriptBrowser.pages.sizePlaceholder")}
                       readOnly={readOnly}
                       multiline={false}
                       saving={savingField === `panel_${p.panel_number}_size`}
@@ -763,12 +798,12 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
                   </dd>
                 </div>
                 <div>
-                  <dt>Cadrage</dt>
+                  <dt>{t("scriptBrowser.pages.shot")}</dt>
                   <dd>
                     <EditableText
-                      label={`Case ${p.panel_number} - Cadrage`}
+                      label={t("scriptBrowser.pages.shot")}
                       value={p.shot || ""}
-                      placeholder="medium shot"
+                      placeholder={t("scriptBrowser.pages.shotPlaceholder")}
                       readOnly={readOnly}
                       multiline={false}
                       saving={savingField === `panel_${p.panel_number}_shot`}
@@ -781,12 +816,12 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
                   </dd>
                 </div>
                 <div>
-                  <dt>Lieu</dt>
+                  <dt>{t("scriptBrowser.pages.location")}</dt>
                   <dd>
                     <EditableText
-                      label={`Case ${p.panel_number} - Lieu`}
+                      label={t("scriptBrowser.pages.location")}
                       value={p.location || ""}
-                      placeholder="Non précisé"
+                      placeholder={t("scriptBrowser.pages.locationPlaceholder")}
                       readOnly={readOnly}
                       multiline={false}
                       saving={savingField === `panel_${p.panel_number}_location`}
@@ -799,12 +834,12 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
                   </dd>
                 </div>
                 <div>
-                  <dt>Personnages</dt>
+                  <dt>{t("scriptBrowser.pages.characters")}</dt>
                   <dd>
                     <EditableText
-                      label={`Case ${p.panel_number} - Personnages`}
+                      label={t("scriptBrowser.pages.characters")}
                       value={(p.characters || []).join(", ")}
-                      placeholder="Aucun"
+                      placeholder={t("scriptBrowser.pages.charactersPlaceholder")}
                       readOnly={readOnly}
                       multiline={false}
                       saving={savingField === `panel_${p.panel_number}_characters`}
@@ -817,12 +852,12 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
                   </dd>
                 </div>
                 <div>
-                  <dt>Objets</dt>
+                  <dt>{t("scriptBrowser.pages.objects")}</dt>
                   <dd>
                     <EditableText
-                      label={`Case ${p.panel_number} - Objets`}
+                      label={t("scriptBrowser.pages.objects")}
                       value={(p.objects || []).join(", ")}
-                      placeholder="Aucun"
+                      placeholder={t("scriptBrowser.pages.objectsPlaceholder")}
                       readOnly={readOnly}
                       multiline={false}
                       saving={savingField === `panel_${p.panel_number}_objects`}
@@ -837,9 +872,9 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
               </dl>
 
               <section className="script-section">
-                <h4>Scène</h4>
+                <h4>{t("scriptBrowser.pages.scene")}</h4>
                 <EditableText
-                  label={`Case ${p.panel_number} - Scène`}
+                  label={t("scriptBrowser.pages.scene")}
                   value={p.scene_description || ""}
                   readOnly={readOnly}
                   saving={savingField === `panel_${p.panel_number}_scene`}
@@ -852,11 +887,11 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
               </section>
 
               <section className="script-section script-narration">
-                <h4>Narration</h4>
+                <h4>{t("scriptBrowser.pages.narration")}</h4>
                 <EditableText
-                  label={`Case ${p.panel_number} - Narration`}
+                  label={t("scriptBrowser.pages.narration")}
                   value={p.narration || ""}
-                  placeholder="Aucune narration."
+                  placeholder={t("scriptBrowser.pages.narrationPlaceholder")}
                   readOnly={readOnly}
                   saving={savingField === `panel_${p.panel_number}_narration`}
                   onSave={(value) =>
@@ -868,11 +903,11 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
               </section>
 
               <section className="script-section">
-                <h4>SFX</h4>
+                <h4>{t("scriptBrowser.pages.sfx")}</h4>
                 <EditableText
-                  label={`Case ${p.panel_number} - SFX`}
+                  label={t("scriptBrowser.pages.sfx")}
                   value={(p.sound_effects || []).join(", ")}
-                  placeholder="Aucun SFX."
+                  placeholder={t("scriptBrowser.pages.sfxPlaceholder")}
                   readOnly={readOnly}
                   saving={savingField === `panel_${p.panel_number}_sfx`}
                   onSave={(value) =>
@@ -885,15 +920,15 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
 
               {p.dialogs?.length > 0 && (
                 <section className="script-section">
-                  <h4>Dialogues</h4>
+                  <h4>{t("scriptBrowser.pages.dialogs")}</h4>
                   <ul className="space-y-2">
                     {p.dialogs.map((d, i) => (
                       <li key={i} className="script-dialog">
                         <div className="script-dialog-header">
                           <div>
-                            <span className="script-dialog-label">Personnage</span>
+                            <span className="script-dialog-label">{t("scriptBrowser.pages.dialogCharacter")}</span>
                             <EditableText
-                              label={`Case ${p.panel_number} - Dialogue ${i + 1} - Personnage`}
+                              label={t("scriptBrowser.pages.dialogCharacter")}
                               value={d.speaker || ""}
                               readOnly={readOnly}
                               multiline={false}
@@ -906,9 +941,9 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
                             />
                           </div>
                           <div>
-                            <span className="script-dialog-label">Type</span>
+                            <span className="script-dialog-label">{t("scriptBrowser.pages.dialogType")}</span>
                             <EditableSelect
-                              label={`Case ${p.panel_number} - Dialogue ${i + 1} - Type`}
+                              label={t("scriptBrowser.pages.dialogType")}
                               value={d.type || "speech"}
                               options={DIALOG_TYPES}
                               readOnly={readOnly}
@@ -922,7 +957,7 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
                           </div>
                         </div>
                         <EditableText
-                          label={`Case ${p.panel_number} - Dialogue ${i + 1} - Texte`}
+                          label={t("scriptBrowser.pages.dialogCharacter")}
                           value={d.text || ""}
                           readOnly={readOnly}
                           saving={savingField === `panel_${p.panel_number}_dialog_${i}`}
@@ -941,7 +976,9 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
           ))}
         </ol>
         {manualError && (
-          <p className="text-sm text-[var(--color-rose-500)] mt-4">Sauvegarde impossible : {manualError}</p>
+          <p className="text-sm text-[var(--color-rose-500)] mt-4">
+            {t("scriptBrowser.pages.saveError", { error: manualError })}
+          </p>
         )}
       </div>
 
@@ -949,13 +986,12 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
 
       {refining && (
         <RefineDialog
-          title={`Retoucher la planche ${page.page_number}`}
-          hint="Décrivez le changement à apporter à cette planche. Le LLM réécrira uniquement cette page."
+          title={t("scriptBrowser.pages.refineTitle", { n: page.page_number })}
+          hint={t("scriptBrowser.pages.refineHint")}
           extraField={{
             type: "checkbox",
             id: "cascade",
-            label:
-              "Régénérer aussi les planches suivantes pour cohérence (recommandé pour des changements importants).",
+            label: t("scriptBrowser.pages.refineCascadeLabel"),
           }}
           onClose={() => setRefining(false)}
           onSubmit={async (text, extras) => {
@@ -966,10 +1002,11 @@ function PagesBrowser({ script, coherence, onChanged, onRegeneratePage, readOnly
       )}
       {regenerating && (
         <ConfirmDialog
-          title={`Régénérer la planche ${page.page_number} ?`}
-          body="Le scénario de cette planche sera réécrit par le LLM avec de nouvelles idées. Cette action consomme des crédits API."
-          confirmLabel="Régénérer"
+          title={t("scriptBrowser.pages.regenTitle", { n: page.page_number })}
+          body={t("scriptBrowser.pages.regenBody")}
+          confirmLabel={t("common.regenerate")}
           onConfirm={async () => {
+            // LLM prompt — not localized
             await api.refinePage(
               name,
               page.page_number,
@@ -992,6 +1029,7 @@ function buildReferencePrompt(...parts) {
 }
 
 function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
+  const { t } = useTranslation();
   const isCharacter = type === "character";
   const [draft, setDraft] = useState({
     id: "",
@@ -1015,7 +1053,7 @@ function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
     const outfit = draft.outfit.trim();
     const referencePrompt = draft.referencePrompt.trim() || buildReferencePrompt(description, outfit, name);
     if (!id || !name || !description) {
-      setError("L'id, le nom et la description sont obligatoires.");
+      setError(t("scriptBrowser.addItem.idNameDescriptionRequired"));
       return;
     }
     setSaving(true);
@@ -1048,18 +1086,24 @@ function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
       <form className="space-y-3" onSubmit={submit}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="text-sm font-medium">
-            ID
+            {t("scriptBrowser.addItem.idName")}
             <input
               autoFocus
               className="input mt-1"
               value={draft.id}
               onChange={(event) => updateField("id", event.target.value)}
               disabled={saving}
-              placeholder={isCharacter ? "perso_2" : type === "location" ? "decor_2" : "objet_2"}
+              placeholder={
+                isCharacter
+                  ? "perso_2"
+                  : type === "location"
+                    ? "decor_2"
+                    : "objet_2"
+              }
             />
           </label>
           <label className="text-sm font-medium">
-            Nom
+            {t("scriptBrowser.addItem.name")}
             <input
               className="input mt-1"
               value={draft.name}
@@ -1069,7 +1113,7 @@ function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
           </label>
         </div>
         <label className="text-sm font-medium block">
-          {isCharacter ? "Description physique" : "Description"}
+          {isCharacter ? t("scriptBrowser.addItem.physicalDescription") : t("scriptBrowser.addItem.description")}
           <textarea
             className="textarea editable-modal-textarea mt-1"
             value={draft.description}
@@ -1079,7 +1123,7 @@ function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
         </label>
         {isCharacter && (
           <label className="text-sm font-medium block">
-            Tenue
+            {t("scriptBrowser.addItem.outfit")}
             <input
               className="input mt-1"
               value={draft.outfit}
@@ -1089,22 +1133,22 @@ function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
           </label>
         )}
         <label className="text-sm font-medium block">
-          Prompt image de reference
+          {t("scriptBrowser.addItem.referencePrompt")}
           <textarea
             className="textarea editable-modal-textarea mt-1"
             value={draft.referencePrompt}
             onChange={(event) => updateField("referencePrompt", event.target.value)}
             disabled={saving}
-            placeholder="Si vide, il sera repris depuis la description."
+            placeholder={t("scriptBrowser.addItem.referencePromptPlaceholder")}
           />
         </label>
         {error && <p className="text-sm text-[var(--color-rose-500)]">{error}</p>}
         <div className="editable-actions">
           <button type="button" className="btn btn-ghost text-xs" onClick={onClose} disabled={saving}>
-            Annuler
+            {t("common.cancel")}
           </button>
           <button type="submit" className="btn btn-primary text-xs" disabled={saving}>
-            {saving ? "Ajout..." : "Ajouter"}
+            {saving ? t("common.add") + "…" : t("common.add")}
           </button>
         </div>
       </form>
@@ -1112,15 +1156,8 @@ function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
   );
 }
 
-function EditableText({
-  label = "Champ",
-  value,
-  onSave,
-  placeholder = "Texte vide.",
-  readOnly = false,
-  saving = false,
-  multiline = true,
-}) {
+function EditableText({ label, value, onSave, placeholder, readOnly = false, saving = false, multiline = true }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
 
@@ -1143,14 +1180,14 @@ function EditableText({
             className="editable-edit-button"
             onClick={startEdit}
             disabled={saving}
-            title="Modifier"
-            aria-label="Modifier ce texte"
+            title={t("scriptBrowser.editor.editTitle")}
+            aria-label={t("scriptBrowser.editor.editAriaText")}
           >
             <FiEdit2 aria-hidden="true" />
           </button>
         </div>
       )}
-      <p className={value ? "" : "text-[var(--color-mute)] italic"}>{value || placeholder}</p>
+      <p className={value ? "" : "text-[var(--color-mute)] italic"}>{value || placeholder || t("scriptBrowser.editor.emptyText")}</p>
       {editing && (
         <EditValueDialog title={label}>
           {multiline ? (
@@ -1180,10 +1217,10 @@ function EditableText({
               }}
               disabled={saving}
             >
-              Annuler
+              {t("common.cancel")}
             </button>
             <button type="button" className="btn btn-primary text-xs" onClick={submit} disabled={saving}>
-              {saving ? "Sauvegarde..." : "Sauvegarder"}
+              {saving ? t("scriptBrowser.editor.saving") : t("scriptBrowser.editor.save")}
             </button>
           </div>
         </EditValueDialog>
@@ -1192,7 +1229,8 @@ function EditableText({
   );
 }
 
-function EditableSelect({ label = "Champ", value, options, onSave, readOnly = false, saving = false }) {
+function EditableSelect({ label, value, options, onSave, readOnly = false, saving = false }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || options[0]);
 
@@ -1213,8 +1251,8 @@ function EditableSelect({ label = "Champ", value, options, onSave, readOnly = fa
               setEditing(true);
             }}
             disabled={saving}
-            title="Modifier"
-            aria-label="Modifier ce type"
+            title={t("scriptBrowser.editor.editTitle")}
+            aria-label={t("scriptBrowser.editor.editAriaType")}
           >
             <FiEdit2 aria-hidden="true" />
           </button>
@@ -1246,10 +1284,10 @@ function EditableSelect({ label = "Champ", value, options, onSave, readOnly = fa
               }}
               disabled={saving}
             >
-              Annuler
+              {t("common.cancel")}
             </button>
             <button type="button" className="btn btn-primary text-xs" onClick={submit} disabled={saving}>
-              {saving ? "Sauvegarde..." : "Sauvegarder"}
+              {saving ? t("scriptBrowser.editor.saving") : t("scriptBrowser.editor.save")}
             </button>
           </div>
         </EditValueDialog>
@@ -1259,11 +1297,12 @@ function EditableSelect({ label = "Champ", value, options, onSave, readOnly = fa
 }
 
 function EditValueDialog({ title, children }) {
+  const { t } = useTranslation();
   return (
     <div className="editable-modal-positioner">
-      <div className="editable-modal" role="dialog" aria-modal="true" aria-label={`Modifier ${title}`}>
+      <div className="editable-modal" role="dialog" aria-modal="true" aria-label={`${t("scriptBrowser.editor.editTitle")} ${title}`}>
         <div className="editable-modal-header">
-          <p className="editable-modal-kicker">Modifier</p>
+          <p className="editable-modal-kicker">{t("scriptBrowser.editor.kicker")}</p>
           <h3 className="text-lg font-semibold">{title}</h3>
         </div>
         {children}
@@ -1273,6 +1312,7 @@ function EditValueDialog({ title, children }) {
 }
 
 function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, onRegeneratePage, onApplySuggestion }) {
+  const { t } = useTranslation();
   const [confirmSuggestion, setConfirmSuggestion] = useState(null);
   const issues = coherence.issues || [];
   const suggestions = coherence.suggestions || [];
@@ -1297,14 +1337,14 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
   const globalSuggestions = suggestions.filter((s) => !s.page_number);
 
   const statusText = dirty
-    ? "Des modifications manuelles sont en attente de vérification."
+    ? t("scriptBrowser.coherence.statusDirty")
     : issues.length > 0
-      ? `${issues.length} erreur(s) détectée(s).`
+      ? t("scriptBrowser.coherence.statusIssues", { count: issues.length })
       : suggestions.length > 0
-        ? `Aucune erreur · ${suggestions.length} suggestion(s).`
+        ? t("scriptBrowser.coherence.statusSuggestions", { count: suggestions.length })
         : coherence.checked_at
-          ? "Dernière vérification sans erreur ni suggestion."
-          : "Aucune vérification lancée depuis les dernières modifications.";
+          ? t("scriptBrowser.coherence.statusCheckedClean")
+          : t("scriptBrowser.coherence.statusUnchecked");
 
   return (
     <div className="space-y-4">
@@ -1315,9 +1355,9 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
           className={"btn text-sm " + (dirty ? "btn-primary" : "btn-ghost")}
           onClick={onCheck}
           disabled={readOnly || checking || !dirty || !onCheck}
-          title={!dirty ? "Aucune modification manuelle non vérifiée" : "Vérifier la cohérence du scénario"}
+          title={!dirty ? t("scriptBrowser.coherence.checkTitleNoChanges") : t("scriptBrowser.coherence.checkTitleHasChanges")}
         >
-          {checking ? "Vérification..." : "Vérifier la cohérence"}
+          {checking ? t("scriptBrowser.coherence.checkingButton") : t("scriptBrowser.coherence.checkButton")}
         </button>
       </div>
       {error && <p className="text-sm text-[var(--color-rose-500)]">{error}</p>}
@@ -1331,7 +1371,9 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-[var(--color-rose-500)]">Planche {pageNumber} — erreur</p>
+                  <p className="text-sm font-semibold text-[var(--color-rose-500)]">
+                    {t("scriptBrowser.coherence.pageIssueTitle", { n: pageNumber })}
+                  </p>
                   <ul className="mt-1 list-disc pl-5 text-xs text-[var(--color-ink-soft)]">
                     {pageIssues.map((issue, index) => (
                       <li key={`${issue.kind}_${issue.target}_${index}`}>{issue.message}</li>
@@ -1344,7 +1386,7 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
                     className="btn btn-secondary text-xs"
                     onClick={() => onRegeneratePage(Number(pageNumber))}
                   >
-                    Régénérer la planche
+                    {t("scriptBrowser.pages.regenPage")}
                   </button>
                 )}
               </div>
@@ -1362,7 +1404,7 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-sm font-semibold">Planche {pageNumber} — suggestion</p>
+                  <p className="text-sm font-semibold">{t("scriptBrowser.coherence.pageSuggestionTitle", { n: pageNumber })}</p>
                   <ul className="mt-1 list-disc pl-5 text-xs text-[var(--color-ink-soft)]">
                     {pageSuggestions.map((s, index) => (
                       <li key={`${s.kind}_${s.target}_${index}`}>{s.message}</li>
@@ -1375,7 +1417,7 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
                     className="btn btn-ghost text-xs"
                     onClick={() => onRegeneratePage(Number(pageNumber))}
                   >
-                    Améliorer la planche
+                    {t("scriptBrowser.pages.improvePage")}
                   </button>
                 )}
               </div>
@@ -1386,7 +1428,7 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
 
       {globalSuggestions.length > 0 && (
         <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-paper-soft)] p-2">
-          <p className="text-sm font-semibold">Suggestions générales</p>
+          <p className="text-sm font-semibold">{t("scriptBrowser.coherence.globalSuggestionsTitle")}</p>
           <ul className="mt-2 space-y-2">
             {globalSuggestions.map((s, index) => (
               <li key={`global_${index}`} className="flex items-start justify-between gap-2">
@@ -1397,7 +1439,7 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
                     className="btn btn-ghost text-xs flex-shrink-0"
                     onClick={() => setConfirmSuggestion(s)}
                   >
-                    Appliquer cette suggestion
+                    {t("scriptBrowser.coherence.applySuggestion")}
                   </button>
                 )}
               </li>
@@ -1409,16 +1451,16 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
       {issues.length === 0 && suggestions.length === 0 && !dirty && (
         <p className="text-sm text-[var(--color-mute)]">
           {coherence.checked_at
-            ? "Aucune erreur ni suggestion détectée lors de la dernière vérification."
-            : "Lancez une vérification pour analyser la cohérence du scénario."}
+            ? t("scriptBrowser.coherence.emptyChecked")
+            : t("scriptBrowser.coherence.emptyUnchecked")}
         </p>
       )}
 
       {confirmSuggestion && (
         <ConfirmDialog
-          title="Appliquer cette suggestion ?"
-          body="Le LLM va analyser le scénario et appliquer cette modification. Selon la nature du changement, des planches, des personnages ou des décors pourront être mis à jour. Cette action consomme des crédits API."
-          confirmLabel="Appliquer"
+          title={t("scriptBrowser.coherence.applyTitle")}
+          body={t("scriptBrowser.coherence.applyBody")}
+          confirmLabel={t("common.apply")}
           onConfirm={async () => {
             await onApplySuggestion(confirmSuggestion.message);
           }}
@@ -1430,6 +1472,7 @@ function CoherenceTabContent({ coherence, checking, error, readOnly, onCheck, on
 }
 
 function PageNavigation({ idx, pageCount, onChange, className = "" }) {
+  const { t } = useTranslation();
   return (
     <div className={"flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between " + className}>
       <button
@@ -1437,10 +1480,10 @@ function PageNavigation({ idx, pageCount, onChange, className = "" }) {
         disabled={idx === 0}
         onClick={() => onChange((i) => Math.max(0, i - 1))}
       >
-        ← Précédente
+        {t("scriptBrowser.navigation.previous")}
       </button>
       <div className="flex items-center justify-center gap-2 text-sm font-medium">
-        <span>Planche</span>
+        <span>{t("scriptBrowser.navigation.page")}</span>
         <select className="select page-select" value={idx} onChange={(event) => onChange(Number(event.target.value))}>
           {Array.from({ length: pageCount }, (_, i) => (
             <option key={i} value={i}>
@@ -1455,13 +1498,14 @@ function PageNavigation({ idx, pageCount, onChange, className = "" }) {
         disabled={idx === pageCount - 1}
         onClick={() => onChange((i) => Math.min(pageCount - 1, i + 1))}
       >
-        Suivante →
+        {t("scriptBrowser.navigation.next")}
       </button>
     </div>
   );
 }
 
 function CoversView({ script, onChanged, readOnly = false }) {
+  const { t } = useTranslation();
   const { name } = useParams();
   const [refining, setRefining] = useState(null);
   const [regenerating, setRegenerating] = useState(null);
@@ -1505,21 +1549,21 @@ function CoversView({ script, onChanged, readOnly = false }) {
       {script.cover && (
         <div className="card p-4 bg-[var(--color-paper-soft)]/40">
           <div className="flex items-start justify-between gap-3 mb-1">
-            <h3 className="font-semibold">Couverture</h3>
+            <h3 className="font-semibold">{t("scriptBrowser.covers.cover")}</h3>
             {!readOnly && (
               <div className="flex gap-1">
                 <button className="btn btn-ghost text-xs" onClick={() => setRegenerating("cover")}>
-                  ↻ Régénérer
+                  ↻ {t("common.regenerate")}
                 </button>
                 <button className="btn btn-ghost text-xs" onClick={() => setRefining("cover")}>
-                  Retoucher
+                  {t("common.retouch")}
                 </button>
               </div>
             )}
           </div>
           <div className="text-sm whitespace-pre-wrap">
             <EditableText
-              label="Couverture - Illustration"
+              label={t("scriptBrowser.covers.cover")}
               value={script.cover.scene_description}
               readOnly={readOnly}
               saving={savingField === "cover_scene"}
@@ -1532,11 +1576,13 @@ function CoversView({ script, onChanged, readOnly = false }) {
           </div>
           {script.cover.title_placement && (
             <p className="text-xs text-[var(--color-ink-soft)] mt-2">
-              <span className="uppercase tracking-wide text-[var(--color-mute)]">Placement du titre — </span>
+              <span className="uppercase tracking-wide text-[var(--color-mute)]">
+                {t("scriptBrowser.covers.titlePlacementLabel")}
+              </span>
               <EditableText
-                label="Couverture - Placement du titre"
+                label={t("scriptBrowser.covers.cover")}
                 value={script.cover.title_placement || ""}
-                placeholder="Non précisé."
+                placeholder={t("scriptBrowser.covers.titlePlacementPlaceholder")}
                 readOnly={readOnly}
                 saving={savingField === "cover_title_placement"}
                 onSave={(value) =>
@@ -1549,9 +1595,9 @@ function CoversView({ script, onChanged, readOnly = false }) {
           )}
           {script.cover.subtitle && (
             <p className="text-sm mt-2">
-              <strong>Sous-titre&nbsp;:</strong>{" "}
+              <strong>{t("scriptBrowser.covers.subtitle")}</strong>{" "}
               <EditableText
-                label="Couverture - Sous-titre"
+                label={t("scriptBrowser.covers.cover")}
                 value={script.cover.subtitle || ""}
                 readOnly={readOnly}
                 multiline={false}
@@ -1567,7 +1613,7 @@ function CoversView({ script, onChanged, readOnly = false }) {
           {script.cover.tagline && (
             <div className="text-sm italic mt-2">
               <EditableText
-                label="Couverture - Tagline"
+                label={t("scriptBrowser.covers.cover")}
                 value={script.cover.tagline || ""}
                 readOnly={readOnly}
                 saving={savingField === "cover_tagline"}
@@ -1584,21 +1630,21 @@ function CoversView({ script, onChanged, readOnly = false }) {
       {script.back_cover && (
         <div className="card p-4 bg-[var(--color-paper-soft)]/40">
           <div className="flex items-start justify-between gap-3 mb-1">
-            <h3 className="font-semibold">4ᵉ de couverture</h3>
+            <h3 className="font-semibold">{t("scriptBrowser.covers.backCover")}</h3>
             {!readOnly && (
               <div className="flex gap-1">
                 <button className="btn btn-ghost text-xs" onClick={() => setRegenerating("back_cover")}>
-                  ↻ Régénérer
+                  ↻ {t("common.regenerate")}
                 </button>
                 <button className="btn btn-ghost text-xs" onClick={() => setRefining("back_cover")}>
-                  Retoucher
+                  {t("common.retouch")}
                 </button>
               </div>
             )}
           </div>
           <div className="text-sm whitespace-pre-wrap">
             <EditableText
-              label="4e de couverture - Synopsis"
+              label={t("scriptBrowser.covers.backCover")}
               value={script.back_cover.synopsis_blurb}
               readOnly={readOnly}
               saving={savingField === "back_synopsis"}
@@ -1611,9 +1657,11 @@ function CoversView({ script, onChanged, readOnly = false }) {
           </div>
           {script.back_cover.scene_description && (
             <p className="text-xs text-[var(--color-ink-soft)] mt-2">
-              <span className="uppercase tracking-wide text-[var(--color-mute)]">Illustration — </span>
+              <span className="uppercase tracking-wide text-[var(--color-mute)]">
+                {t("scriptBrowser.covers.backIllustrationLabel")}
+              </span>
               <EditableText
-                label="4e de couverture - Illustration"
+                label={t("scriptBrowser.covers.backCover")}
                 value={script.back_cover.scene_description || ""}
                 readOnly={readOnly}
                 saving={savingField === "back_scene"}
@@ -1628,7 +1676,7 @@ function CoversView({ script, onChanged, readOnly = false }) {
           {script.back_cover.tagline && (
             <div className="text-sm italic mt-2">
               <EditableText
-                label="4e de couverture - Tagline"
+                label={t("scriptBrowser.covers.backCover")}
                 value={script.back_cover.tagline || ""}
                 readOnly={readOnly}
                 saving={savingField === "back_tagline"}
@@ -1643,7 +1691,7 @@ function CoversView({ script, onChanged, readOnly = false }) {
           {script.back_cover.layout_notes && (
             <div className="text-xs text-[var(--color-mute)] mt-2">
               <EditableText
-                label="4e de couverture - Notes de mise en page"
+                label={t("scriptBrowser.covers.backCover")}
                 value={script.back_cover.layout_notes || ""}
                 readOnly={readOnly}
                 saving={savingField === "back_layout_notes"}
@@ -1658,14 +1706,18 @@ function CoversView({ script, onChanged, readOnly = false }) {
         </div>
       )}
       {!script.cover && !script.back_cover && (
-        <p className="text-sm text-[var(--color-mute)]">Aucune couverture définie.</p>
+        <p className="text-sm text-[var(--color-mute)]">{t("scriptBrowser.covers.noCover")}</p>
       )}
-      {manualError && <p className="text-sm text-[var(--color-rose-500)]">Sauvegarde impossible : {manualError}</p>}
+      {manualError && (
+        <p className="text-sm text-[var(--color-rose-500)]">
+          {t("scriptBrowser.covers.saveError", { error: manualError })}
+        </p>
+      )}
 
       {refining === "cover" && (
         <RefineDialog
-          title="Retoucher la couverture"
-          hint="Décrivez la modification à apporter à la couverture (illustration, placement du titre, tagline…)."
+          title={t("scriptBrowser.covers.refineCoverTitle")}
+          hint={t("scriptBrowser.covers.refineCoverHint")}
           onClose={() => setRefining(null)}
           onSubmit={async (text) => {
             await api.refineCover(name, text);
@@ -1675,8 +1727,8 @@ function CoversView({ script, onChanged, readOnly = false }) {
       )}
       {refining === "back_cover" && (
         <RefineDialog
-          title="Retoucher la 4ᵉ de couverture"
-          hint="Décrivez la modification à apporter (synopsis, tagline, mise en page…)."
+          title={t("scriptBrowser.covers.refineBackCoverTitle")}
+          hint={t("scriptBrowser.covers.refineBackCoverHint")}
           onClose={() => setRefining(null)}
           onSubmit={async (text) => {
             await api.refineBackCover(name, text);
@@ -1686,10 +1738,11 @@ function CoversView({ script, onChanged, readOnly = false }) {
       )}
       {regenerating === "cover" && (
         <ConfirmDialog
-          title="Régénérer la couverture ?"
-          body="La description de la couverture sera réécrite par le LLM. Cette action consomme des crédits API."
-          confirmLabel="Régénérer"
+          title={t("scriptBrowser.covers.regenCoverTitle")}
+          body={t("scriptBrowser.covers.regenCoverBody")}
+          confirmLabel={t("common.regenerate")}
           onConfirm={async () => {
+            // LLM prompt — not localized
             await api.refineCover(
               name,
               "Propose une version alternative complète de la couverture, avec une nouvelle mise en scène et un nouveau placement du titre.",
@@ -1701,10 +1754,11 @@ function CoversView({ script, onChanged, readOnly = false }) {
       )}
       {regenerating === "back_cover" && (
         <ConfirmDialog
-          title="Régénérer la 4ᵉ de couverture ?"
-          body="Le synopsis et la mise en page de la 4ᵉ de couverture seront réécrits par le LLM. Cette action consomme des crédits API."
-          confirmLabel="Régénérer"
+          title={t("scriptBrowser.covers.regenBackCoverTitle")}
+          body={t("scriptBrowser.covers.regenBackCoverBody")}
+          confirmLabel={t("common.regenerate")}
           onConfirm={async () => {
+            // LLM prompt — not localized
             await api.refineBackCover(
               name,
               "Propose une version alternative complète de la 4ᵉ de couverture, avec un nouveau synopsis et une nouvelle tagline.",

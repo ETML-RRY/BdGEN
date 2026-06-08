@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
 import ProjectForm, { DEFAULT_CONFIG, slugifyProjectName } from "../components/ProjectForm.jsx";
 import QuickCreatePanel from "../components/QuickCreatePanel.jsx";
@@ -38,6 +39,7 @@ async function createUniqueProject(config) {
 
 export default function NewProject() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [mode, setMode] = useState("quick"); // "quick" | "form"
   const [initialConfig, setInitialConfig] = useState(DEFAULT_CONFIG);
   const [error, setError] = useState(null);
@@ -58,7 +60,7 @@ export default function NewProject() {
     } catch (e) {
       // Couldn't auto-save: fall back to the manual form with the draft
       // pre-filled so the user can review and create it themselves.
-      setError(e.message || "La sauvegarde automatique a échoué.");
+      setError(e.message || t("newProject.saveFailed"));
       setInitialConfig(config);
       setMode("form");
     }
@@ -71,11 +73,9 @@ export default function NewProject() {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
-      <h1 className="text-2xl font-semibold mb-2">Nouveau projet</h1>
+      <h1 className="text-2xl font-semibold mb-2">{t("newProject.title")}</h1>
       <p className="text-[var(--color-ink-soft)] mb-6">
-        {mode === "quick"
-          ? "Partez d'une simple idée : nous créons le projet et pré-remplissons le formulaire pour vous."
-          : "Relisez et ajustez les informations ci-dessous. Vous pourrez les affiner à tout moment depuis l'étape « Préparation »."}
+        {mode === "quick" ? t("newProject.introQuick") : t("newProject.introForm")}
       </p>
       {error && (
         <p className="card p-4 mb-6 text-[var(--color-rose-500)]">{error}</p>
@@ -88,7 +88,7 @@ export default function NewProject() {
           isNew
           onSubmit={onSubmit}
           onCancel={() => navigate("/")}
-          submitLabel="Créer le projet"
+          submitLabel={t("newProject.create")}
         />
       )}
     </div>
