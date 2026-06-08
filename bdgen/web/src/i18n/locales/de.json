@@ -86,6 +86,19 @@
     "previousAria": "Zurück",
     "nextAria": "Weiter"
   },
+  "progressEvents": {
+    "references": {
+      "character": {
+        "generating": "Referenz für „{{name}}“ wird erstellt …"
+      },
+      "location": {
+        "generating": "Referenz für den Schauplatz „{{name}}“ wird erstellt …"
+      },
+      "object": {
+        "generating": "Referenz für das Objekt „{{name}}“ wird erstellt …"
+      }
+    }
+  },
   "progressPanel": {
     "interruptFailed": "Stoppen fehlgeschlagen.",
     "interrupting": "Wird gestoppt…",

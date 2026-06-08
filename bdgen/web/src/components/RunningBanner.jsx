@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useStepLabelMap } from "../hooks/useTranslatedSteps.js";
+import { formatProgressEvent } from "../i18n/formatProgressEvent.js";
 
 export default function RunningBanner({ job, className = "" }) {
   const { t } = useTranslation();
   const stepLabels = useStepLabelMap();
   const stepLabel = stepLabels[job.step] || job.step;
+  const lastMessage = formatProgressEvent(job.last_event, t) || job.last_message;
   return (
     <div
       className={
@@ -23,9 +25,9 @@ export default function RunningBanner({ job, className = "" }) {
               {t("runningBanner.stepSuffix", { step: stepLabel })}
             </span>
           </div>
-          {job.last_message && (
+          {lastMessage && (
             <div className="text-[var(--color-ink-soft)] text-xs mt-0.5">
-              {job.last_message}
+              {lastMessage}
               {job.progress_total ? (
                 <>
                   {" "}

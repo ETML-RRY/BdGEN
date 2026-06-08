@@ -168,7 +168,12 @@ def _generate_references_traced(
                     message=f"Génération de la référence pour « {character.name} »…",
                     current=done,
                     total=total,
-                    extra={"id": character.id, "kind": "character"},
+                    extra={
+                        "id": character.id,
+                        "kind": "character",
+                        "name": character.name,
+                        "i18n_key": "progressEvents.references.character.generating",
+                    },
                 )
             )
             prompt = _augment_prompt(
@@ -243,7 +248,12 @@ def _generate_references_traced(
                     message=f"Génération de la référence pour le décor « {location.name} »…",
                     current=done,
                     total=total,
-                    extra={"id": location.id, "kind": "location"},
+                    extra={
+                        "id": location.id,
+                        "kind": "location",
+                        "name": location.name,
+                        "i18n_key": "progressEvents.references.location.generating",
+                    },
                 )
             )
             prompt = _augment_prompt(
@@ -319,7 +329,12 @@ def _generate_references_traced(
                     message=f"Génération de la référence pour l'objet « {obj.name} »…",
                     current=done,
                     total=total,
-                    extra={"id": obj.id, "kind": "object"},
+                    extra={
+                        "id": obj.id,
+                        "kind": "object",
+                        "name": obj.name,
+                        "i18n_key": "progressEvents.references.object.generating",
+                    },
                 )
             )
             prompt = _augment_prompt(
