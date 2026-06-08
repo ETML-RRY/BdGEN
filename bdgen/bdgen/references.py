@@ -128,6 +128,7 @@ def _generate_references_traced(
                 step="references",
                 phase="skipped",
                 message="Génération des références désactivée dans les options.",
+                extra={"i18n_key": "progressEvents.references.skipped"},
             )
         )
         return script
@@ -157,7 +158,12 @@ def _generate_references_traced(
                     current=done,
                     total=total,
                     artifact=str(target),
-                    extra={"id": character.id, "kind": "character"},
+                    extra={
+                        "id": character.id,
+                        "kind": "character",
+                        "name": character.name,
+                        "i18n_key": "progressEvents.references.character.skipped",
+                    },
                 )
             )
         else:
@@ -217,7 +223,12 @@ def _generate_references_traced(
                     current=done,
                     total=total,
                     artifact=str(target),
-                    extra={"id": character.id, "kind": "character"},
+                    extra={
+                        "id": character.id,
+                        "kind": "character",
+                        "name": character.name,
+                        "i18n_key": "progressEvents.references.character.done",
+                    },
                 )
             )
         character.reference_image = target
@@ -237,7 +248,12 @@ def _generate_references_traced(
                     current=done,
                     total=total,
                     artifact=str(target),
-                    extra={"id": location.id, "kind": "location"},
+                    extra={
+                        "id": location.id,
+                        "kind": "location",
+                        "name": location.name,
+                        "i18n_key": "progressEvents.references.location.skipped",
+                    },
                 )
             )
         else:
@@ -298,7 +314,12 @@ def _generate_references_traced(
                     current=done,
                     total=total,
                     artifact=str(target),
-                    extra={"id": location.id, "kind": "location"},
+                    extra={
+                        "id": location.id,
+                        "kind": "location",
+                        "name": location.name,
+                        "i18n_key": "progressEvents.references.location.done",
+                    },
                 )
             )
         location.reference_image = target
@@ -318,7 +339,12 @@ def _generate_references_traced(
                     current=done,
                     total=total,
                     artifact=str(target),
-                    extra={"id": obj.id, "kind": "object"},
+                    extra={
+                        "id": obj.id,
+                        "kind": "object",
+                        "name": obj.name,
+                        "i18n_key": "progressEvents.references.object.skipped",
+                    },
                 )
             )
         else:
@@ -379,7 +405,12 @@ def _generate_references_traced(
                     current=done,
                     total=total,
                     artifact=str(target),
-                    extra={"id": obj.id, "kind": "object"},
+                    extra={
+                        "id": obj.id,
+                        "kind": "object",
+                        "name": obj.name,
+                        "i18n_key": "progressEvents.references.object.done",
+                    },
                 )
             )
         obj.reference_image = target
@@ -393,6 +424,7 @@ def _generate_references_traced(
             message="Toutes les références sont prêtes.",
             current=total,
             total=total,
+            extra={"i18n_key": "progressEvents.references.allDone"},
         )
     )
     return script

@@ -88,15 +88,64 @@
   },
   "progressEvents": {
     "references": {
+      "skipped": "Génération des références désactivée dans les options.",
+      "allDone": "Toutes les références sont prêtes.",
       "character": {
-        "generating": "Génération de la référence pour « {{name}} »…"
+        "skipped": "Personnage « {{name}} » déjà sur disque.",
+        "generating": "Génération de la référence pour « {{name}} »…",
+        "done": "Référence « {{name}} » générée."
       },
       "location": {
-        "generating": "Génération de la référence pour le décor « {{name}} »…"
+        "skipped": "Décor « {{name}} » déjà sur disque.",
+        "generating": "Génération de la référence pour le décor « {{name}} »…",
+        "done": "Référence « {{name}} » générée."
       },
       "object": {
-        "generating": "Génération de la référence pour l'objet « {{name}} »…"
+        "skipped": "Objet « {{name}} » déjà sur disque.",
+        "generating": "Génération de la référence pour l'objet « {{name}} »…",
+        "done": "Référence « {{name}} » générée."
       }
+    },
+    "compose": {
+      "cover": {
+        "skipped": "Couverture déjà sur disque.",
+        "generating": "Génération de la couverture…",
+        "done": "Couverture générée."
+      },
+      "page": {
+        "skipped": "Planche {{n}} déjà sur disque.",
+        "generating": "Génération de la planche {{n}}…",
+        "done": "Planche {{n}} générée."
+      },
+      "back": {
+        "skipped": "4ᵉ de couverture déjà sur disque.",
+        "generating": "Génération de la 4ᵉ de couverture…",
+        "done": "4ᵉ de couverture générée."
+      },
+      "assembling": "Assemblage de {{count}} images en PDF…",
+      "donePdf": "PDF assemblé.",
+      "doneImages": "Images sauvegardées dans {{path}}"
+    },
+    "upscale": {
+      "missingSource": "Source absente pour {{id}}, étape ignorée.",
+      "skipped": "Upscale déjà présent pour {{id}}, on conserve.",
+      "generating": "Upscale de {{id}} via Replicate…",
+      "done": "Upscale terminé pour {{id}}.",
+      "assemblingPdf": "Assemblage de {{count}} images upscalées en PDF…",
+      "pdfDone": "PDF assemblé à partir des images upscalées.",
+      "allDone": "Upscale terminé."
+    },
+    "script": {
+      "setup": "Phase de setup : personnages, décors, couverture, 4ᵉ de couverture ({{label}})…",
+      "setupDone": "Setup terminé : {{characters}} personnages, {{locations}} décors.",
+      "page": {
+        "generating": "Génération de la planche {{n}}/{{total}} ({{label}})…",
+        "done": "Planche {{n}} écrite."
+      },
+      "done": "Scénario complet : {{characters}} personnages, {{locations}} décors, {{pages}} planches, {{panels}} cases.",
+      "resumeFailed": "Script existant illisible ({{error}}) ; regénération complète.",
+      "alreadyComplete": "Scénario déjà complet sur disque ({{count}} planches).",
+      "resuming": "Reprise : {{written}}/{{target}} planches déjà écrites."
     }
   },
   "progressPanel": {

@@ -192,7 +192,7 @@ def _compose_output_impl(
                     current=done,
                     total=total,
                     artifact=str(cover_image),
-                    extra={"id": "cover"},
+                    extra={"id": "cover", "i18n_key": "progressEvents.compose.cover.skipped"},
                 )
             )
         else:
@@ -203,7 +203,7 @@ def _compose_output_impl(
                     message="Génération de la couverture…",
                     current=done,
                     total=total,
-                    extra={"id": "cover"},
+                    extra={"id": "cover", "i18n_key": "progressEvents.compose.cover.generating"},
                 )
             )
             started_at, started = start_timer()
@@ -239,7 +239,7 @@ def _compose_output_impl(
                     current=done,
                     total=total,
                     artifact=str(cover_image),
-                    extra={"id": "cover"},
+                    extra={"id": "cover", "i18n_key": "progressEvents.compose.cover.done"},
                 )
             )
 
@@ -257,7 +257,11 @@ def _compose_output_impl(
                     current=done,
                     total=total,
                     artifact=str(target),
-                    extra={"id": f"page_{page.page_number}"},
+                    extra={
+                        "id": f"page_{page.page_number}",
+                        "n": page.page_number,
+                        "i18n_key": "progressEvents.compose.page.skipped",
+                    },
                 )
             )
         else:
@@ -268,7 +272,11 @@ def _compose_output_impl(
                     message=f"Génération de la planche {page.page_number}…",
                     current=done,
                     total=total,
-                    extra={"id": f"page_{page.page_number}"},
+                    extra={
+                        "id": f"page_{page.page_number}",
+                        "n": page.page_number,
+                        "i18n_key": "progressEvents.compose.page.generating",
+                    },
                 )
             )
             started_at, started = start_timer()
@@ -308,7 +316,11 @@ def _compose_output_impl(
                     current=done,
                     total=total,
                     artifact=str(target),
-                    extra={"id": f"page_{page.page_number}"},
+                    extra={
+                        "id": f"page_{page.page_number}",
+                        "n": page.page_number,
+                        "i18n_key": "progressEvents.compose.page.done",
+                    },
                 )
             )
         page_images.append(target)
@@ -327,7 +339,7 @@ def _compose_output_impl(
                     current=done,
                     total=total,
                     artifact=str(back_image),
-                    extra={"id": "back"},
+                    extra={"id": "back", "i18n_key": "progressEvents.compose.back.skipped"},
                 )
             )
         else:
@@ -338,7 +350,7 @@ def _compose_output_impl(
                     message="Génération de la 4ᵉ de couverture…",
                     current=done,
                     total=total,
-                    extra={"id": "back"},
+                    extra={"id": "back", "i18n_key": "progressEvents.compose.back.generating"},
                 )
             )
             started_at, started = start_timer()
@@ -374,7 +386,7 @@ def _compose_output_impl(
                     current=done,
                     total=total,
                     artifact=str(back_image),
-                    extra={"id": "back"},
+                    extra={"id": "back", "i18n_key": "progressEvents.compose.back.done"},
                 )
             )
 
@@ -386,6 +398,10 @@ def _compose_output_impl(
                 step="compose",
                 phase="assembling",
                 message=f"Assemblage de {len(full_sequence)} images en PDF…",
+                extra={
+                    "count": len(full_sequence),
+                    "i18n_key": "progressEvents.compose.assembling",
+                },
             )
         )
         _assemble_pdf(full_sequence, options.output_path)
@@ -395,6 +411,7 @@ def _compose_output_impl(
                 phase="done",
                 message="PDF assemblé.",
                 artifact=str(options.output_path),
+                extra={"i18n_key": "progressEvents.compose.donePdf"},
             )
         )
         return options.output_path
@@ -405,6 +422,10 @@ def _compose_output_impl(
                 phase="done",
                 message=f"Images sauvegardées dans {pages_dir}",
                 artifact=str(pages_dir),
+                extra={
+                    "path": str(pages_dir),
+                    "i18n_key": "progressEvents.compose.doneImages",
+                },
             )
         )
         return pages_dir

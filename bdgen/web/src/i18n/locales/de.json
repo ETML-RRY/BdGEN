@@ -88,15 +88,64 @@
   },
   "progressEvents": {
     "references": {
+      "skipped": "Referenzerzeugung in den Optionen deaktiviert.",
+      "allDone": "Alle Referenzen sind bereit.",
       "character": {
-        "generating": "Referenz für „{{name}}“ wird erstellt …"
+        "skipped": "Figur „{{name}}“ ist bereits auf der Festplatte.",
+        "generating": "Referenz für „{{name}}“ wird erstellt …",
+        "done": "Referenz „{{name}}“ erstellt."
       },
       "location": {
-        "generating": "Referenz für den Schauplatz „{{name}}“ wird erstellt …"
+        "skipped": "Schauplatz „{{name}}“ ist bereits auf der Festplatte.",
+        "generating": "Referenz für den Schauplatz „{{name}}“ wird erstellt …",
+        "done": "Referenz „{{name}}“ erstellt."
       },
       "object": {
-        "generating": "Referenz für das Objekt „{{name}}“ wird erstellt …"
+        "skipped": "Objekt „{{name}}“ ist bereits auf der Festplatte.",
+        "generating": "Referenz für das Objekt „{{name}}“ wird erstellt …",
+        "done": "Referenz „{{name}}“ erstellt."
       }
+    },
+    "compose": {
+      "cover": {
+        "skipped": "Cover ist bereits auf der Festplatte.",
+        "generating": "Cover wird erstellt …",
+        "done": "Cover erstellt."
+      },
+      "page": {
+        "skipped": "Seite {{n}} ist bereits auf der Festplatte.",
+        "generating": "Seite {{n}} wird erstellt …",
+        "done": "Seite {{n}} erstellt."
+      },
+      "back": {
+        "skipped": "Rückcover ist bereits auf der Festplatte.",
+        "generating": "Rückcover wird erstellt …",
+        "done": "Rückcover erstellt."
+      },
+      "assembling": "{{count}} Bilder werden zu einem PDF zusammengefügt …",
+      "donePdf": "PDF zusammengefügt.",
+      "doneImages": "Bilder unter {{path}} gespeichert"
+    },
+    "upscale": {
+      "missingSource": "Quelle für {{id}} fehlt, Schritt übersprungen.",
+      "skipped": "Hochskalierung für {{id}} bereits vorhanden, wird beibehalten.",
+      "generating": "Hochskalierung von {{id}} über Replicate …",
+      "done": "Hochskalierung für {{id}} abgeschlossen.",
+      "assemblingPdf": "{{count}} hochskalierte Bilder werden zu einem PDF zusammengefügt …",
+      "pdfDone": "PDF aus den hochskalierten Bildern zusammengefügt.",
+      "allDone": "Hochskalierung abgeschlossen."
+    },
+    "script": {
+      "setup": "Setup-Phase: Figuren, Orte, Cover, Rückcover ({{label}}) …",
+      "setupDone": "Setup abgeschlossen: {{characters}} Figuren, {{locations}} Orte.",
+      "page": {
+        "generating": "Seite {{n}}/{{total}} wird erstellt ({{label}}) …",
+        "done": "Seite {{n}} geschrieben."
+      },
+      "done": "Skript vollständig: {{characters}} Figuren, {{locations}} Orte, {{pages}} Seiten, {{panels}} Panels.",
+      "resumeFailed": "Vorhandenes Skript nicht lesbar ({{error}}); vollständige Neuerzeugung.",
+      "alreadyComplete": "Skript bereits vollständig auf der Festplatte ({{count}} Seiten).",
+      "resuming": "Fortsetzung: {{written}}/{{target}} Seiten bereits geschrieben."
     }
   },
   "progressPanel": {

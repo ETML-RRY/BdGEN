@@ -88,15 +88,64 @@
   },
   "progressEvents": {
     "references": {
+      "skipped": "Reference generation disabled in the options.",
+      "allDone": "All references are ready.",
       "character": {
-        "generating": "Generating reference for “{{name}}”…"
+        "skipped": "Character “{{name}}” already on disk.",
+        "generating": "Generating reference for “{{name}}”…",
+        "done": "Reference “{{name}}” generated."
       },
       "location": {
-        "generating": "Generating reference for the setting “{{name}}”…"
+        "skipped": "Setting “{{name}}” already on disk.",
+        "generating": "Generating reference for the setting “{{name}}”…",
+        "done": "Reference “{{name}}” generated."
       },
       "object": {
-        "generating": "Generating reference for the object “{{name}}”…"
+        "skipped": "Object “{{name}}” already on disk.",
+        "generating": "Generating reference for the object “{{name}}”…",
+        "done": "Reference “{{name}}” generated."
       }
+    },
+    "compose": {
+      "cover": {
+        "skipped": "Cover already on disk.",
+        "generating": "Generating the cover…",
+        "done": "Cover generated."
+      },
+      "page": {
+        "skipped": "Page {{n}} already on disk.",
+        "generating": "Generating page {{n}}…",
+        "done": "Page {{n}} generated."
+      },
+      "back": {
+        "skipped": "Back cover already on disk.",
+        "generating": "Generating the back cover…",
+        "done": "Back cover generated."
+      },
+      "assembling": "Assembling {{count}} images into a PDF…",
+      "donePdf": "PDF assembled.",
+      "doneImages": "Images saved to {{path}}"
+    },
+    "upscale": {
+      "missingSource": "Source missing for {{id}}, step skipped.",
+      "skipped": "Upscale already present for {{id}}, keeping it.",
+      "generating": "Upscaling {{id}} via Replicate…",
+      "done": "Upscale finished for {{id}}.",
+      "assemblingPdf": "Assembling {{count}} upscaled images into a PDF…",
+      "pdfDone": "PDF assembled from the upscaled images.",
+      "allDone": "Upscale complete."
+    },
+    "script": {
+      "setup": "Setup phase: characters, locations, cover, back cover ({{label}})…",
+      "setupDone": "Setup done: {{characters}} characters, {{locations}} locations.",
+      "page": {
+        "generating": "Generating page {{n}}/{{total}} ({{label}})…",
+        "done": "Page {{n}} written."
+      },
+      "done": "Script complete: {{characters}} characters, {{locations}} locations, {{pages}} pages, {{panels}} panels.",
+      "resumeFailed": "Existing script unreadable ({{error}}); full regeneration.",
+      "alreadyComplete": "Script already complete on disk ({{count}} pages).",
+      "resuming": "Resuming: {{written}}/{{target}} pages already written."
     }
   },
   "progressPanel": {
