@@ -394,6 +394,8 @@
       "previewAlt": "Preview",
       "dropzone": "Click or drop an image here",
       "preResult": "Once you've chosen an image, start the analysis. You'll be able to review the description before applying it to the form.",
+      "analyze": "Analyze",
+      "analyzing": "Analyzing…",
       "extracting": "Analyzing the image…",
       "visualStyle": "Visual style",
       "artStyle": "Art style",

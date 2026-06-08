@@ -394,6 +394,8 @@
       "previewAlt": "Vorschau",
       "dropzone": "Klicken oder legen Sie ein Bild hier ab",
       "preResult": "Sobald Sie ein Bild gewählt haben, starten Sie die Analyse. Sie können die Beschreibung überprüfen, bevor Sie sie im Formular anwenden.",
+      "analyze": "Analysieren",
+      "analyzing": "Wird analysiert…",
       "extracting": "Bild wird analysiert…",
       "visualStyle": "Visueller Stil",
       "artStyle": "Kunststil",

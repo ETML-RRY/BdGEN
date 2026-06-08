@@ -394,6 +394,8 @@
       "previewAlt": "Aperçu",
       "dropzone": "Cliquez ou déposez une image ici",
       "preResult": "Une fois l'image choisie, lancez l'analyse. Vous pourrez relire la description avant de l'appliquer au formulaire.",
+      "analyze": "Analyser",
+      "analyzing": "Analyse…",
       "extracting": "Analyse de l'image…",
       "visualStyle": "Style visuel",
       "artStyle": "Style artistique",
