@@ -533,7 +533,10 @@
       "aiMarginObjects": " Die KI wird sie nur am Rande erfinden.",
       "objectCardHeading": "Objekt {{n}}",
       "removeObjectAria": "Dieses Objekt entfernen",
-      "objectDescriptionHint": "Beschreiben Sie das Objekt und seine Rolle in der Geschichte."
+      "objectDescriptionHint": "Beschreiben Sie das Objekt und seine Rolle in der Geschichte.",
+      "sizeLabel": "Grösse",
+      "sizePlaceholder": "z. B. sehr gross, 1,80 m, imposant",
+      "sizeHint": "Freitext-Grössenbeschreibung, damit die KI Proportionen besser einschätzen kann."
     },
     "structure": {
       "title": "Struktur",

@@ -91,15 +91,21 @@ SETUP_SYSTEM_PROMPT = dedent("""\
     You must produce JSON containing:
 
     1. CHARACTERS — first, for EACH entry in the input `characters` array, copy `id`,
-       `name`, `physical_description` and `outfit` verbatim. ADD `reference_prompt`: a
-       detailed English image-generation prompt for a character sheet showing THREE
-       views on a single image with a neutral white background — face close-up, full
-       body front, and an expressions sheet.
+       `name`, `physical_description`, `outfit` and (if present) `size` verbatim.
+       ADD `reference_prompt`: a detailed English image-generation prompt for a
+       character sheet showing THREE views on a single image with a neutral white
+       background — face close-up, full body front, and an expressions sheet.
        The prompt must describe the character's full physical appearance and outfit
        with as much visual specificity as possible (hair, face, build, skin tone, age,
        clothing cut and colors, accessories). Do NOT include any art style, color
        palette, line work, rendering technique, or stylization instructions — visual
        style is injected separately at image-generation time.
+       SIZE — if the input character has a `size` field (non-null string), include
+       the EXACT user text in the `reference_prompt` as a dedicated line, phrased
+       as: `Size: <the user's size text>.` Place this line right after the outfit /
+       appearance description and BEFORE the HANDS AND ARMS block. Do not paraphrase,
+       translate or shorten the user's wording — the user authored it intentionally to
+       anchor relative proportions across the album.
        HANDS AND ARMS — MANDATORY in every `reference_prompt`: the full-body
        front view MUST explicitly show both hands with clearly separated fingers
        (5 fingers per hand: 4 fingers + 1 thumb). Include the instruction:
@@ -112,43 +118,53 @@ SETUP_SYSTEM_PROMPT = dedent("""\
        end of the user message.
 
     2. LOCATIONS — first, for EACH entry in the input `locations` array (which may be
-       empty), copy `id`, `name`, and `description` verbatim. ADD `reference_prompt`:
-       an English image-generation prompt for a hand-drawn comic-book background
-       illustration of the place, no characters, no text. The prompt MUST open with
-       a phrase that anchors the output as a drawn illustration — never as a
-       photograph or photorealistic scene — such as "A hand-drawn comic-book
-       background panel showing…" or "A stylized comic-book illustration of…".
-       The prompt must describe the place's key visual features — spatial layout,
-       dominant landmarks, characteristic architecture, atmosphere and lighting mood —
-       with as much specificity as possible. Avoid photographic vocabulary (depth of
-       field, bokeh, establishing shot, camera, lens); use illustration vocabulary
-       instead (composition, foreground, midground, scene, layout). Do NOT include
+       empty), copy `id`, `name`, `description` and (if present) `size` verbatim.
+       ADD `reference_prompt`: an English image-generation prompt for a hand-drawn
+       comic-book background illustration of the place, no characters, no text. The
+       prompt MUST open with a phrase that anchors the output as a drawn illustration
+       — never as a photograph or photorealistic scene — such as "A hand-drawn
+       comic-book background panel showing…" or "A stylized comic-book illustration
+       of…". The prompt must describe the place's key visual features — spatial
+       layout, dominant landmarks, characteristic architecture, atmosphere and
+       lighting mood — with as much specificity as possible. Avoid photographic
+       vocabulary (depth of field, bokeh, establishing shot, camera, lens); use
+       illustration vocabulary instead (composition, foreground, midground, scene,
+       layout). SIZE — if the input location has a `size` field (non-null string),
+       include the EXACT user text in the `reference_prompt` as a dedicated line,
+       phrased as: `Size: <the user's size text>.` Place this line right after the
+       place's main description and before the final "No text. No characters." line.
+       Do not paraphrase, translate or shorten the user's wording. Do NOT include
        any art style, color palette, line work, rendering technique, or stylization
        instructions — visual style is injected separately at image-generation time.
        End with "No text. No characters." Whether you may invent ADDITIONAL locations
        is decided by the AUTHORING RULES at the end of the user message.
 
     3. OBJECTS — first, for EACH entry in the input `objects` array (which may be
-       empty), copy `id`, `name`, and `description` verbatim. ADD `reference_prompt`:
-       an English image-generation prompt for a hand-drawn comic-book object
-       reference sheet showing the object isolated on a neutral white background,
-       no characters, no text. The prompt MUST open with a phrase that anchors the
-       output as a drawn illustration — never as a product photograph — such as
-       "A hand-drawn comic-book illustration of…" or "A stylized object reference
-       sheet showing…". The prompt must describe the object's shape, proportions,
-       silhouette, key structural details, dominant colors and any distinctive
-       markings with as much specificity as possible. Avoid photographic vocabulary
-       (product shot, studio photo, macro, depth of field, lighting rig); use
-       illustration vocabulary instead (drawing, illustration, reference sheet,
-       composition). If the user provided a photo of this object (passed at
-       image-generation time), the resulting illustration must remain recognizably
-       the SAME object — same shape, key markings, characteristic silhouette. Do NOT
-       include any art style, color palette, line work, rendering technique, or
-       stylization instructions — visual style is injected separately at
-       image-generation time. Plan how each object will recur across the story so
-       panels can reference it consistently. End with "No text. No characters."
-       Whether you may invent ADDITIONAL objects is decided by the AUTHORING RULES
-       at the end of the user message.
+       empty), copy `id`, `name`, `description` and (if present) `size` verbatim.
+       ADD `reference_prompt`: an English image-generation prompt for a hand-drawn
+       comic-book object reference sheet showing the object isolated on a neutral
+       white background, no characters, no text. The prompt MUST open with a phrase
+       that anchors the output as a drawn illustration — never as a product
+       photograph — such as "A hand-drawn comic-book illustration of…" or "A
+       stylized object reference sheet showing…". The prompt must describe the
+       object's shape, proportions, silhouette, key structural details, dominant
+       colors and any distinctive markings with as much specificity as possible.
+       Avoid photographic vocabulary (product shot, studio photo, macro, depth of
+       field, lighting rig); use illustration vocabulary instead (drawing,
+       illustration, reference sheet, composition). SIZE — if the input object has
+       a `size` field (non-null string), include the EXACT user text in the
+       `reference_prompt` as a dedicated line, phrased as:
+       `Size: <the user's size text>.` Place this line right after the object's main
+       description and before the final "No text. No characters." line. Do not
+       paraphrase, translate or shorten the user's wording. If the user provided a
+       photo of this object (passed at image-generation time), the resulting
+       illustration must remain recognizably the SAME object — same shape, key
+       markings, characteristic silhouette. Do NOT include any art style, color
+       palette, line work, rendering technique, or stylization instructions — visual
+       style is injected separately at image-generation time. Plan how each object
+       will recur across the story so panels can reference it consistently. End with
+       "No text. No characters." Whether you may invent ADDITIONAL objects is decided
+       by the AUTHORING RULES at the end of the user message.
 
     4. COVER — only if `structure.include_cover` is true. Provide:
        - `scene_description`: an evocative illustration concept for the front cover
@@ -261,6 +277,7 @@ class _DraftCharacter(BaseModel):
     name: str
     physical_description: str
     outfit: str | None = None
+    size: str | None = None
     reference_prompt: str
 
 
@@ -268,6 +285,7 @@ class _DraftLocation(BaseModel):
     id: str
     name: str
     description: str
+    size: str | None = None
     reference_prompt: str
 
 
@@ -275,6 +293,7 @@ class _DraftObject(BaseModel):
     id: str
     name: str
     description: str
+    size: str | None = None
     reference_prompt: str
 
 
@@ -303,6 +322,7 @@ CHARACTER_REFINE_SYSTEM_PROMPT = dedent("""\
         "name": "...",
         "physical_description": "...",
         "outfit": "...",
+        "size": "<string or null>",
         "reference_prompt": "..."
       }
 
@@ -358,6 +378,7 @@ LOCATION_REFINE_SYSTEM_PROMPT = dedent("""\
         "id": "<unchanged>",
         "name": "...",
         "description": "...",
+        "size": "<string or null>",
         "reference_prompt": "..."
       }
 
@@ -417,6 +438,7 @@ OBJECT_REFINE_SYSTEM_PROMPT = dedent("""\
         "id": "<unchanged>",
         "name": "...",
         "description": "...",
+        "size": "<string or null>",
         "reference_prompt": "..."
       }
 
@@ -1606,6 +1628,7 @@ def regenerate_character(
             draft.id = character_id  # never let the model rename
         char.physical_description = draft.physical_description
         char.outfit = draft.outfit
+        char.size = draft.size
         char.reference_prompt = draft.reference_prompt
         char.name = draft.name
         rep.emit(
@@ -1678,6 +1701,7 @@ def regenerate_location(
             draft.id = location_id
         loc.name = draft.name
         loc.description = draft.description
+        loc.size = draft.size
         loc.reference_prompt = draft.reference_prompt
         rep.emit(
             ProgressEvent(
@@ -1749,6 +1773,7 @@ def regenerate_object(
             draft.id = object_id
         obj.name = draft.name
         obj.description = draft.description
+        obj.size = draft.size
         obj.reference_prompt = draft.reference_prompt
         rep.emit(
             ProgressEvent(

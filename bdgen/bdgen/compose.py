@@ -501,6 +501,7 @@ def _collect_refs(script: BdGenScript, page: Page) -> list[tuple[Path, str]]:
                 f'Character sheet for "{char.name}" — this is the canonical '
                 f"reference for this character's face, hair, eyes, body type "
                 f"and outfit. Match it EXACTLY in every panel they appear in."
+                f"{_size_anchor(char.size)}"
             )
             refs.append((ref_path, label))
         elif char:
@@ -514,6 +515,7 @@ def _collect_refs(script: BdGenScript, page: Page) -> list[tuple[Path, str]]:
             label = (
                 f'Establishing shot of "{loc.name}" — match its mood, '
                 f"atmosphere and visual elements when this location appears."
+                f"{_size_anchor(loc.size)}"
             )
             refs.append((ref_path, label))
         elif loc:
@@ -529,6 +531,7 @@ def _collect_refs(script: BdGenScript, page: Page) -> list[tuple[Path, str]]:
                 f"stylized appearance of this object. Whenever it is visible "
                 f"in a panel, match its shape, key markings and silhouette "
                 f"EXACTLY so it stays recognizable across the album."
+                f"{_size_anchor(obj.size)}"
             )
             refs.append((ref_path, label))
         elif obj:
@@ -537,6 +540,40 @@ def _collect_refs(script: BdGenScript, page: Page) -> list[tuple[Path, str]]:
                 refs.append((photo_path, _photo_fallback_label("object", obj.name)))
 
     return refs
+
+
+def _size_anchor(size: str | None) -> str:
+    """Return a "Size anchor: <text>." suffix for compose labels, or empty string.
+
+    Anchoring the size verbatim in the per-entity input image label gives the
+    image model an explicit cue to reason about relative proportions when
+    several entities share a frame.
+    """
+    if not size or not size.strip():
+        return ""
+    return f" Size anchor: {size.strip()}."
+
+
+def _entity_short_label(entity) -> str:
+    """Return ``"<name> (<size>)"`` if the entity has a size, else ``"<name>"``."""
+    name = entity.name
+    if entity.size and entity.size.strip():
+        return f"{name} ({entity.size.strip()})"
+    return name
+
+
+def _entity_label_with_size(entity, separator: str) -> str:
+    """Return ``"<name> (<size>) <separator> <description>"`` when size is set.
+
+    Falls back to the original ``"<name> <separator> <description>"`` form
+    when the entity has no size, so existing per-panel prompts stay
+    byte-identical for projects that don't use the new field.
+    """
+    name = entity.name
+    description = entity.description
+    if entity.size and entity.size.strip():
+        return f"{name} ({entity.size.strip()}){separator}{description}"
+    return f"{name}{separator}{description}"
 
 
 def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | None = None) -> str:
@@ -550,11 +587,11 @@ def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | 
     panels_text: list[str] = []
     for panel in page.panels:
         loc = script.location_by_id(panel.location)
-        loc_text = f"{loc.name} - {loc.description}" if loc else panel.location
+        loc_text = _entity_label_with_size(loc, " - ") if loc else panel.location
         chars = [script.character_by_id(c) for c in panel.characters]
-        chars_text = ", ".join(c.name for c in chars if c) or "(no character)"
+        chars_text = ", ".join(_entity_short_label(c) for c in chars if c) or "(no character)"
         objs = [script.object_by_id(o) for o in panel.objects]
-        objs_text = ", ".join(o.name for o in objs if o) or "(no object)"
+        objs_text = ", ".join(_entity_short_label(o) for o in objs if o) or "(no object)"
 
         dialogs_block = ""
         if panel.dialogs:

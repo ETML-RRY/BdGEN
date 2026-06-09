@@ -533,7 +533,10 @@
       "aiMarginObjects": " L'IA n'en inventera qu'à la marge.",
       "objectCardHeading": "Objet {{n}}",
       "removeObjectAria": "Supprimer cet objet",
-      "objectDescriptionHint": "Décrivez l'objet et son rôle dans l'histoire."
+      "objectDescriptionHint": "Décrivez l'objet et son rôle dans l'histoire.",
+      "sizeLabel": "Taille",
+      "sizePlaceholder": "ex. très grand, 1m80, imposant",
+      "sizeHint": "Description libre de la taille pour aider l'IA à raisonner sur les proportions."
     },
     "structure": {
       "title": "Structure",

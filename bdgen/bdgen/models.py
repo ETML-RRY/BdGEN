@@ -87,6 +87,11 @@ class CharacterInput(BaseModel):
     physical_description: str
     outfit: str | None = None
     personality: str | None = None
+    # Free-form size description (e.g. "1m85, taller than Alice, shorter than
+    # the doorframe"). Propagated verbatim into the reference_prompt and the
+    # compose label so the image model can reason about relative proportions
+    # when several entities share a frame.
+    size: str | None = None
 
 
 class LocationInput(BaseModel):
@@ -99,6 +104,7 @@ class LocationInput(BaseModel):
     id: str
     name: str
     description: str
+    size: str | None = None
 
 
 class ObjectInput(BaseModel):
@@ -113,6 +119,7 @@ class ObjectInput(BaseModel):
     id: str
     name: str
     description: str
+    size: str | None = None
 
 
 class Structure(BaseModel):
@@ -270,6 +277,7 @@ class ScriptCharacter(BaseModel):
     name: str
     physical_description: str
     outfit: str | None = None
+    size: str | None = None
     reference_prompt: str
     reference_image: Path | None = None
 
@@ -278,6 +286,7 @@ class ScriptLocation(BaseModel):
     id: str
     name: str
     description: str
+    size: str | None = None
     reference_prompt: str
     reference_image: Path | None = None
 
@@ -288,6 +297,7 @@ class ScriptObject(BaseModel):
     id: str
     name: str
     description: str
+    size: str | None = None
     reference_prompt: str
     reference_image: Path | None = None
 

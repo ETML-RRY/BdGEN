@@ -533,7 +533,10 @@
       "aiMarginObjects": " The AI will invent them only marginally.",
       "objectCardHeading": "Object {{n}}",
       "removeObjectAria": "Remove this object",
-      "objectDescriptionHint": "Describe the object and its role in the story."
+      "objectDescriptionHint": "Describe the object and its role in the story.",
+      "sizeLabel": "Size",
+      "sizePlaceholder": "e.g. very tall, 6ft, imposing",
+      "sizeHint": "Free-form size description so the AI can reason on relative proportions."
     },
     "structure": {
       "title": "Structure",
