@@ -1,13 +1,13 @@
 import { Link } from "react-router-dom";
-
-const STEP_LABEL = {
-  script: "écriture",
-  references: "références",
-  compose: "planches",
-  upscale: "upscale",
-};
+import { useTranslation } from "react-i18next";
+import { useStepLabelMap } from "../hooks/useTranslatedSteps.js";
+import { formatProgressEvent } from "../i18n/formatProgressEvent.js";
 
 export default function RunningBanner({ job, className = "" }) {
+  const { t } = useTranslation();
+  const stepLabels = useStepLabelMap();
+  const stepLabel = stepLabels[job.step] || job.step;
+  const lastMessage = formatProgressEvent(job.last_event, t) || job.last_message;
   return (
     <div
       className={
@@ -20,15 +20,14 @@ export default function RunningBanner({ job, className = "" }) {
         <span className="inline-block w-2.5 h-2.5 rounded-full bg-[var(--color-peach-500)] animate-pulse" />
         <div className="text-sm">
           <div className="font-medium">
-            Génération en cours sur «&nbsp;{job.project}&nbsp;»
+            {t("runningBanner.title", { project: job.project })}
             <span className="text-[var(--color-ink-soft)] font-normal">
-              {" "}
-              — étape «&nbsp;{STEP_LABEL[job.step] || job.step}&nbsp;»
+              {t("runningBanner.stepSuffix", { step: stepLabel })}
             </span>
           </div>
-          {job.last_message && (
+          {lastMessage && (
             <div className="text-[var(--color-ink-soft)] text-xs mt-0.5">
-              {job.last_message}
+              {lastMessage}
               {job.progress_total ? (
                 <>
                   {" "}
@@ -43,7 +42,7 @@ export default function RunningBanner({ job, className = "" }) {
         to={`/projects/${encodeURIComponent(job.project)}`}
         className="btn btn-secondary text-sm"
       >
-        Suivre
+        {t("runningBanner.follow")}
       </Link>
     </div>
   );

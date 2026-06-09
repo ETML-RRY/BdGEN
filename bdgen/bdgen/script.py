@@ -704,6 +704,7 @@ def _generate_script_impl(
                 step="script",
                 phase="setup",
                 message=f"Setup phase: characters, locations, cover, back cover ({label})…",
+                extra={"label": label, "i18n_key": "progressEvents.script.setup"},
             )
         )
         flag.check()
@@ -737,6 +738,7 @@ def _generate_script_impl(
                 extra={
                     "characters": len(bd_script.characters),
                     "locations": len(bd_script.locations),
+                    "i18n_key": "progressEvents.script.setupDone",
                 },
             )
         )
@@ -750,6 +752,12 @@ def _generate_script_impl(
                 message=f"Génération de la planche {page_n}/{target_pages} ({label})…",
                 current=page_n,
                 total=target_pages,
+                extra={
+                    "n": page_n,
+                    "total": target_pages,
+                    "label": label,
+                    "i18n_key": "progressEvents.script.page.generating",
+                },
             )
         )
         page_result = _call_llm(
@@ -785,6 +793,10 @@ def _generate_script_impl(
                 message=f"Planche {page_n} écrite.",
                 current=page_n,
                 total=target_pages,
+                extra={
+                    "n": page_n,
+                    "i18n_key": "progressEvents.script.page.done",
+                },
             )
         )
 
@@ -797,6 +809,13 @@ def _generate_script_impl(
                 f"{len(bd_script.locations)} décors, {len(bd_script.pages)} planches, "
                 f"{sum(len(p.panels) for p in bd_script.pages)} cases."
             ),
+            extra={
+                "characters": len(bd_script.characters),
+                "locations": len(bd_script.locations),
+                "pages": len(bd_script.pages),
+                "panels": sum(len(p.panels) for p in bd_script.pages),
+                "i18n_key": "progressEvents.script.done",
+            },
         )
     )
     return bd_script
@@ -819,6 +838,7 @@ def _try_resume(
                 step="script",
                 phase="resume_failed",
                 message=f"Script existant illisible ({e}) ; regénération complète.",
+                extra={"error": str(e), "i18n_key": "progressEvents.script.resumeFailed"},
             )
         )
         return None
@@ -832,6 +852,10 @@ def _try_resume(
                 message=(f"Scénario déjà complet sur disque ({len(existing.pages)} planches)."),
                 current=len(existing.pages),
                 total=target_pages,
+                extra={
+                    "count": len(existing.pages),
+                    "i18n_key": "progressEvents.script.alreadyComplete",
+                },
             )
         )
         return existing
@@ -842,6 +866,11 @@ def _try_resume(
             message=(f"Reprise : {len(existing.pages)}/{target_pages} planches déjà écrites."),
             current=len(existing.pages),
             total=target_pages,
+            extra={
+                "written": len(existing.pages),
+                "target": target_pages,
+                "i18n_key": "progressEvents.script.resuming",
+            },
         )
     )
     return existing

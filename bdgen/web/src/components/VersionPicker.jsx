@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
 
-// Inline version selector — visually matches the "Planche/Image" picker so
+// Inline version selector — visually matches the "Page/Image" picker so
 // the two read as a coherent row. Renders a fragment (no wrapper div) so the
 // caller can drop it into an existing flex row alongside the page selector.
 //
@@ -22,11 +23,12 @@ export default function VersionPicker({
   onRestored,
   disabled = false,
 }) {
+  const { t, i18n } = useTranslation();
   const { versions, current, loading, error, refresh } = useVersions(projectName, filePath);
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState(null);
 
-  // Always present "Actuelle" as the first option so the dropdown stays
+  // Always present "Current" as the first option so the dropdown stays
   // visible even before the first archive — the user can see the feature
   // exists.
   const all = current
@@ -51,7 +53,7 @@ export default function VersionPicker({
 
   if (loading) {
     return (
-      <span className="text-sm text-[var(--color-mute)]">Chargement de l'historique…</span>
+      <span className="text-sm text-[var(--color-mute)]">{t("trace.versionPicker.loading")}</span>
     );
   }
   if (error) {
@@ -61,7 +63,7 @@ export default function VersionPicker({
   return (
     <>
       <label className="flex items-center gap-2 text-sm font-medium">
-        <span>Version</span>
+        <span>{t("trace.versionPicker.label")}</span>
         <select
           className="select page-select"
           value={selectedVersionId || ""}
@@ -73,7 +75,7 @@ export default function VersionPicker({
         >
           {all.map((v, idx) => (
             <option key={v.version_id || "current"} value={v.version_id || ""}>
-              {labelFor(v, all.length, idx)}
+              {labelFor(v, all.length, idx, t, i18n.language)}
             </option>
           ))}
         </select>
@@ -84,9 +86,9 @@ export default function VersionPicker({
           className="btn btn-ghost text-sm"
           onClick={handleRestore}
           disabled={disabled || restoring}
-          title="Restaurer cette version comme version courante"
+          title={t("trace.versionPicker.restoreTitle")}
         >
-          {restoring ? "Restauration…" : "Restaurer cette version"}
+          {restoring ? t("trace.versionPicker.restoring") : t("trace.versionPicker.restore")}
         </button>
       )}
       {restoreError && (
@@ -98,24 +100,26 @@ export default function VersionPicker({
 
 // Build a short, readable label per option. `idx === 0` is the live file;
 // `idx >= 1` are archived versions in newest-first order.
-function labelFor(v, total, idx) {
+function labelFor(v, total, idx, t, language) {
   if (v.version_id === null) {
-    return `Actuelle · ${formatModified(v.modified_at)}`;
+    return t("trace.versionPicker.currentOpt", {
+      ts: formatModified(v.modified_at, language),
+    });
   }
   const versionNumber = total - idx; // oldest = v1
   const kind = v.kind || "regen";
-  const ts = formatVersionId(v.version_id);
-  return `v${versionNumber} · ${ts} · ${kind}`;
+  const ts = formatVersionId(v.version_id, language);
+  return t("trace.versionPicker.versionOpt", { num: versionNumber, ts, kind });
 }
 
-function formatVersionId(versionId) {
-  // 2026-05-22T14-30-15-123Z → 22 mai 14:30:15
+function formatVersionId(versionId, language) {
+  // 2026-05-22T14-30-15-123Z → 22 May 14:30:15
   try {
     const iso = versionId
       .replace(/-(\d{2})-(\d{2})-(\d{3})Z$/, ":$1:$2.$3Z")
       .replace(/T(\d{2})-/, "T$1:");
     const d = new Date(iso);
-    return d.toLocaleString("fr-FR", {
+    return d.toLocaleString(language || "en", {
       month: "short",
       day: "2-digit",
       hour: "2-digit",
@@ -127,10 +131,10 @@ function formatVersionId(versionId) {
   }
 }
 
-function formatModified(iso) {
+function formatModified(iso, language) {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString("fr-FR", {
+    return new Date(iso).toLocaleString(language || "en", {
       month: "short",
       day: "2-digit",
       hour: "2-digit",

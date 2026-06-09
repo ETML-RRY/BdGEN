@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation, Trans } from "react-i18next";
 import { slugify, sanitizeSlugInput } from "../utils/slugify.js";
 
 /**
@@ -11,6 +12,7 @@ import { slugify, sanitizeSlugInput } from "../utils/slugify.js";
  *   - onConfirm: async ({ newTitle, newProject }) => void
  */
 export default function ImportProjectDialog({ fileName, onClose, onConfirm }) {
+  const { t } = useTranslation();
   const [newTitle, setNewTitle] = useState("");
   const [manualSlug, setManualSlug] = useState("");
   const [slugIsManual, setSlugIsManual] = useState(false);
@@ -54,7 +56,7 @@ export default function ImportProjectDialog({ fileName, onClose, onConfirm }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm">
       <div className="card p-6 w-full max-w-lg space-y-4">
         <div>
-          <h3 className="text-lg font-semibold">Importer un projet</h3>
+          <h3 className="text-lg font-semibold">{t("dialogs.import.title")}</h3>
           {fileName && (
             <p className="text-sm text-[var(--color-ink-soft)] mt-1 font-mono truncate">
               {fileName}
@@ -63,22 +65,24 @@ export default function ImportProjectDialog({ fileName, onClose, onConfirm }) {
         </div>
 
         <p className="text-sm text-[var(--color-ink-soft)]">
-          Vous pouvez personnaliser le titre et l'identifiant du projet importé.
-          Laissez les champs vides pour utiliser les valeurs d'origine de l'archive.
+          {t("dialogs.import.body")}
         </p>
 
         <fieldset className="space-y-3">
-          <legend className="sr-only">Identité du projet importé</legend>
+          <legend className="sr-only">{t("dialogs.import.identityLegend")}</legend>
 
           <div>
             <label className="block text-xs font-medium mb-1" htmlFor="imp-title">
-              Titre <span className="text-[var(--color-mute)] font-normal">(affiché dans la liste)</span>
+              <Trans
+                i18nKey="dialogs.import.titleLabel"
+                components={{ span: <span className="text-[var(--color-mute)] font-normal" /> }}
+              />
             </label>
             <input
               id="imp-title"
               type="text"
               className="input w-full"
-              placeholder="Titre d'origine de l'archive"
+              placeholder={t("dialogs.import.titlePlaceholder")}
               value={newTitle}
               onChange={handleTitleChange}
               disabled={submitting}
@@ -87,21 +91,23 @@ export default function ImportProjectDialog({ fileName, onClose, onConfirm }) {
 
           <div>
             <label className="block text-xs font-medium mb-1" htmlFor="imp-slug">
-              Identifiant{" "}
-              <span className="text-[var(--color-mute)] font-normal">(slug du dossier)</span>
+              <Trans
+                i18nKey="dialogs.import.slugLabel"
+                components={{ span: <span className="text-[var(--color-mute)] font-normal" /> }}
+              />
             </label>
             <input
               id="imp-slug"
               type="text"
               className="input w-full font-mono text-sm"
-              placeholder="Identifiant du dossier"
+              placeholder={t("dialogs.import.slugPlaceholder")}
               value={slugValue}
               onChange={handleSlugChange}
               disabled={submitting}
             />
             <p className="mt-1 text-xs text-[var(--color-mute)]">
-              Lettres minuscules, chiffres et underscores uniquement.
-              {!slugIsManual && derivedSlug && " Dérivé du titre — modifiable."}
+              {t("dialogs.import.slugHint")}
+              {!slugIsManual && derivedSlug && t("dialogs.import.slugDerived")}
             </p>
           </div>
         </fieldset>
@@ -117,7 +123,7 @@ export default function ImportProjectDialog({ fileName, onClose, onConfirm }) {
             onClick={onClose}
             disabled={submitting}
           >
-            Annuler
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -125,7 +131,7 @@ export default function ImportProjectDialog({ fileName, onClose, onConfirm }) {
             onClick={handleConfirm}
             disabled={submitting}
           >
-            {submitting ? "Importation…" : "Importer"}
+            {submitting ? t("dialogs.import.importing") : t("dialogs.import.import")}
           </button>
         </div>
       </div>

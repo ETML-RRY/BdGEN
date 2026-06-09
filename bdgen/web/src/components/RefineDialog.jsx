@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function RefineDialog({
   title,
@@ -7,6 +8,7 @@ export default function RefineDialog({
   onClose,
   onSubmit,
 }) {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [extras, setExtras] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -42,7 +44,7 @@ export default function RefineDialog({
         <textarea
           autoFocus
           className="textarea min-h-[8rem]"
-          placeholder="Décrivez la modification souhaitée…"
+          placeholder={t("dialogs.refine.placeholder")}
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
@@ -71,14 +73,14 @@ export default function RefineDialog({
             onClick={onClose}
             disabled={submitting}
           >
-            Annuler
+            {t("common.cancel")}
           </button>
           <button
             type="submit"
             className="btn btn-primary"
             disabled={submitting || !text.trim()}
           >
-            {submitting ? "Application…" : "Appliquer la retouche"}
+            {submitting ? t("dialogs.refine.applying") : t("dialogs.refine.submit")}
           </button>
         </div>
       </form>

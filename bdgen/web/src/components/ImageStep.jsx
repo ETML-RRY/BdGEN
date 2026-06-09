@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   FaWandMagicSparkles,
   FaArrowRotateRight,
@@ -19,6 +20,7 @@ import RunningBanner from "./RunningBanner.jsx";
 import RefineDialog from "./RefineDialog.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 import VersionPicker from "./VersionPicker.jsx";
+import { formatError } from "../i18n/formatError.js";
 
 // Extract the project-relative path from a /api/projects/{name}/files/{path}
 // URL — needed to query the version history of the same file.
@@ -75,14 +77,15 @@ export default function ImageStep({
   allowSkip = false,
   onSkip,
   onContinue,
-  continueLabel = "Continuer →",
+  continueLabel,
   projectExtraCommands = null,
-  genGroupLabel = "Génération",
-  startLabel = "Lancer la génération",
+  genGroupLabel,
+  startLabel,
   items,
   emptyLabel,
   layout = "portrait",
 }) {
+  const { t } = useTranslation();
   const { name } = useParams();
   const { projectActions } = useAppContext();
   const stream = useJobStream({ project: name, step: stepId });
@@ -141,7 +144,15 @@ export default function ImageStep({
   const isStale = !!item?.stale && !!item?.image_url;
   const canRefresh = !viewingHistory && item?.image_url;
   const itemBusy = starting || submitting || activeGenerationId === item?.id;
-  const readerBusyLabel = submitting ? "Retouche en cours..." : isRunning ? "Génération en cours..." : "Préparation...";
+  const readerBusyLabel = submitting
+    ? t("imageStep.busy.retouch")
+    : isRunning
+    ? t("imageStep.busy.generating")
+    : t("imageStep.busy.preparing");
+
+  const finalContinueLabel = continueLabel || t("imageStep.continue");
+  const finalGenGroupLabel = genGroupLabel || t("imageStep.groups.album");
+  const finalStartLabel = startLabel || t("imageStep.start");
 
   useEffect(() => {
     if (stream.terminal) onChanged();
@@ -164,7 +175,7 @@ export default function ImageStep({
   }, [safeIdx]);
 
   // Keep the retouche popover anchored under the ribbon icon. It is non-modal:
-  // closing happens via the icon, Annuler or Échap — never on outside click,
+  // closing happens via the icon, Cancel or Échap — never on outside click,
   // so painting the mask on the image never dismisses it.
   useEffect(() => {
     if (!inpaintActive) {
@@ -218,7 +229,7 @@ export default function ImageStep({
       await api.startStep(name, stepId, payload);
       await stream.refresh();
     } catch (e) {
-      setError(e.message);
+      setError(formatError(e, t));
     } finally {
       setStarting(false);
     }
@@ -357,11 +368,11 @@ export default function ImageStep({
 
   async function submitInpaint() {
     if (!hasMask) {
-      setInpaintError("Dessinez d'abord la zone à retoucher.");
+      setInpaintError(t("imageStep.inpaint.drawFirst"));
       return;
     }
     if (!inpaintPrompt.trim()) {
-      setInpaintError("Décrivez ce que vous souhaitez changer.");
+      setInpaintError(t("imageStep.inpaint.describeFirst"));
       return;
     }
     setInpaintError(null);
@@ -373,7 +384,7 @@ export default function ImageStep({
       setInpaintActive(false);
       clearMask();
     } catch (e) {
-      setInpaintError(e.message);
+      setInpaintError(formatError(e, t));
     } finally {
       setSubmitting(false);
     }
@@ -410,7 +421,7 @@ export default function ImageStep({
     Boolean(onSkip),
     projectActions,
     projectExtraCommands,
-    genGroupLabel,
+    finalGenGroupLabel,
     allowRefine,
   ]);
 
@@ -419,7 +430,7 @@ export default function ImageStep({
     const order = [];
     const byGroup = new Map();
     items.forEach((it, i) => {
-      const g = it.group || "Éléments";
+      const g = it.group || t("imageStep.elementsFallback");
       if (!byGroup.has(g)) {
         byGroup.set(g, []);
         order.push(g);
@@ -429,7 +440,7 @@ export default function ImageStep({
         label: it.shortLabel || it.label,
         badge: it.stale && it.image_url ? "•" : undefined,
         tone: "peach",
-        title: it.stale ? "Le texte a changé depuis cette image" : it.label,
+        title: it.stale ? t("imageStep.stale") : it.label,
       });
     });
     return {
@@ -444,53 +455,53 @@ export default function ImageStep({
     if (!hasAnyImage) {
       genCommands.push({
         id: "generate",
-        label: "Lancer",
+        label: t("imageStep.commands.start"),
         icon: <FaImages />,
         tone: "primary",
         onClick: () => start(),
         disabled: starting || blocked || isRunning,
-        title: "Lancer la génération avec la qualité définie en préparation.",
+        title: t("imageStep.commands.startTitle"),
       });
     } else {
       genCommands.push({
         id: "resume",
-        label: "Reprendre",
+        label: t("imageStep.commands.resume"),
         icon: <FaImages />,
         onClick: () => start(),
         disabled: starting || blocked || isRunning,
-        title: "Reprendre / compléter la génération.",
+        title: t("imageStep.commands.resumeTitle"),
       });
       genCommands.push({
         id: "regen-all",
-        label: "Tout régénérer",
+        label: t("imageStep.commands.regenAll"),
         icon: <FaArrowRotateRight />,
         onClick: () => setConfirmingRegenAll(true),
         disabled: starting || blocked || isRunning,
-        title: "Régénère toutes les images de cette étape.",
+        title: t("imageStep.commands.regenAllTitle"),
       });
       if (staleItems.length > 0) {
         genCommands.push({
           id: "refresh-stale",
-          label: `Obsolètes (${staleItems.length})`,
+          label: t("imageStep.commands.stale", { count: staleItems.length }),
           icon: <FaArrowRotateRight />,
           tone: "primary",
           onClick: () => start({ force_ids: staleItems.map((it) => it.id) }),
           disabled: starting || blocked || isRunning,
-          title: `${staleItems.length} image(s) ne correspondent plus au texte modifié.`,
+          title: t("imageStep.commands.staleTitle", { count: staleItems.length }),
         });
       }
     }
     if (allowSkip && !hasAnyImage) {
       genCommands.push({
         id: "skip",
-        label: "Passer",
+        label: t("imageStep.commands.skip"),
         icon: <FaForward />,
         onClick: onSkip,
         disabled: starting || blocked || isRunning,
       });
     }
 
-    const groups = [{ id: "gen", label: genGroupLabel, commands: genCommands }];
+    const groups = [{ id: "gen", label: finalGenGroupLabel, commands: genCommands }];
 
     // Retouche group — only meaningful once an image exists.
     if (hasAnyImage && allowRefine) {
@@ -498,34 +509,34 @@ export default function ImageStep({
       if (canRefresh) {
         editCommands.push({
           id: "regen-one",
-          label: "Régénérer",
+          label: t("imageStep.commands.regenOne"),
           icon: <FaArrowRotateRight />,
           onClick: () => setConfirmingRegen(true),
           disabled: itemBusy || isRunning,
-          title: "Régénère cette image (qualité actuelle conservée).",
+          title: t("imageStep.commands.regenOneTitle"),
         });
       }
       editCommands.push({
         id: "inpaint",
-        label: "Retouche ciblée",
+        label: t("imageStep.commands.inpaint"),
         icon: <FaPaintbrush />,
         ref: inpaintBtnRef,
         active: inpaintActive,
         onClick: () => (inpaintActive ? closeInpaint() : setInpaintActive(true)),
         disabled: !item?.image_url || itemBusy || isRunning || viewingHistory,
         title: viewingHistory
-          ? "Restaurez d'abord cette version pour la retoucher."
-          : "Peindre une zone et décrire la retouche.",
+          ? t("imageStep.commands.inpaintDisabledTitle")
+          : t("imageStep.commands.inpaintDefaultTitle"),
       });
       editCommands.push({
         id: "refine",
-        label: "Retoucher",
+        label: t("imageStep.commands.refine"),
         icon: <FaWandMagicSparkles />,
         onClick: () => setRefining(item),
         disabled: !item?.image_url || itemBusy || isRunning || viewingHistory,
-        title: "Décrire une retouche en langage naturel.",
+        title: t("imageStep.commands.refineTitle"),
       });
-      groups.push({ id: "edit", label: "Retouche", commands: editCommands });
+      groups.push({ id: "edit", label: t("imageStep.groups.edit"), commands: editCommands });
     }
 
     // Album / continue group.
@@ -533,18 +544,18 @@ export default function ImageStep({
     if (onContinue) {
       albumCommands.push({
         id: "continue",
-        label: continueLabel.replace(/\s*→\s*$/, ""),
+        label: finalContinueLabel.replace(/\s*→\s*$/, ""),
         icon: <FaCheck />,
         tone: "primary",
         onClick: onContinue,
-        title: continueLabel,
+        title: finalContinueLabel,
       });
     }
     if (albumCommands.length) {
-      groups.push({ id: "album", label: "Album", commands: albumCommands });
+      groups.push({ id: "album", label: t("imageStep.groups.album"), commands: albumCommands });
     }
 
-    const projectGroup = projectRibbonGroup(projectActions, projectExtraCommands || []);
+    const projectGroup = projectRibbonGroup(projectActions, projectExtraCommands || [], t);
     if (projectGroup) groups.push(projectGroup);
 
     return { groups };
@@ -555,14 +566,14 @@ export default function ImageStep({
     return (
       <div className="space-y-6">
         <ProgressPanel
-          title={`${title} — génération en cours…`}
+          title={t("imageStep.progressTitle", { title })}
           job={stream.job}
           events={stream.events}
           onInterrupt={stream.interrupt}
           hint={
             allowRefine
-              ? "Vous pouvez feuilleter les images déjà générées. Pour donner un retour, interrompez d'abord la génération."
-              : "Vous pouvez feuilleter les images déjà générées pendant l'upscale local."
+              ? t("imageStep.progressHint")
+              : t("imageStep.progressHintUpscale")
           }
         />
         {hasAnyImage && item && renderReader()}
@@ -587,11 +598,11 @@ export default function ImageStep({
               onClick={() => start()}
               disabled={starting || blocked || isRunning}
             >
-              {starting ? "Démarrage…" : startLabel}
+              {starting ? t("imageStep.starting") : finalStartLabel}
             </button>
             {allowSkip && onSkip && (
               <button className="btn btn-secondary" onClick={onSkip} disabled={starting || blocked || isRunning}>
-                Passer cette étape
+                {t("imageStep.skipStep")}
               </button>
             )}
           </div>
@@ -613,8 +624,8 @@ export default function ImageStep({
 
       {allowRefine && refining && (
         <RefineDialog
-          title={`Retoucher « ${refining.label} »`}
-          hint="Décrivez ce qui doit changer. La génération sera relancée pour cet élément uniquement (les autres restent intacts)."
+          title={t("imageStep.refineDialogTitle", { label: refining.label })}
+          hint={t("imageStep.refineDialogHint")}
           onClose={() => setRefining(null)}
           onSubmit={async (text) => {
             await api.imageFeedback(name, feedbackStep, refining.id, text);
@@ -625,9 +636,9 @@ export default function ImageStep({
 
       {confirmingRegenAll && (
         <ConfirmDialog
-          title="Tout régénérer ?"
-          body={`Les ${items.length} images de cette étape seront régénérées. Les images existantes seront remplacées. Cette action consomme des crédits API.`}
-          confirmLabel="Tout régénérer"
+          title={t("imageStep.regenAllConfirmTitle")}
+          body={t("imageStep.regenAllConfirmBody", { count: items.length })}
+          confirmLabel={t("imageStep.regenAllConfirm")}
           onConfirm={async () => {
             await start({ force_ids: items.map((it) => it.id) });
           }}
@@ -637,9 +648,9 @@ export default function ImageStep({
 
       {confirmingRegen && item && (
         <ConfirmDialog
-          title={`Régénérer « ${item.label} » ?`}
-          body="L'image actuelle sera remplacée par une nouvelle génération. Cette action consomme des crédits API."
-          confirmLabel="Régénérer"
+          title={t("imageStep.regenOneConfirmTitle", { label: item.label })}
+          body={t("imageStep.regenOneConfirmBody")}
+          confirmLabel={t("imageStep.regenOneConfirm")}
           onConfirm={async () => {
             await start({ force_ids: [item.id] });
           }}
@@ -665,36 +676,34 @@ export default function ImageStep({
           boxShadow: "0 12px 32px rgb(0 0 0 / 0.18)",
         }}
         role="dialog"
-        aria-label="Retouche ciblée"
+        aria-label={t("imageStep.inpaintAria")}
       >
         <div
           className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-[var(--color-line)] select-none"
           style={{ cursor: "move" }}
           onMouseDown={startInpaintDrag}
-          title="Glissez pour déplacer le panneau"
+          title={t("imageStep.inpaintPanelTitle")}
         >
-          <span className="text-sm font-semibold truncate">⠿ Retouche ciblée — {item.label}</span>
+          <span className="text-sm font-semibold truncate">{t("imageStep.inpaintHeading", { label: item.label })}</span>
           <button
             className="btn btn-ghost text-sm px-2 py-0.5"
             onClick={closeInpaint}
             onMouseDown={(e) => e.stopPropagation()}
             disabled={submitting}
-            aria-label="Fermer"
+            aria-label={t("imageStep.inpaintCloseAria")}
             style={{ cursor: "pointer" }}
           >
             ✕
           </button>
         </div>
         <div className="p-4 space-y-3">
-          <p className="text-xs text-[var(--color-ink-soft)]">
-            Peignez la zone sur l'image, puis décrivez le changement.
-          </p>
+          <p className="text-xs text-[var(--color-ink-soft)]">{t("imageStep.inpaintBody")}</p>
           <div className="flex items-center gap-2 flex-wrap text-sm">
-            <span className="text-[var(--color-ink-soft)]">Pinceau</span>
+            <span className="text-[var(--color-ink-soft)]">{t("imageStep.brush")}</span>
             <button
               className="status-pager-btn"
               onClick={() => setBrushSize((s) => Math.max(MIN_BRUSH, s - 8))}
-              aria-label="Réduire le pinceau"
+              aria-label={t("imageStep.brushSmaller")}
             >
               −
             </button>
@@ -709,19 +718,19 @@ export default function ImageStep({
             <button
               className="status-pager-btn"
               onClick={() => setBrushSize((s) => Math.min(MAX_BRUSH, s + 8))}
-              aria-label="Agrandir le pinceau"
+              aria-label={t("imageStep.brushBigger")}
             >
               +
             </button>
             <span className="text-[var(--color-mute)] text-xs">{brushSize}px</span>
             <button className="btn btn-ghost text-xs ml-auto" onClick={clearMask} disabled={!hasMask}>
-              Effacer le masque
+              {t("imageStep.inpaintClear")}
             </button>
           </div>
           <textarea
             className="input textarea"
             rows={3}
-            placeholder="Ex. : remplacer le fond par un ciel étoilé, changer la couleur du manteau en rouge…"
+            placeholder={t("imageStep.inpaintPlaceholder")}
             value={inpaintPrompt}
             onChange={(e) => setInpaintPrompt(e.target.value)}
             disabled={itemBusy}
@@ -729,14 +738,14 @@ export default function ImageStep({
           {inpaintError && <p className="text-xs text-[var(--color-rose-500)]">{inpaintError}</p>}
           <div className="flex justify-end gap-2">
             <button className="btn btn-ghost text-sm" onClick={closeInpaint} disabled={itemBusy}>
-              Annuler
+              {t("common.cancel")}
             </button>
             <button
               className="btn btn-primary text-sm"
               onClick={submitInpaint}
               disabled={itemBusy || !hasMask || !inpaintPrompt.trim()}
             >
-              {submitting ? "Retouche en cours…" : "Lancer la retouche"}
+              {submitting ? t("imageStep.inpaintInProgress") : t("imageStep.inpaintSubmit")}
             </button>
           </div>
         </div>
@@ -764,17 +773,17 @@ export default function ImageStep({
             />
           )}
           {isStale && (
-            <span className="chip chip-peach" title="Le texte a été modifié après cette image.">
-              Texte modifié
+            <span className="chip chip-peach" title={t("imageStep.textChangedChipTitle")}>
+              {t("imageStep.textChangedChip")}
             </span>
           )}
           {viewingHistory && (
             <span
               className="chip"
               style={{ background: "var(--color-paper-soft)", color: "var(--color-primary-700)" }}
-              title="Version archivée — actions destructives désactivées."
+              title={t("imageStep.archivedChipTitle")}
             >
-              version archivée
+              {t("imageStep.archivedChip")}
             </span>
           )}
         </div>
@@ -827,7 +836,7 @@ export default function ImageStep({
                 <img src={displayedUrl} alt={item.label} className="max-h-full max-w-full object-contain" />
               )
             ) : (
-              <div className="text-sm text-[var(--color-mute)]">{emptyLabel || "Pas encore généré."}</div>
+              <div className="text-sm text-[var(--color-mute)]">{emptyLabel || t("imageStep.emptyImage")}</div>
             )}
           </div>
           {itemBusy && (
@@ -849,6 +858,7 @@ export default function ImageStep({
 }
 
 function TerminalBanner({ terminal, onClear }) {
+  const { t } = useTranslation();
   const tone = terminal.status === "interrupted" ? "chip-peach" : "chip-rose";
   return (
     <div className="card p-4 flex items-center justify-between gap-4">
@@ -857,7 +867,7 @@ function TerminalBanner({ terminal, onClear }) {
         {terminal.message}
       </div>
       <button className="btn btn-ghost text-sm" onClick={onClear}>
-        OK
+        {t("common.ok")}
       </button>
     </div>
   );

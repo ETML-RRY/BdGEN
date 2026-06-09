@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useAppContext } from "../../context/AppContext.jsx";
 
 /**
@@ -8,12 +9,13 @@ import { useAppContext } from "../../context/AppContext.jsx";
  */
 export default function Sidebar() {
   const { sidebar } = useAppContext();
+  const { t } = useTranslation();
   if (!sidebar || !sidebar.sections?.length) return null;
 
   const { sections, activeItem, onSelect } = sidebar;
 
   return (
-    <aside className="app-sidebar" aria-label="Sous-sections">
+    <aside className="app-sidebar" aria-label={t("sidebar.subsectionsAria")}>
       {sections.map((section) => (
         <div key={section.id} className="sidebar-section">
           {section.label && <div className="sidebar-section-label">{section.label}</div>}

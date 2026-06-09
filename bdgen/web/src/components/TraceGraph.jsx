@@ -10,25 +10,33 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Dagre from "@dagrejs/dagre";
+import { useTranslation } from "react-i18next";
 
 const NODE_WIDTH = 230;
 const NODE_HEIGHT = 110;
 
-// Visual style per node kind. Keys must match the `kind` values written by
-// the Python tracer (see bdgen/trace.py): "flow", "llm_call", "image_call".
-const KIND_STYLE = {
-  flow: { bg: "#eef2ff", border: "#6366f1", label: "flow" },
-  llm_call: { bg: "#ecfdf5", border: "#10b981", label: "LLM" },
-  image_call: { bg: "#fff7ed", border: "#f97316", label: "image" },
-  default: { bg: "#f8fafc", border: "#64748b", label: "?" },
-};
+// Build a lookup of i18n labels for the node kind ("flow" / "LLM" / "image" /
+// "?"). The visual style is fixed (no need to translate colors); only the
+// short kind tag is shown to the user.
+function useKindStyle() {
+  const { t } = useTranslation();
+  return useMemo(
+    () => ({
+      flow: { bg: "#eef2ff", border: "#6366f1", label: t("trace.kind.flow") },
+      llm_call: { bg: "#ecfdf5", border: "#10b981", label: t("trace.kind.llm") },
+      image_call: { bg: "#fff7ed", border: "#f97316", label: t("trace.kind.image") },
+      default: { bg: "#f8fafc", border: "#64748b", label: t("trace.kind.default") },
+    }),
+    [t],
+  );
+}
 
 const COMPARE_BORDER = "#a855f7"; // node differs vs compare session
 
 // Convert the linear node list (with parent_id) into React Flow nodes + edges
 // and apply a dagre top-down layout. Roots (parent_id == null) sit at the top;
 // each call hangs under its parent flow.
-function buildGraph(primaryNodes, compareNodes) {
+function buildGraph(primaryNodes, compareNodes, kindStyle) {
   const compareByName = new Map();
   if (compareNodes) {
     for (const n of compareNodes) compareByName.set(n.name, n);
@@ -61,7 +69,7 @@ function buildGraph(primaryNodes, compareNodes) {
     }
   }
   // Data edges: inferred producer→consumer relations by node name.
-  for (const e of inferDataEdges(primaryNodes)) edges.push(e);
+  for (const e of inferDataEdges(primaryNodes, kindStyle)) edges.push(e);
 
   // Dagre layout — give each node a height proportional to how many pill
   // rows it ends up showing, so neighbours don't overlap.
@@ -90,8 +98,9 @@ function buildGraph(primaryNodes, compareNodes) {
 // generate_script + compose_output). When the tracer later supports
 // explicit `produces`/`consumes` declarations, this whole function can be
 // dropped — until then, the names are the source of truth.
-function inferDataEdges(nodes) {
+function inferDataEdges(nodes, kindStyle) {
   const byName = new Map(nodes.map((n) => [n.name, n]));
+  const t = kindStyle && (kindStyle.__t || null); // optional i18n
   const out = [];
 
   function add(srcName, dstName, label, color) {
@@ -167,9 +176,9 @@ function inferRefEdges(nodes) {
       if (!producer) continue;
       const kind = producer.name.split(":")[0];
       const label =
-        kind === "ref_character" ? "perso" :
-        kind === "ref_location" ? "lieu" :
-        kind === "ref_object" ? "objet" : "ref";
+        kind === "ref_character" ? "character" :
+        kind === "ref_location" ? "location" :
+        kind === "ref_object" ? "object" : "ref";
       edges.push(buildDataEdge(producer.node_id, n.node_id, label, "amber"));
     }
   }
@@ -235,9 +244,9 @@ function extractPills(node) {
     }
     // The references.py path passes named photos individually.
     if (node.inputs?.style_ref?.path) ins.push({ label: "style", color: "purple" });
-    if (node.inputs?.character_photo?.path) ins.push({ label: "photo perso", color: "blue" });
-    if (node.inputs?.location_photo?.path) ins.push({ label: "photo lieu", color: "blue" });
-    if (node.inputs?.object_photo?.path) ins.push({ label: "photo objet", color: "blue" });
+    if (node.inputs?.character_photo?.path) ins.push({ label: "photo character", color: "blue" });
+    if (node.inputs?.location_photo?.path) ins.push({ label: "photo location", color: "blue" });
+    if (node.inputs?.object_photo?.path) ins.push({ label: "photo object", color: "blue" });
     if (node.prompt) ins.push({ label: "prompt", color: "slate" });
 
     const art = node.outputs?.artifact;
@@ -303,12 +312,12 @@ function Pill({ label, color }) {
   );
 }
 
-function PillRow({ pills, label }) {
+function PillRow({ pills, label, t }) {
   if (!pills || pills.length === 0) return null;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 3, alignItems: "center" }}>
       <span style={{ fontSize: 8, color: "#94a3b8", marginRight: 2, letterSpacing: 0.5 }}>
-        {label}
+        {label ?? t("trace.pill.in")}
       </span>
       {pills.map((p, i) => (
         <Pill key={i} {...p} />
@@ -319,8 +328,10 @@ function PillRow({ pills, label }) {
 
 // Custom node renderer with input/output pills.
 function TraceNodeView({ data, selected }) {
+  const { t } = useTranslation();
+  const kindStyle = useKindStyle();
   const { node, diffStatus, pills } = data;
-  const style = KIND_STYLE[node.kind] || KIND_STYLE.default;
+  const style = kindStyle[node.kind] || kindStyle.default;
   const borderColor =
     diffStatus?.kind === "changed" ? COMPARE_BORDER : style.border;
   return (
@@ -353,8 +364,8 @@ function TraceNodeView({ data, selected }) {
         </div>
       )}
 
-      <PillRow pills={pills.inputs} label="IN" />
-      <PillRow pills={pills.outputs} label="OUT" />
+      <PillRow pills={pills.inputs} label={t("trace.pill.in")} t={t} />
+      <PillRow pills={pills.outputs} label={t("trace.pill.out")} t={t} />
 
       {diffStatus?.kind === "changed" && (
         <div style={{ color: COMPARE_BORDER, fontSize: 10, marginTop: 3 }}>
@@ -362,7 +373,7 @@ function TraceNodeView({ data, selected }) {
         </div>
       )}
       {node.status === "error" && (
-        <div style={{ color: "#dc2626", fontSize: 10, marginTop: 2 }}>error</div>
+        <div style={{ color: "#dc2626", fontSize: 10, marginTop: 2 }}>{t("trace.pill.error")}</div>
       )}
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
     </div>
@@ -372,11 +383,13 @@ function TraceNodeView({ data, selected }) {
 const nodeTypes = { trace: TraceNodeView };
 
 export default function TraceGraph({ primaryNodes, compareNodes, selectedNodeId, onSelect }) {
+  const { t } = useTranslation();
+  const kindStyle = useKindStyle();
   const [showData, setShowData] = useState(true);
 
   const { nodes, edges } = useMemo(
-    () => buildGraph(primaryNodes, compareNodes),
-    [primaryNodes, compareNodes],
+    () => buildGraph(primaryNodes, compareNodes, kindStyle),
+    [primaryNodes, compareNodes, kindStyle],
   );
 
   // Hide data edges entirely when the toggle is off so the user can fall
@@ -452,7 +465,7 @@ export default function TraceGraph({ primaryNodes, compareNodes, selectedNodeId,
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>
-      <DataFlowToggle showData={showData} onToggle={setShowData} />
+      <DataFlowToggle showData={showData} onToggle={setShowData} title={t("trace.dataFlow.title")} label={t("trace.dataFlow.label")} />
       <ReactFlow
         nodes={decoratedNodes}
         edges={decoratedEdges}
@@ -473,7 +486,7 @@ export default function TraceGraph({ primaryNodes, compareNodes, selectedNodeId,
   );
 }
 
-function DataFlowToggle({ showData, onToggle }) {
+function DataFlowToggle({ showData, onToggle, title, label }) {
   return (
     <div
       style={{
@@ -491,7 +504,7 @@ function DataFlowToggle({ showData, onToggle }) {
         fontSize: 11,
         boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
       }}
-      title="Affiche les arêtes data-flow inférées (setup → page, page → compose_page, …). Sélectionne un nœud pour isoler sa lineage."
+      title={title}
     >
       <span
         style={{
@@ -509,7 +522,7 @@ function DataFlowToggle({ showData, onToggle }) {
           onChange={(e) => onToggle(e.target.checked)}
           style={{ margin: 0 }}
         />
-        Data flow
+        {label}
       </label>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { api } from "./api.js";
 import { useAppContext } from "./context/AppContext.jsx";
 import AppBar from "./components/AppBar.jsx";
@@ -20,6 +21,7 @@ import OnboardingWizard, {
 } from "./components/OnboardingWizard.jsx";
 
 export default function App() {
+  const { t } = useTranslation();
   const { setRunningJob } = useAppContext();
   const [secretsStatus, setSecretsStatus] = useState(null);
   const [onboardingLoaded, setOnboardingLoaded] = useState(() => !window.bdgenDesktop?.getPreference);
@@ -98,7 +100,7 @@ export default function App() {
   if (!secretsStatus || !onboardingLoaded) {
     return (
       <div className="min-h-full flex items-center justify-center text-sm text-[var(--color-mute)]">
-        Chargement...
+        {t("common.loading")}
       </div>
     );
   }

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 const MIN_BRUSH = 8;
 const MAX_BRUSH = 80;
 const DEFAULT_BRUSH = 24;
 
 export default function InpaintModal({ item, onClose, onSubmit }) {
+  const { t } = useTranslation();
   const imageRef = useRef(null);
   const canvasRef = useRef(null);
   const [brushSize, setBrushSize] = useState(DEFAULT_BRUSH);
@@ -136,11 +138,11 @@ export default function InpaintModal({ item, onClose, onSubmit }) {
 
   async function handleSubmit() {
     if (!hasMask) {
-      setError("Dessinez d'abord la zone à retoucher.");
+      setError(t("dialogs.inpaint.drawFirst"));
       return;
     }
     if (!prompt.trim()) {
-      setError("Décrivez ce que vous souhaitez changer.");
+      setError(t("dialogs.inpaint.describeFirst"));
       return;
     }
     setError(null);
@@ -165,7 +167,7 @@ export default function InpaintModal({ item, onClose, onSubmit }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-[var(--color-border)]">
           <h2 className="text-base font-semibold">
-            Retouche ciblée — {item.label}
+            {t("dialogs.inpaint.title", { label: item.label })}
           </h2>
           <button
             className="btn btn-ghost text-sm"
@@ -179,7 +181,7 @@ export default function InpaintModal({ item, onClose, onSubmit }) {
         {/* Canvas area */}
         <div className="flex-1 overflow-auto px-5 pt-4">
           <p className="text-xs text-[var(--color-ink-soft)] mb-3">
-            Peignez la zone à modifier, puis décrivez la retouche souhaitée.
+            {t("dialogs.inpaint.instruction")}
           </p>
           <div
             className="relative inline-block rounded overflow-hidden"
@@ -209,7 +211,7 @@ export default function InpaintModal({ item, onClose, onSubmit }) {
 
           {/* Brush controls */}
           <div className="flex items-center gap-3 mt-3 flex-wrap">
-            <span className="text-xs text-[var(--color-ink-soft)]">Pinceau :</span>
+            <span className="text-xs text-[var(--color-ink-soft)]">{t("dialogs.inpaint.brushLabel")}</span>
             <button
               className="btn btn-ghost text-xs px-2 py-1"
               onClick={() => setBrushSize((s) => Math.max(MIN_BRUSH, s - 8))}
@@ -236,7 +238,7 @@ export default function InpaintModal({ item, onClose, onSubmit }) {
               onClick={clearMask}
               disabled={!hasMask}
             >
-              Effacer le masque
+              {t("dialogs.inpaint.clearMask")}
             </button>
           </div>
         </div>
@@ -244,12 +246,12 @@ export default function InpaintModal({ item, onClose, onSubmit }) {
         {/* Prompt + footer */}
         <div className="px-5 pt-3 pb-5 space-y-3 border-t border-[var(--color-border)] mt-3">
           <label className="block text-xs font-medium text-[var(--color-ink-soft)]">
-            Que souhaitez-vous changer dans cette zone ?
+            {t("dialogs.inpaint.promptLabel")}
           </label>
           <textarea
             className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-paper-soft)] px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
             rows={2}
-            placeholder="Ex. : remplacer le fond par un ciel étoilé, changer la couleur du manteau en rouge…"
+            placeholder={t("dialogs.inpaint.promptPlaceholder")}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             disabled={submitting}
@@ -263,14 +265,14 @@ export default function InpaintModal({ item, onClose, onSubmit }) {
               onClick={onClose}
               disabled={submitting}
             >
-              Annuler
+              {t("common.cancel")}
             </button>
             <button
               className="btn btn-primary text-sm"
               onClick={handleSubmit}
               disabled={submitting || !hasMask || !prompt.trim()}
             >
-              {submitting ? "Retouche en cours…" : "Lancer la retouche"}
+              {submitting ? t("dialogs.inpaint.inProgress") : t("dialogs.inpaint.submit")}
             </button>
           </div>
         </div>

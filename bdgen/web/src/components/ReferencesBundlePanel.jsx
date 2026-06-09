@@ -1,12 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FaFileExport, FaFileImport, FaXmark } from "react-icons/fa6";
+import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
-
-const KIND_LABEL = {
-  characters: "Personnages",
-  locations: "Décors",
-  objects: "Objets",
-};
 
 /**
  * Compact bundle controls (export/import) intended to live inside the
@@ -14,6 +9,7 @@ const KIND_LABEL = {
  * line; the parent owns the heading and intro copy.
  */
 export default function ReferencesBundlePanel({ projectName, onImported }) {
+  const { t } = useTranslation();
   const [exportOpen, setExportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState(null);
@@ -30,16 +26,16 @@ export default function ReferencesBundlePanel({ projectName, onImported }) {
     try {
       const result = await api.importReferencesBundle(projectName, file);
       const counts = ["characters", "locations", "objects"]
-        .map((k) => `${KIND_LABEL[k]} : ${result.imported[k].length}`)
+        .map((k) => `${t(`dialogs.referencesBundle.kinds.${k}`)} : ${result.imported[k].length}`)
         .join(" — ");
-      const renamedKeys = Object.keys(result.renamed || {});
-      const renamedNote = renamedKeys.length
-        ? ` (${renamedKeys.length} identifiant${renamedKeys.length > 1 ? "s" : ""} renommé${renamedKeys.length > 1 ? "s" : ""} pour éviter les doublons)`
+      const renamedCount = Object.keys(result.renamed || {}).length;
+      const renamedNote = renamedCount
+        ? t("dialogs.referencesBundle.renamedNote", { count: renamedCount })
         : "";
-      setMessage(`Import effectué — ${counts}${renamedNote}.`);
+      setMessage(t("dialogs.referencesBundle.importSuccess", { counts, renamed: renamedNote }));
       if (onImported) await onImported();
     } catch (e) {
-      setError(e.message || "Échec de l'import.");
+      setError(e.message || t("common.importFailed"));
     } finally {
       setImporting(false);
     }
@@ -56,19 +52,19 @@ export default function ReferencesBundlePanel({ projectName, onImported }) {
             setError(null);
             setExportOpen(true);
           }}
-          title="Exporter une sélection de personnages / décors / objets (avec leurs images) dans un fichier .bdrefs"
+          title={t("dialogs.referencesBundle.exportTitle")}
         >
-          <FaFileExport aria-hidden /> Exporter
+          <FaFileExport aria-hidden /> {t("dialogs.referencesBundle.export")}
         </button>
         <button
           type="button"
           className="btn btn-ghost text-sm inline-flex items-center gap-2"
           onClick={() => fileRef.current?.click()}
           disabled={importing}
-          title="Importer un fichier .bdrefs pour réutiliser un casting d'un autre projet"
+          title={t("dialogs.referencesBundle.importTitle")}
         >
           <FaFileImport aria-hidden />
-          {importing ? "Import…" : "Importer .bdrefs"}
+          {importing ? t("dialogs.referencesBundle.importing") : t("dialogs.referencesBundle.import")}
         </button>
         <input
           ref={fileRef}
@@ -95,6 +91,7 @@ export default function ReferencesBundlePanel({ projectName, onImported }) {
 }
 
 function ExportDialog({ projectName, onClose }) {
+  const { t } = useTranslation();
   const [available, setAvailable] = useState(null);
   const [picked, setPicked] = useState({
     characters: new Set(),
@@ -167,7 +164,7 @@ function ExportDialog({ projectName, onClose }) {
       URL.revokeObjectURL(url);
       onClose();
     } catch (e) {
-      setError(e.message || "Échec de l'export.");
+      setError(e.message || t("common.exportFailed"));
     } finally {
       setExporting(false);
     }
@@ -177,23 +174,21 @@ function ExportDialog({ projectName, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="card max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
         <div className="flex items-baseline justify-between mb-2">
-          <h3 className="text-lg font-semibold">Exporter des références</h3>
+          <h3 className="text-lg font-semibold">{t("dialogs.referencesBundle.title")}</h3>
           <button
             type="button"
             className="btn btn-ghost text-sm"
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t("dialogs.referencesBundle.closeAria")}
           >
             <FaXmark aria-hidden />
           </button>
         </div>
         <p className="text-sm text-[var(--color-mute)] mb-4">
-          Sélectionnez les éléments à inclure dans le fichier <code>.bdrefs</code>.
-          Seules les entrées dont l'image de référence existe sur disque sont
-          listées.
+          {t("dialogs.referencesBundle.intro")}
         </p>
         {available === null && !error && (
-          <p className="text-sm text-[var(--color-mute)]">Chargement…</p>
+          <p className="text-sm text-[var(--color-mute)]">{t("dialogs.referencesBundle.loading")}</p>
         )}
         {error && (
           <p className="text-sm text-[var(--color-rose-500)] mb-3">{error}</p>
@@ -206,8 +201,8 @@ function ExportDialog({ projectName, onClose }) {
                 return (
                   <Section
                     key={kind}
-                    title={KIND_LABEL[kind]}
-                    empty="Aucune référence disponible (PNG manquant ou élément non défini)."
+                    title={t(`dialogs.referencesBundle.kinds.${kind}`)}
+                    empty={t("dialogs.referencesBundle.empty")}
                   />
                 );
               }
@@ -215,14 +210,16 @@ function ExportDialog({ projectName, onClose }) {
               return (
                 <Section
                   key={kind}
-                  title={KIND_LABEL[kind]}
+                  title={t(`dialogs.referencesBundle.kinds.${kind}`)}
                   action={
                     <button
                       type="button"
                       className="btn btn-ghost text-xs"
                       onClick={() => toggleAll(kind)}
                     >
-                      {allPicked ? "Tout désélectionner" : "Tout sélectionner"}
+                      {allPicked
+                        ? t("dialogs.referencesBundle.deselectAll")
+                        : t("dialogs.referencesBundle.selectAll")}
                     </button>
                   }
                 >
@@ -255,7 +252,7 @@ function ExportDialog({ projectName, onClose }) {
             onClick={onClose}
             disabled={exporting}
           >
-            Annuler
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -265,8 +262,8 @@ function ExportDialog({ projectName, onClose }) {
           >
             <FaFileExport aria-hidden />
             {exporting
-              ? "Export…"
-              : `Exporter (${totalPicked} élément${totalPicked > 1 ? "s" : ""})`}
+              ? t("common.exporting")
+              : t("dialogs.referencesBundle.export", { count: totalPicked })}
           </button>
         </div>
       </div>

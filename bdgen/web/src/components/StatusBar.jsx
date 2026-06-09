@@ -1,20 +1,16 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
 import { useAppContext } from "../context/AppContext.jsx";
-
-const STEP_LABELS = {
-  preparation: "préparation",
-  script: "écriture",
-  references: "références",
-  compose: "planches",
-  upscale: "upscale",
-};
+import { useStepLabelMap } from "../hooks/useTranslatedSteps.js";
 
 export default function StatusBar() {
+  const { t } = useTranslation();
   const { runningJob, pager } = useAppContext();
   const [interrupting, setInterrupting] = useState(false);
+  const stepLabels = useStepLabelMap();
 
   async function handleInterrupt() {
     if (interrupting) return;
@@ -32,7 +28,7 @@ export default function StatusBar() {
 
   let left;
   if (running) {
-    const stepLabel = STEP_LABELS[runningJob.step] || runningJob.step;
+    const stepLabel = stepLabels[runningJob.step] || runningJob.step;
     const progress =
       runningJob.progress_total > 0 ? ` · ${runningJob.progress_current}/${runningJob.progress_total}` : "";
     left = (
@@ -42,16 +38,17 @@ export default function StatusBar() {
           aria-hidden="true"
         />
         <span className="truncate">
-          Génération en cours — {stepLabel}
-          {progress}
+          {t("statusBar.running", { stepLabel, progress })}
           {runningJob.last_message && (
-            <span className="text-[var(--color-mute)] ml-1.5">· {runningJob.last_message}</span>
+            <span className="text-[var(--color-mute)] ml-1.5">
+              {t("statusBar.runningMessage", { message: runningJob.last_message })}
+            </span>
           )}
         </span>
       </div>
     );
   } else {
-    left = <span>BdGEN · made with ❤ in Switzerland</span>;
+    left = <span>{t("statusBar.idle")}</span>;
   }
 
   return (
@@ -66,7 +63,7 @@ export default function StatusBar() {
                 to={`/projects/${encodeURIComponent(runningJob.project)}/${runningJob.step}`}
                 className="text-[var(--color-primary-600)] hover:underline"
               >
-                Suivre
+                {t("statusBar.follow")}
               </Link>
             )}
             <button
@@ -75,7 +72,7 @@ export default function StatusBar() {
               onClick={handleInterrupt}
               disabled={interrupting}
             >
-              {interrupting ? "…" : "Interrompre"}
+              {interrupting ? t("statusBar.interrupting") : t("statusBar.interrupt")}
             </button>
           </div>
         )}
@@ -85,16 +82,17 @@ export default function StatusBar() {
 }
 
 function StatusPager({ pager }) {
+  const { t } = useTranslation();
   const { index, total, onPrev, onNext, label } = pager;
   return (
-    <div className="status-pager" aria-label="Pagination">
+    <div className="status-pager" aria-label={t("statusBar.pagerAria")}>
       <button
         type="button"
         className="status-pager-btn"
         onClick={onPrev}
         disabled={index <= 0}
-        title="Précédent"
-        aria-label="Précédent"
+        title={t("statusBar.previousAria")}
+        aria-label={t("statusBar.previousAria")}
       >
         <FiChevronLeft aria-hidden />
       </button>
@@ -104,8 +102,8 @@ function StatusPager({ pager }) {
         className="status-pager-btn"
         onClick={onNext}
         disabled={index >= total - 1}
-        title="Suivant"
-        aria-label="Suivant"
+        title={t("statusBar.nextAria")}
+        aria-label={t("statusBar.nextAria")}
       >
         <FiChevronRight aria-hidden />
       </button>

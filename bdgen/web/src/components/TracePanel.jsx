@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
 import TraceGraph from "./TraceGraph.jsx";
 import TraceNodeDrawer from "./TraceNodeDrawer.jsx";
@@ -8,6 +9,7 @@ import TraceNodeDrawer from "./TraceNodeDrawer.jsx";
 // the dagre-laid-out graph occupying the remaining space. Node detail is
 // shown in a centered modal — the rest of the surface stays uncluttered.
 export default function TracePanel({ projectName }) {
+  const { t, i18n } = useTranslation();
   const [sessions, setSessions] = useState(null);
   const [error, setError] = useState(null);
   const [primaryId, setPrimaryId] = useState(null);
@@ -89,24 +91,25 @@ export default function TracePanel({ projectName }) {
           if (v && v === compareId) setCompareId(null);
         }}
         onChangeCompare={(v) => setCompareId(v)}
+        language={i18n.language}
+        t={t}
       />
 
       <section className="card p-0 overflow-hidden flex-1 relative">
         {error && <p className="p-4 text-xs text-[var(--color-rose-500)]">{error}</p>}
         {!error && sessions === null && (
-          <p className="p-4 text-xs text-[var(--color-mute)]">Chargement…</p>
+          <p className="p-4 text-xs text-[var(--color-mute)]">{t("trace.panel.loading")}</p>
         )}
         {!error && sessions && sessions.length === 0 && (
           <p className="p-4 text-xs text-[var(--color-mute)]">
-            Aucune trace pour l'instant. Lance une génération avec{" "}
-            <code className="text-[10px]">BDGEN_DEBUG=1</code>.
+            {t("trace.panel.empty")}
           </p>
         )}
         {primaryId && primaryNodes === undefined && (
-          <p className="p-4 text-xs text-[var(--color-mute)]">Chargement du graphe…</p>
+          <p className="p-4 text-xs text-[var(--color-mute)]">{t("trace.panel.loadingGraph")}</p>
         )}
         {primaryNodes && primaryNodes.length === 0 && (
-          <p className="p-4 text-xs text-[var(--color-mute)]">Session vide.</p>
+          <p className="p-4 text-xs text-[var(--color-mute)]">{t("trace.panel.emptySession")}</p>
         )}
         {primaryNodes && primaryNodes.length > 0 && (
           <TraceGraph
@@ -130,27 +133,27 @@ export default function TracePanel({ projectName }) {
   );
 }
 
-function Toolbar({ sessions, primaryId, compareId, onChangePrimary, onChangeCompare }) {
+function Toolbar({ sessions, primaryId, compareId, onChangePrimary, onChangeCompare, language, t }) {
   return (
     <div className="card p-3 flex flex-wrap items-center gap-4 text-sm">
       <label className="flex items-center gap-2">
-        <span className="text-[var(--color-mute)] text-xs uppercase tracking-wide">Session</span>
+        <span className="text-[var(--color-mute)] text-xs uppercase tracking-wide">{t("trace.panel.session")}</span>
         <select
           className="form-control text-sm"
           value={primaryId || ""}
           onChange={(e) => onChangePrimary(e.target.value || null)}
         >
-          <option value="">— aucune —</option>
+          <option value="">{t("trace.panel.noneOption")}</option>
           {sessions.map((s) => (
             <option key={s.session_id} value={s.session_id}>
-              {formatTs(s.started_at)} · {s.node_count} nœuds
+              {t("trace.panel.sessionOpt", { ts: formatTs(s.started_at, language), count: s.node_count })}
             </option>
           ))}
         </select>
       </label>
       <label className="flex items-center gap-2">
         <span className="text-[var(--color-mute)] text-xs uppercase tracking-wide">
-          Comparer avec
+          {t("trace.panel.compareWith")}
         </span>
         <select
           className="form-control text-sm"
@@ -158,19 +161,19 @@ function Toolbar({ sessions, primaryId, compareId, onChangePrimary, onChangeComp
           onChange={(e) => onChangeCompare(e.target.value || null)}
           disabled={!primaryId}
         >
-          <option value="">— aucune —</option>
+          <option value="">{t("trace.panel.noneOption")}</option>
           {sessions
             .filter((s) => s.session_id !== primaryId)
             .map((s) => (
               <option key={s.session_id} value={s.session_id}>
-                {formatTs(s.started_at)} · {s.node_count} nœuds
+                {t("trace.panel.sessionOpt", { ts: formatTs(s.started_at, language), count: s.node_count })}
               </option>
             ))}
         </select>
       </label>
       {compareId && (
         <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-700">
-          diff actif — les nœuds modifiés ont une bordure violette
+          {t("trace.panel.diffActive")}
         </span>
       )}
     </div>
@@ -200,11 +203,11 @@ function NodeDetailModal({ node, compareNode, projectName, onClose }) {
   );
 }
 
-function formatTs(ts) {
+function formatTs(ts, language) {
   if (!ts) return "—";
   try {
     const d = new Date(ts);
-    return d.toLocaleString("fr-FR", {
+    return d.toLocaleString(language || "en", {
       year: "2-digit",
       month: "2-digit",
       day: "2-digit",

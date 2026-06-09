@@ -70,6 +70,10 @@ def upscale_pages(
                     message=f"Source absente pour {target_id}, étape ignorée.",
                     current=processed,
                     total=total,
+                    extra={
+                        "id": target_id,
+                        "i18n_key": "progressEvents.upscale.missingSource",
+                    },
                 )
             )
             continue
@@ -82,6 +86,10 @@ def upscale_pages(
                     current=processed,
                     total=total,
                     artifact=str(dst),
+                    extra={
+                        "id": target_id,
+                        "i18n_key": "progressEvents.upscale.skipped",
+                    },
                 )
             )
             continue
@@ -93,6 +101,10 @@ def upscale_pages(
                 message=f"Upscale de {target_id} via Replicate…",
                 current=processed,
                 total=total,
+                extra={
+                    "id": target_id,
+                    "i18n_key": "progressEvents.upscale.generating",
+                },
             )
         )
         started_at, started = start_timer()
@@ -122,6 +134,10 @@ def upscale_pages(
                 current=processed,
                 total=total,
                 artifact=str(dst),
+                extra={
+                    "id": target_id,
+                    "i18n_key": "progressEvents.upscale.done",
+                },
             )
         )
 
@@ -135,6 +151,10 @@ def upscale_pages(
                 message=f"Assemblage de {len(upscaled_sequence)} images upscalées en PDF…",
                 current=total,
                 total=total,
+                extra={
+                    "count": len(upscaled_sequence),
+                    "i18n_key": "progressEvents.upscale.assemblingPdf",
+                },
             )
         )
         _assemble_pdf(upscaled_sequence, pdf_path)
@@ -146,6 +166,7 @@ def upscale_pages(
                 current=total,
                 total=total,
                 artifact=str(pdf_path),
+                extra={"i18n_key": "progressEvents.upscale.pdfDone"},
             )
         )
 
@@ -157,6 +178,7 @@ def upscale_pages(
             current=total,
             total=total,
             artifact=str(output_dir),
+            extra={"i18n_key": "progressEvents.upscale.allDone"},
         )
     )
     return output_dir

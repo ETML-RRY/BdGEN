@@ -27,10 +27,13 @@ async function request(path, options = {}) {
   if (!contentType.includes("json")) {
     const peek = (await res.text()).slice(0, 80);
     if (peek.trim().toLowerCase().startsWith("<!doctype") || peek.includes("<html")) {
-      const err = new Error(
-        `Endpoint inconnu côté serveur (${path}). Redémarre le backend pour charger les nouvelles routes.`,
-      );
+      // The backend doesn't know this route — the SPA fallback served HTML
+      // instead. We surface a structured error so the caller can translate
+      // it; the `path` is preserved for the user-facing message.
+      const err = new Error(path);
       err.status = 404;
+      err.kind = "unknownEndpoint";
+      err.path = path;
       err.body = { detail: peek };
       throw err;
     }
@@ -46,11 +49,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ password, secrets, overwrite }),
     }),
-  unlockSecretsVault: (password) =>
-    request("/api/secrets/unlock", {
-      method: "POST",
-      body: JSON.stringify({ password }),
-    }),
+  unlockSecretsVault: async (password) => {
+    try {
+      return await request("/api/secrets/unlock", {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      });
+    } catch (e) {
+      // 401 = wrong password or corrupted vault (server raises
+      // `Mot de passe incorrect ou coffre illisible.`). Tag the error so the
+      // UI can translate it instead of showing the raw French message.
+      if (e && e.status === 401) e.kind = "wrongPassword";
+      throw e;
+    }
+  },
   lockSecretsVault: () => request("/api/secrets/lock", { method: "POST" }),
   updateSecretProvider: (provider, value, password = null) =>
     request(`/api/secrets/providers/${encodeURIComponent(provider)}`, {

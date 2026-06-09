@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
 
 export default function StyleFromImageDialog({ language = "fr", onApply, onClose }) {
+  const { t } = useTranslation();
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [extracting, setExtracting] = useState(false);
@@ -61,17 +63,13 @@ export default function StyleFromImageDialog({ language = "fr", onApply, onClose
       <div className="card p-6 w-full max-w-3xl space-y-4 max-h-[90vh] overflow-y-auto">
         <div>
           <h3 className="text-lg font-semibold">
-            Inspirez-vous d'une image
+            {t("dialogs.styleFromImage.title")}
           </h3>
           <p className="text-sm text-[var(--color-ink-soft)] mt-1">
-            Téléchargez une image (JPEG, PNG, WEBP). Un modèle de vision en
-            extrait le style visuel et, si des personnages sont visibles, leurs
-            descriptions — pour pré-remplir le formulaire.
+            {t("dialogs.styleFromImage.body")}
             <br />
             <em className="text-[var(--color-mute)]">
-              Aucune référence à des auteurs, studios ou personnages
-              protégés ne sera produite — seulement des descripteurs
-              génériques.
+              {t("dialogs.styleFromImage.caveat")}
             </em>
           </p>
         </div>
@@ -90,12 +88,12 @@ export default function StyleFromImageDialog({ language = "fr", onApply, onClose
             {previewUrl ? (
               <img
                 src={previewUrl}
-                alt="Aperçu"
+                alt={t("dialogs.styleFromImage.previewAlt")}
                 className="max-h-full max-w-full object-contain"
               />
             ) : (
               <div className="text-center text-sm text-[var(--color-mute)] p-6">
-                Cliquez ou déposez une image ici
+                {t("dialogs.styleFromImage.dropzone")}
               </div>
             )}
           </div>
@@ -110,23 +108,22 @@ export default function StyleFromImageDialog({ language = "fr", onApply, onClose
           <div className="space-y-3">
             {!result && !extracting && (
               <p className="text-sm text-[var(--color-ink-soft)]">
-                Une fois l'image choisie, lancez l'analyse. Vous pourrez relire
-                la description avant de l'appliquer au formulaire.
+                {t("dialogs.styleFromImage.preResult")}
               </p>
             )}
             {extracting && (
               <div className="text-sm text-[var(--color-ink-soft)]">
                 <span className="inline-block w-3 h-3 rounded-full border-2 border-[var(--color-primary-200)] border-t-[var(--color-primary-500)] animate-spin mr-2" />
-                Analyse de l'image…
+                {t("dialogs.styleFromImage.extracting")}
               </div>
             )}
             {result && (
               <div className="space-y-2 text-sm">
-                <SectionTitle>Style visuel</SectionTitle>
-                <Field label="Style artistique" value={result.style.art_style} />
-                <Field label="Palette de couleurs" value={result.style.color_palette} />
-                <Field label="Encrage / traits" value={result.style.line_work} />
-                <Field label="Atmosphère" value={result.style.mood} />
+                <SectionTitle>{t("dialogs.styleFromImage.visualStyle")}</SectionTitle>
+                <Field label={t("dialogs.styleFromImage.artStyle")} value={result.style.art_style} />
+                <Field label={t("dialogs.styleFromImage.colorPalette")} value={result.style.color_palette} />
+                <Field label={t("dialogs.styleFromImage.lineWork")} value={result.style.line_work} />
+                <Field label={t("dialogs.styleFromImage.mood")} value={result.style.mood} />
               </div>
             )}
             {error && (
@@ -139,10 +136,10 @@ export default function StyleFromImageDialog({ language = "fr", onApply, onClose
           <div className="space-y-2">
             <div className="flex items-baseline justify-between">
               <SectionTitle>
-                Personnages détectés ({characters.length})
+                {t("dialogs.styleFromImage.charactersDetected", { count: characters.length })}
               </SectionTitle>
               <span className="text-xs text-[var(--color-mute)]">
-                Cochez ceux à ajouter au projet.
+                {t("dialogs.styleFromImage.selectHint")}
               </span>
             </div>
             <ul className="space-y-2">
@@ -181,9 +178,8 @@ export default function StyleFromImageDialog({ language = "fr", onApply, onClose
                     {c.outfit && (
                       <p className="text-[var(--color-ink-soft)] mt-1">
                         <span className="text-xs uppercase tracking-wide text-[var(--color-mute)]">
-                          Tenue —{" "}
+                          {t("stepsUi.compose.cover")} — {c.outfit}
                         </span>
-                        {c.outfit}
                       </p>
                     )}
                     {c.personality && (
@@ -201,10 +197,10 @@ export default function StyleFromImageDialog({ language = "fr", onApply, onClose
           <div className="space-y-2">
             <div className="flex items-baseline justify-between">
               <SectionTitle>
-                Décors détectés ({locations.length})
+                {t("dialogs.styleFromImage.locationsDetected", { count: locations.length })}
               </SectionTitle>
               <span className="text-xs text-[var(--color-mute)]">
-                Cochez ceux à ajouter au projet.
+                {t("dialogs.styleFromImage.selectHint")}
               </span>
             </div>
             <ul className="space-y-2">
@@ -243,14 +239,13 @@ export default function StyleFromImageDialog({ language = "fr", onApply, onClose
         )}
         {result && !hasCharacters && !hasLocations && (
           <p className="text-sm text-[var(--color-mute)]">
-            Aucun personnage ni décor identifié — seuls les champs de style
-            seront appliqués.
+            {t("dialogs.styleFromImage.noCharactersOrLocations")}
           </p>
         )}
 
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Annuler
+            {t("common.cancel")}
           </button>
           {!result ? (
             <button
@@ -259,7 +254,7 @@ export default function StyleFromImageDialog({ language = "fr", onApply, onClose
               disabled={!file || extracting}
               onClick={extract}
             >
-              {extracting ? "Analyse…" : "Analyser l'image"}
+              {extracting ? t("dialogs.styleFromImage.analyzing") : t("dialogs.styleFromImage.analyze")}
             </button>
           ) : (
             <>
@@ -272,13 +267,10 @@ export default function StyleFromImageDialog({ language = "fr", onApply, onClose
                   setError(null);
                 }}
               >
-                Recommencer
+                {t("common.restart")}
               </button>
               <button type="button" className="btn btn-primary" onClick={apply}>
-                {applyButtonLabel({
-                  anyCharSelected,
-                  anyLocSelected,
-                })}
+                {applyButtonLabel({ anyCharSelected, anyLocSelected, t })}
               </button>
             </>
           )}
@@ -288,12 +280,12 @@ export default function StyleFromImageDialog({ language = "fr", onApply, onClose
   );
 }
 
-function applyButtonLabel({ anyCharSelected, anyLocSelected }) {
+function applyButtonLabel({ anyCharSelected, anyLocSelected, t }) {
   const extras = [];
-  if (anyCharSelected) extras.push("personnages");
-  if (anyLocSelected) extras.push("décors");
-  if (extras.length === 0) return "Appliquer le style";
-  return `Appliquer style + ${extras.join(" + ")}`;
+  if (anyCharSelected) extras.push(t("dialogs.styleFromImage.extras.characters"));
+  if (anyLocSelected) extras.push(t("dialogs.styleFromImage.extras.locations"));
+  if (extras.length === 0) return t("dialogs.styleFromImage.applyStyle");
+  return t("dialogs.styleFromImage.applyStyleAnd", { extras: extras.join(" + ") });
 }
 
 function SectionTitle({ children }) {

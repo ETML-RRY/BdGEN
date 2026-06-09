@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation, Trans } from "react-i18next";
 import { FaPlus, FaUpload, FaCopy, FaTrash, FaDownload, FaChartSimple } from "react-icons/fa6";
 import { api } from "../api.js";
 import StateChip from "../components/StateChip.jsx";
@@ -7,16 +8,10 @@ import RunningBanner from "../components/RunningBanner.jsx";
 import ConfirmDeleteDialog from "../components/ConfirmDeleteDialog.jsx";
 import DuplicateProjectDialog from "../components/DuplicateProjectDialog.jsx";
 import ImportProjectDialog from "../components/ImportProjectDialog.jsx";
-
-const STATE_LABELS = {
-  preparation: "Préparation",
-  script: "Écriture",
-  references: "Références",
-  compose: "Planches",
-  done: "Terminé",
-};
+import { formatError } from "../i18n/formatError.js";
 
 export default function Home() {
+  const { t } = useTranslation();
   const [projects, setProjects] = useState(null);
   const [job, setJob] = useState(null);
   const [error, setError] = useState(null);
@@ -36,7 +31,7 @@ export default function Home() {
       setProjects(projects);
       setJob(job);
     } catch (e) {
-      setError(e.message);
+      setError(formatError(e, t));
     }
   }
 
@@ -68,7 +63,7 @@ export default function Home() {
       const { name } = await api.importProject(importFile, { newTitle, newProject });
       navigate(`/projects/${encodeURIComponent(name)}`);
     } catch (err) {
-      setError(err.message);
+      setError(formatError(err, t));
       throw err;
     }
   }
@@ -109,25 +104,24 @@ export default function Home() {
 
       <section className="card p-8 mb-8">
         <h1 className="text-2xl font-semibold mb-2">
-          Bienvenue sur BdGEN
+          {t("home.title")}
         </h1>
         <p className="text-[var(--color-ink-soft)] max-w-2xl mb-6">
-          BdGEN écrit le scénario, dessine les références puis assemble une BD
-          complète à partir d'une simple description. Lancez
-          un nouveau projet, reprenez-en un en cours, ou importez une archive
-          <code className="px-1 py-0.5 bg-[var(--color-paper-soft)] rounded mx-1">.bdgen</code>
-          pour continuer où vous l'aviez laissé.
+          <Trans
+            i18nKey="home.intro"
+            components={{ code: <code className="px-1 py-0.5 bg-[var(--color-paper-soft)] rounded mx-1" /> }}
+          />
         </p>
         <div className="flex flex-wrap gap-3">
           <Link to="/new" className="btn btn-primary inline-flex items-center gap-2">
-            <FaPlus aria-hidden /> Nouveau projet
+            <FaPlus aria-hidden /> {t("home.newProject")}
           </Link>
           <button
             type="button"
             className="btn btn-secondary inline-flex items-center gap-2"
             onClick={() => fileRef.current?.click()}
           >
-            <FaUpload aria-hidden /> Importer un projet
+            <FaUpload aria-hidden /> {t("home.importProject")}
           </button>
           <input
             ref={fileRef}
@@ -144,19 +138,19 @@ export default function Home() {
 
       <section>
         <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-lg font-semibold">Projets en cours</h2>
+          <h2 className="text-lg font-semibold">{t("home.currentProjects")}</h2>
           <span className="text-xs text-[var(--color-mute)]">
-            {projects ? `${projects.length} projet${projects.length > 1 ? "s" : ""}` : "…"}
+            {projects ? t("home.projectsCount", { count: projects.length }) : t("common.loading")}
           </span>
         </div>
 
         {projects === null ? (
-          <p className="text-sm text-[var(--color-mute)]">Chargement…</p>
+          <p className="text-sm text-[var(--color-mute)]">{t("home.loading")}</p>
         ) : projects.length === 0 ? (
           <div className="card p-8 text-center text-[var(--color-mute)]">
-            Aucun projet pour l'instant.
+            {t("home.empty")}
             <br />
-            Démarrez avec « Nouveau projet ».
+            {t("home.emptyHint")}
           </div>
         ) : (
           <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -202,8 +196,8 @@ export default function Home() {
                             <Link
                               to={`/projects/${encodeURIComponent(p.name)}/stats`}
                               className="p-1.5 rounded-md text-[var(--color-ink-soft)] hover:bg-[var(--color-paper-soft)] hover:text-[var(--color-primary-600)] transition-colors"
-                              title="Voir les statistiques"
-                              aria-label="Voir les statistiques"
+                              title={t("home.openStats")}
+                              aria-label={t("home.openStats")}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <FaChartSimple aria-hidden />
@@ -213,8 +207,8 @@ export default function Home() {
                                 href={`/api/projects/${encodeURIComponent(p.name)}/files/${encodeURIComponent(p.name)}.pdf`}
                                 download
                                 className="p-1.5 rounded-md text-[var(--color-ink-soft)] hover:bg-[var(--color-mint-100)] hover:text-[var(--color-mint-700)] transition-colors"
-                                title="Télécharger le PDF"
-                                aria-label="Télécharger le PDF"
+                                title={t("home.downloadPdf")}
+                                aria-label={t("home.downloadPdf")}
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <FaDownload aria-hidden />
@@ -223,8 +217,8 @@ export default function Home() {
                             <button
                               type="button"
                               className="p-1.5 rounded-md text-[var(--color-ink-soft)] hover:bg-[var(--color-paper-soft)] hover:text-[var(--color-primary-600)] transition-colors disabled:opacity-50"
-                              title="Dupliquer ce projet (choisir les éléments à reprendre)"
-                              aria-label="Dupliquer ce projet"
+                              title={t("home.duplicateTitle")}
+                              aria-label={t("home.duplicateAria")}
                               onClick={(e) => onAskDuplicate(e, p)}
                               disabled={duplicating === p.name}
                             >
@@ -233,20 +227,20 @@ export default function Home() {
                             <button
                               type="button"
                               className="p-1.5 rounded-md text-[var(--color-ink-soft)] hover:bg-[var(--color-rose-100)] hover:text-[var(--color-rose-500)] transition-colors"
-                              title="Supprimer définitivement ce projet"
-                              aria-label="Supprimer ce projet"
+                              title={t("home.deleteTitle")}
+                              aria-label={t("home.deleteAria")}
                               onClick={(e) => onAskDelete(e, p)}
                             >
                               <FaTrash aria-hidden />
                             </button>
                           </div>
-                          <StateChip state={p.state} label={STATE_LABELS[p.state]} />
+                          <StateChip state={p.state} />
                         </div>
                       </div>
                       <div className="text-xs text-[var(--color-mute)] flex flex-wrap gap-x-4 gap-y-1 mt-3">
                         {p.page_count !== null && (
                           <span>
-                            Planches écrites&nbsp;:{" "}
+                            {t("home.pagesWritten")}{" "}
                             <strong className="text-[var(--color-ink-soft)]">
                               {p.pages_written}/{p.page_count}
                             </strong>
@@ -254,7 +248,7 @@ export default function Home() {
                         )}
                         {p.references_total > 0 && (
                           <span>
-                            Références&nbsp;:{" "}
+                            {t("home.references")}{" "}
                             <strong className="text-[var(--color-ink-soft)]">
                               {p.references_ready}/{p.references_total}
                             </strong>
@@ -272,9 +266,11 @@ export default function Home() {
 
       {deleteTarget && (
         <ConfirmDeleteDialog
-          title="Supprimer ce projet ?"
-          body={`« ${deleteTarget.display_name || deleteTarget.title || deleteTarget.name} » sera supprimé définitivement, avec son scénario, ses références et ses planches. Cette action est irréversible.`}
-          confirmLabel="Supprimer définitivement"
+          title={t("home.deleteConfirmTitle")}
+          body={t("home.deleteConfirmBody", {
+            name: deleteTarget.display_name || deleteTarget.title || deleteTarget.name,
+          })}
+          confirmLabel={t("common.deleteForever")}
           onConfirm={onConfirmDelete}
           onClose={() => setDeleteTarget(null)}
         />

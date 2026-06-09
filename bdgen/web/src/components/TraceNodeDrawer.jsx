@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
 
 // Detail view for the node selected in TraceGraph. Shows the full prompt,
@@ -7,20 +8,21 @@ import { api } from "../api.js";
 // and a small badge listing the changed fields. The optional `onClose` adds
 // a close button so the component can be rendered inside a modal.
 export default function TraceNodeDrawer({ node, compareNode, projectName, onClose }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState("prompt");
 
   if (!node) {
     return (
       <div className="p-4 text-xs text-[var(--color-mute)]">
-        Sélectionne un nœud dans le graphe pour voir son détail.
+        {t("trace.nodeDrawer.empty")}
       </div>
     );
   }
 
   const tabs = [
-    { id: "prompt", label: "Prompt" },
-    { id: "io", label: "I/O" },
-    { id: "raw", label: "Brut" },
+    { id: "prompt", label: t("trace.nodeDrawer.tabPrompt") },
+    { id: "io", label: t("trace.nodeDrawer.tabIo") },
+    { id: "raw", label: t("trace.nodeDrawer.tabRaw") },
   ];
 
   return (
@@ -31,7 +33,7 @@ export default function TraceNodeDrawer({ node, compareNode, projectName, onClos
           <div className="flex items-center gap-2 shrink-0">
             {node.status === "error" && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-rose-100)] text-[var(--color-rose-700)]">
-                error
+                {t("trace.nodeDrawer.errorBadge")}
               </span>
             )}
             {onClose && (
@@ -39,8 +41,8 @@ export default function TraceNodeDrawer({ node, compareNode, projectName, onClos
                 type="button"
                 onClick={onClose}
                 className="text-[var(--color-mute)] hover:text-[var(--color-ink)] text-lg leading-none px-1"
-                aria-label="Fermer"
-                title="Fermer (Esc)"
+                aria-label={t("trace.nodeDrawer.closeAria")}
+                title={t("trace.nodeDrawer.closeTitle")}
               >
                 ×
               </button>
@@ -52,39 +54,41 @@ export default function TraceNodeDrawer({ node, compareNode, projectName, onClos
           {node.provider || node.model
             ? ` · ${node.provider || "?"}/${node.model || "?"}`
             : ""}
-          {node.elapsed_seconds != null ? ` · ${node.elapsed_seconds}s` : ""}
+          {node.elapsed_seconds != null
+            ? t("trace.nodeDrawer.elapsed", { seconds: node.elapsed_seconds })
+            : ""}
         </p>
         {compareNode && (
-          <DiffBadge primary={node} compare={compareNode} />
+          <DiffBadge primary={node} compare={compareNode} t={t} />
         )}
       </header>
 
       <ArtifactPreview node={node} projectName={projectName} />
 
       <nav className="px-3 pt-2 flex gap-1 text-[11px] border-b border-[var(--color-line)]">
-        {tabs.map((t) => (
+        {tabs.map((tb) => (
           <button
-            key={t.id}
+            key={tb.id}
             type="button"
-            onClick={() => setTab(t.id)}
+            onClick={() => setTab(tb.id)}
             className={
               "px-2 py-1 rounded-t-md " +
-              (tab === t.id
+              (tab === tb.id
                 ? "bg-[var(--color-paper-soft)] text-[var(--color-ink)] font-medium"
                 : "text-[var(--color-mute)] hover:text-[var(--color-ink)]")
             }
           >
-            {t.label}
+            {tb.label}
           </button>
         ))}
       </nav>
 
       <div className="p-3 overflow-auto flex-1 text-[11px]">
         {tab === "prompt" && (
-          <PromptTab node={node} compareNode={compareNode} />
+          <PromptTab node={node} compareNode={compareNode} t={t} />
         )}
-        {tab === "io" && <IOTab node={node} projectName={projectName} />}
-        {tab === "raw" && <RawTab node={node} />}
+        {tab === "io" && <IOTab node={node} projectName={projectName} t={t} />}
+        {tab === "raw" && <RawTab node={node} t={t} />}
       </div>
     </div>
   );
@@ -143,9 +147,10 @@ function ArtifactPreview({ node, projectName }) {
 // look up the per-file version history via /api/projects/{name}/versions and
 // match the node's recorded sha256_12 against either the current file or one
 // of the archived versions. The matched version is selected by default and
-// flagged with a "produite par ce nœud" badge; the user can still switch to
+// flagged with a "produced by this node" badge; the user can still switch to
 // any other version via the dropdown.
 function ArtifactPreviewBody({ art, projectName }) {
+  const { t, i18n } = useTranslation();
   const relPath = projectRelPath(art, projectName);
   const nodeSha12 = typeof art === "object" ? art.sha256_12 || null : null;
   const { loading, current, versions, error } = useArtifactVersions(projectName, relPath);
@@ -154,20 +159,23 @@ function ArtifactPreviewBody({ art, projectName }) {
     const out = [];
     if (current) {
       out.push({
-        label: "Actuelle",
+        label: t("trace.nodeDrawer.currentVersion"),
         relPath: current.relpath || relPath,
         sha256: current.sha256,
       });
     }
     for (const v of versions) {
       out.push({
-        label: `${formatVersionId(v.version_id)} · ${v.kind || "regen"}`,
+        label: t("trace.nodeDrawer.versionOpt", {
+          id: formatVersionId(v.version_id, i18n.language),
+          kind: v.kind || "regen",
+        }),
         relPath: v.relpath,
         sha256: v.sha256,
       });
     }
     return out;
-  }, [current, versions, relPath]);
+  }, [current, versions, relPath, t, i18n.language]);
 
   const matchingIdx = useMemo(() => {
     if (!nodeSha12) return -1;
@@ -190,7 +198,7 @@ function ArtifactPreviewBody({ art, projectName }) {
 
   return (
     <div className="px-3 pt-3 flex flex-col items-center">
-      <a href={url} target="_blank" rel="noopener noreferrer" title="Ouvrir en grand">
+      <a href={url} target="_blank" rel="noopener noreferrer" title="Open in full size">
         <img
           src={url}
           alt={basename(art)}
@@ -201,7 +209,7 @@ function ArtifactPreviewBody({ art, projectName }) {
         {basename(art)}
       </p>
       {loading && (
-        <p className="text-[9px] text-[var(--color-mute)] mt-1">Chargement des versions…</p>
+        <p className="text-[9px] text-[var(--color-mute)] mt-1">{t("trace.nodeDrawer.loadingVersions")}</p>
       )}
       {error && (
         <p className="text-[9px] text-[var(--color-rose-500)] mt-1">{error}</p>
@@ -216,13 +224,13 @@ function ArtifactPreviewBody({ art, projectName }) {
             {options.map((o, i) => (
               <option key={i} value={i}>
                 {o.label}
-                {i === matchingIdx ? "  ← ce nœud" : ""}
+                {i === matchingIdx ? t("trace.nodeDrawer.versionOptCurrent") : ""}
               </option>
             ))}
           </select>
           {isMatchSelected && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-mint-100)] text-[var(--color-mint-700)]">
-              produite par ce nœud
+              {t("trace.nodeDrawer.producedBy")}
             </span>
           )}
         </div>
@@ -230,9 +238,9 @@ function ArtifactPreviewBody({ art, projectName }) {
       {archiveMissing && (
         <span
           className="mt-2 text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-peach-100)] text-[var(--color-ink-soft)]"
-          title={`sha256 ${nodeSha12} non retrouvé dans l'historique`}
+          title={t("trace.nodeDrawer.shaNotFound", { sha: nodeSha12 })}
         >
-          archive non retrouvée — affichage de la version actuelle
+          {t("trace.nodeDrawer.archiveMissing")}
         </span>
       )}
     </div>
@@ -280,15 +288,15 @@ function useArtifactVersions(projectName, relPath) {
 }
 
 // Same compact format as VersionPicker: "2026-05-22T14-30-15-123Z" →
-// "22 mai 14:30:15". Kept local to avoid coupling TraceNodeDrawer to the
-// VersionPicker module — the trace UI doesn't share its controlled-state API.
-function formatVersionId(versionId) {
+// "22 May 14:30:15" (in the current UI language). Kept local to avoid
+// coupling TraceNodeDrawer to the VersionPicker module.
+function formatVersionId(versionId, language) {
   try {
     const iso = versionId
       .replace(/-(\d{2})-(\d{2})-(\d{3})Z$/, ":$1:$2.$3Z")
       .replace(/T(\d{2})-/, "T$1:");
     const d = new Date(iso);
-    return d.toLocaleString("fr-FR", {
+    return d.toLocaleString(language || "en", {
       month: "short",
       day: "2-digit",
       hour: "2-digit",
@@ -300,14 +308,16 @@ function formatVersionId(versionId) {
   }
 }
 
-function DiffBadge({ primary, compare }) {
+function DiffBadge({ primary, compare, t }) {
   const fields = [];
-  if (primary.prompt !== compare.prompt) fields.push("prompt");
-  if (primary.model !== compare.model) fields.push("model");
-  if (primary.provider !== compare.provider) fields.push("provider");
-  if (JSON.stringify(primary.usage) !== JSON.stringify(compare.usage)) fields.push("usage");
-  if (JSON.stringify(primary.outputs) !== JSON.stringify(compare.outputs)) fields.push("outputs");
-  const label = fields.length === 0 ? "identique à B" : `Δ ${fields.join(", ")}`;
+  if (primary.prompt !== compare.prompt) fields.push(t("trace.nodeDrawer.diffField.prompt"));
+  if (primary.model !== compare.model) fields.push(t("trace.nodeDrawer.diffField.model"));
+  if (primary.provider !== compare.provider) fields.push(t("trace.nodeDrawer.diffField.provider"));
+  if (JSON.stringify(primary.usage) !== JSON.stringify(compare.usage)) fields.push(t("trace.nodeDrawer.diffField.usage"));
+  if (JSON.stringify(primary.outputs) !== JSON.stringify(compare.outputs)) fields.push(t("trace.nodeDrawer.diffField.outputs"));
+  const label = fields.length === 0
+    ? t("trace.nodeDrawer.diffIdentical")
+    : t("trace.nodeDrawer.diffChanged", { fields: fields.join(", ") });
   const cls =
     fields.length === 0
       ? "bg-[var(--color-mint-100)] text-[var(--color-mint-700)]"
@@ -319,42 +329,42 @@ function DiffBadge({ primary, compare }) {
   );
 }
 
-function PromptTab({ node, compareNode }) {
+function PromptTab({ node, compareNode, t }) {
   const systemPrompt = node.extra?.system_prompt;
   return (
     <div className="space-y-3">
       {systemPrompt && (
-        <CollapsibleBlock label="system prompt" content={systemPrompt} />
+        <CollapsibleBlock label={t("trace.nodeDrawer.systemPrompt")} content={systemPrompt} />
       )}
       {node.prompt ? (
         compareNode ? (
-          <PromptDiff a={node.prompt} b={compareNode.prompt} />
+          <PromptDiff a={node.prompt} b={compareNode.prompt} t={t} />
         ) : (
-          <CodeBlock content={node.prompt} label="prompt" copy />
+          <CodeBlock content={node.prompt} label={t("trace.nodeDrawer.promptLabel")} copy />
         )
       ) : (
-        <p className="text-[var(--color-mute)]">Pas de prompt sur ce nœud.</p>
+        <p className="text-[var(--color-mute)]">{t("trace.nodeDrawer.noPrompt")}</p>
       )}
     </div>
   );
 }
 
-function IOTab({ node, projectName }) {
+function IOTab({ node, projectName, t }) {
   return (
     <div className="space-y-3">
-      <Section label="inputs">
+      <Section label={t("trace.nodeDrawer.inputs")}>
         <IOValue value={node.inputs} projectName={projectName} />
       </Section>
-      <Section label="outputs">
+      <Section label={t("trace.nodeDrawer.outputs")}>
         <IOValue value={node.outputs} projectName={projectName} />
       </Section>
       {node.usage && Object.keys(node.usage).length > 0 && (
-        <Section label="usage">
+        <Section label={t("trace.nodeDrawer.usage")}>
           <JsonView value={node.usage} />
         </Section>
       )}
       {node.extra && Object.keys(node.extra).filter((k) => k !== "system_prompt").length > 0 && (
-        <Section label="extra">
+        <Section label={t("trace.nodeDrawer.extra")}>
           <JsonView
             value={Object.fromEntries(
               Object.entries(node.extra).filter(([k]) => k !== "system_prompt"),
@@ -478,8 +488,8 @@ function isPlainObject(v) {
   return v != null && typeof v === "object" && !Array.isArray(v);
 }
 
-function RawTab({ node }) {
-  return <CodeBlock content={JSON.stringify(node, null, 2)} label="raw node" copy />;
+function RawTab({ node, t }) {
+  return <CodeBlock content={JSON.stringify(node, null, 2)} label={t("trace.nodeDrawer.rawNode")} copy />;
 }
 
 function Section({ label, children }) {
@@ -505,6 +515,7 @@ function JsonView({ value }) {
 }
 
 function CodeBlock({ content, label, copy }) {
+  const { t } = useTranslation();
   return (
     <div className="relative">
       {copy && (
@@ -512,9 +523,9 @@ function CodeBlock({ content, label, copy }) {
           type="button"
           onClick={() => navigator.clipboard.writeText(content)}
           className="absolute right-1 top-1 text-[10px] px-1.5 py-0.5 rounded bg-white border border-[var(--color-line)] hover:bg-[var(--color-paper-soft)]"
-          title={`Copier ${label}`}
+          title={t("common.copyLabel", { label })}
         >
-          copier
+          {t("trace.nodeDrawer.copy")}
         </button>
       )}
       <pre className="bg-[var(--color-paper-soft)] p-2 pr-12 rounded text-[10px] whitespace-pre-wrap break-words max-h-[60vh] overflow-auto">
@@ -541,7 +552,7 @@ function CollapsibleBlock({ label, content }) {
 // as added / removed / unchanged. Not LCS-correct for shifts in the middle,
 // but readable for the common case where generation parameters change a few
 // lines of a stable template.
-function PromptDiff({ a, b }) {
+function PromptDiff({ a, b, t }) {
   const linesA = (a || "").split("\n");
   const linesB = (b || "").split("\n");
   const max = Math.max(linesA.length, linesB.length);
@@ -557,14 +568,14 @@ function PromptDiff({ a, b }) {
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wide text-[var(--color-mute)] mb-1">
-        prompt — A (haut) vs B (bas) par ligne
+        {t("trace.nodeDrawer.diffPrompt")}
       </div>
       <div className="bg-[var(--color-paper-soft)] rounded text-[10px] font-mono leading-snug max-h-[60vh] overflow-auto">
         {rows.map((row, i) => {
           if (row.kind === "same") {
             return (
               <div key={i} className="px-2 py-px text-[var(--color-mute)] whitespace-pre-wrap break-words">
-                {row.la || " "}
+                {row.la || " "}
               </div>
             );
           }

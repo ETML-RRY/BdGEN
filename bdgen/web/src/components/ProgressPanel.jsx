@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { formatProgressEvent } from "../i18n/formatProgressEvent.js";
 
 export default function ProgressPanel({ title, job, events, onInterrupt, hint }) {
+  const { t } = useTranslation();
   const logRef = useRef(null);
   const [interrupting, setInterrupting] = useState(false);
   const [interruptError, setInterruptError] = useState(null);
@@ -22,7 +25,7 @@ export default function ProgressPanel({ title, job, events, onInterrupt, hint })
       // checks the flag between safe boundaries, so the actual stop can take
       // a few seconds — keeping the disabled state avoids double clicks.
     } catch (e) {
-      setInterruptError(e.message || "Échec de l'interruption.");
+      setInterruptError(e.message || t("progressPanel.interruptFailed"));
       setInterrupting(false);
     }
   }
@@ -31,6 +34,11 @@ export default function ProgressPanel({ title, job, events, onInterrupt, hint })
     job?.progress_total && job?.progress_current
       ? Math.min(1, job.progress_current / job.progress_total)
       : null;
+
+  // Translate the snapshot's last message using its full event payload when
+  // available — ``job.last_message`` is the raw French line from the engine,
+  // while ``job.last_event`` carries the i18n key.
+  const lastMessage = formatProgressEvent(job?.last_event, t) || job?.last_message;
 
   return (
     <div className="card p-6">
@@ -53,15 +61,15 @@ export default function ProgressPanel({ title, job, events, onInterrupt, hint })
             {interrupting ? (
               <>
                 <span className="inline-block w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-                Interruption en cours…
+                {t("progressPanel.interrupting")}
               </>
             ) : (
-              "Interrompre"
+              t("progressPanel.interrupt")
             )}
           </button>
           {interrupting && (
             <span className="text-xs text-[var(--color-ink-soft)]">
-              L'arrêt s'effectue après l'élément en cours.
+              {t("progressPanel.interruptHint")}
             </span>
           )}
           {interruptError && (
@@ -75,7 +83,7 @@ export default function ProgressPanel({ title, job, events, onInterrupt, hint })
       {ratio !== null && (
         <div className="mb-4">
           <div className="flex items-baseline justify-between text-xs text-[var(--color-ink-soft)] mb-1">
-            <span>{job.last_message}</span>
+            <span>{lastMessage}</span>
             <span>
               {job.progress_current}/{job.progress_total}
             </span>
@@ -88,9 +96,9 @@ export default function ProgressPanel({ title, job, events, onInterrupt, hint })
           </div>
         </div>
       )}
-      {ratio === null && job?.last_message && (
+      {ratio === null && lastMessage && (
         <p className="text-sm text-[var(--color-ink-soft)] mb-4">
-          {job.last_message}
+          {lastMessage}
         </p>
       )}
 
@@ -99,7 +107,7 @@ export default function ProgressPanel({ title, job, events, onInterrupt, hint })
         className="bg-[var(--color-paper-soft)] rounded-lg p-3 max-h-72 overflow-y-auto text-xs font-mono space-y-0.5"
       >
         {events.length === 0 && (
-          <p className="text-[var(--color-mute)]">En attente du premier événement…</p>
+          <p className="text-[var(--color-mute)]">{t("progressPanel.empty")}</p>
         )}
         {events.map((e, i) => (
           <div key={i} className="text-[var(--color-ink-soft)]">
@@ -108,14 +116,13 @@ export default function ProgressPanel({ title, job, events, onInterrupt, hint })
                 [{e.current}/{e.total}]{" "}
               </span>
             ) : null}
-            {e.message}
+            {formatProgressEvent(e, t)}
           </div>
         ))}
       </div>
 
       <p className="text-xs text-[var(--color-mute)] mt-3">
-        Vous pouvez quitter cette page&nbsp;: la génération continue en arrière-plan
-        et reprendra où elle en était à votre retour.
+        {t("progressPanel.leaveHint")}
       </p>
     </div>
   );

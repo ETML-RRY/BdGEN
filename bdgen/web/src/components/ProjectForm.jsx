@@ -1,41 +1,59 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { FaPlus, FaTrash, FaPalette, FaChevronDown } from "react-icons/fa6";
 import { api } from "../api.js";
 import useRegisterShell from "../hooks/useRegisterShell.js";
 import StyleFromImageDialog from "./StyleFromImageDialog.jsx";
 import ReferencesBundlePanel from "./ReferencesBundlePanel.jsx";
 import { SHOW_UPSCALE } from "../featureFlags.js";
+import { presetsFor, isAllowedPresetValue } from "./projectFormPresets.js";
+import { formatError } from "../i18n/formatError.js";
+import i18n, { DEFAULT_LNG, SUPPORTED } from "../i18n/index.js";
+
+// Default `metadata.language` for a blank project. The new-comic wizard used to
+// hardcode "fr" here, which made every freshly created project French — even
+// when the UI was running in English or German. We now mirror the same logic
+// as the i18n bootstrap (base 2-letter ISO, fall back to the app default when
+// the active language is not in SUPPORTED).
+function defaultMetadataLanguage() {
+  const base = (i18n.language || "").toLowerCase().split(/[-_]/)[0];
+  return SUPPORTED.includes(base) ? base : DEFAULT_LNG;
+}
+
+// Fill `metadata.language` with the current UI language if the config is
+// missing one. The DEFAULT_CONFIG placeholder is "" so that "no language
+// chosen" is distinguishable from an explicit choice and can be back-filled.
+function withDefaultLanguage(cfg) {
+  if (cfg.metadata.language) return cfg;
+  return { ...cfg, metadata: { ...cfg.metadata, language: defaultMetadataLanguage() } };
+}
 
 // Left sub-navigation: one entry per top-level <Section> of the form. The `id`
 // is mirrored onto the section's DOM node so the sidebar can scroll to it and a
-// scroll-spy can highlight the section currently in view.
-const FORM_SECTIONS = [
-  { id: "sec-identite", label: "Identité" },
-  { id: "sec-histoire", label: "Histoire" },
-  { id: "sec-style", label: "Style visuel" },
-  { id: "sec-casting", label: "Casting" },
-  { id: "sec-structure", label: "Structure" },
-  { id: "sec-modeles", label: "Modèles" },
-];
-import {
-  STORY_GENRE_PRESETS,
-  STORY_TONE_PRESETS,
-  STORY_SETTING_PRESETS,
-  STORY_AUDIENCE_PRESETS,
-  STYLE_ART_STYLE_PRESETS,
-  STYLE_COLOR_PALETTE_PRESETS,
-  STYLE_LINE_WORK_PRESETS,
-  STYLE_MOOD_PRESETS,
-  STYLE_PANEL_BORDERS_PRESETS,
-  STYLE_SPEECH_BUBBLES_PRESETS,
-  STYLE_CHARACTER_RENDERING_PRESETS,
-} from "./projectFormPresets.js";
+// scroll-spy can highlight the section currently in view. Labels are looked up
+// at render time so a language switcher re-renders them.
+function useFormSections() {
+  const { t } = useTranslation();
+  return useMemo(
+    () => [
+      { id: "sec-identite", label: t("form.sections.identity") },
+      { id: "sec-histoire", label: t("form.sections.story") },
+      { id: "sec-style", label: t("form.sections.visualStyle") },
+      { id: "sec-casting", label: t("form.sections.casting") },
+      { id: "sec-structure", label: t("form.sections.structure") },
+      { id: "sec-modeles", label: t("form.sections.models") },
+    ],
+    [t],
+  );
+}
 
 export const DEFAULT_CONFIG = {
   project: "",
   display_name: "",
   output_root: "./output",
-  metadata: { title: "", author: "", language: "fr" },
+  // language is left empty so withDefaultLanguage() can fill it with the
+  // current UI language (see top of file). Previously hardcoded to "fr".
+  metadata: { title: "", author: "", language: "" },
   story: {
     synopsis: "",
     genre: "",
@@ -193,12 +211,12 @@ function modelRates(provider, model) {
   return null;
 }
 
-function formatModelPrice(provider, model) {
+function formatModelPrice(provider, model, t) {
   const r = modelRates(provider, model);
   if (!r) return null;
   const out = r.image_output ?? r.output;
-  const outLabel = r.image_output ? "sortie image" : "sortie";
-  return `≈ ${r.input} $ entrée · ${out} $ ${outLabel} / M tokens`;
+  const outLabel = r.image_output ? t("form.priceSuffix.imageOutput") : t("form.priceSuffix.output");
+  return t("form.priceLine", { input: r.input, output: out, outputLabel: outLabel });
 }
 
 // True for Opus variants that offer a premium "fast" tier at double the rate.
@@ -210,18 +228,33 @@ function hasFastTier(provider, model) {
   );
 }
 
-const QUALITY_OPTIONS = [
-  { value: "low", label: "Économique" },
-  { value: "medium", label: "Standard" },
-  { value: "high", label: "Haute qualité" },
-];
+const QUALITY_VALUES = ["low", "medium", "high"];
+const SCRIPT_EFFORT_VALUES = ["low", "medium", "high", "max"];
 
-const SCRIPT_EFFORT_OPTIONS = [
-  { value: "low", label: "Rapide" },
-  { value: "medium", label: "Équilibré" },
-  { value: "high", label: "Approfondi" },
-  { value: "max", label: "Maximum" },
-];
+function useQualityOptions() {
+  const { t } = useTranslation();
+  return useMemo(
+    () => [
+      { value: "low", label: t("form.quality.economy") },
+      { value: "medium", label: t("form.quality.standard") },
+      { value: "high", label: t("form.quality.high") },
+    ],
+    [t],
+  );
+}
+
+function useScriptEffortOptions() {
+  const { t } = useTranslation();
+  return useMemo(
+    () => [
+      { value: "low", label: t("form.effort.fast") },
+      { value: "medium", label: t("form.effort.balanced") },
+      { value: "high", label: t("form.effort.thorough") },
+      { value: "max", label: t("form.effort.maximum") },
+    ],
+    [t],
+  );
+}
 
 function supportsScriptEffort(provider, model) {
   return (
@@ -236,7 +269,7 @@ function supportsScriptEffort(provider, model) {
 
 function normaliseScriptEffort(modelConfig) {
   if (supportsScriptEffort(modelConfig.provider, modelConfig.model)) {
-    if (!SCRIPT_EFFORT_OPTIONS.some((option) => option.value === modelConfig.effort)) {
+    if (!SCRIPT_EFFORT_VALUES.includes(modelConfig.effort)) {
       modelConfig.effort = DEFAULT_CONFIG.generation_options.script_model.effort;
     }
     return;
@@ -358,11 +391,15 @@ export default function ProjectForm({
   onSubmit,
   onCancel,
   onReferencesImported = null,
-  submitLabel = "Enregistrer",
+  submitLabel,
   onApplyStyleOnly = null,
-  applyStyleOnlyLabel = "Appliquer le style uniquement",
+  applyStyleOnlyLabel,
 }) {
-  const [config, setConfig] = useState(() => normalize(initial || DEFAULT_CONFIG));
+  const { t, i18n } = useTranslation();
+  const FORM_SECTIONS = useFormSections();
+  const QUALITY_OPTIONS = useQualityOptions();
+  const SCRIPT_EFFORT_OPTIONS = useScriptEffortOptions();
+  const [config, setConfig] = useState(() => withDefaultLanguage(normalize(initial || DEFAULT_CONFIG)));
   const [submitting, setSubmitting] = useState(false);
   const [applyingStyleOnly, setApplyingStyleOnly] = useState(false);
   const [error, setError] = useState(null);
@@ -402,7 +439,7 @@ export default function ProjectForm({
   });
 
   useEffect(() => {
-    if (initial) setConfig(normalize(initial));
+    if (initial) setConfig(withDefaultLanguage(normalize(initial)));
   }, [initial]);
 
   // ── Left sub-navigation (Préparation only) ────────────────────────────
@@ -439,7 +476,7 @@ export default function ProjectForm({
       sidebar: isNew
         ? null
         : {
-            sections: [{ id: "form", label: "Préparation", items: FORM_SECTIONS }],
+            sections: [{ id: "form", label: t("form.sections.preparation"), items: FORM_SECTIONS }],
             activeItem: activeSection,
             onSelect: scrollToSection,
           },
@@ -610,7 +647,7 @@ export default function ProjectForm({
 
     // Extract character info — only fills fields that are still empty
     try {
-      const extracted = await api.characterFromPhoto(file, config.metadata.language || "fr");
+      const extracted = await api.characterFromPhoto(file, config.metadata.language || defaultMetadataLanguage());
       setConfig((c) => {
         const next = structuredClone(c);
         const row = next.characters[i];
@@ -643,7 +680,7 @@ export default function ProjectForm({
         setCharacterPhotos((prev) => ({
           ...prev,
           [charId]: (prev[charId] || []).map((e) =>
-            e.file === file ? { ...e, uploading: false, error: uploadErr.message || "Échec de l'upload." } : e,
+            e.file === file ? { ...e, uploading: false, error: uploadErr.message || t("form.uploadingFailed") } : e,
           ),
         }));
       }
@@ -720,7 +757,7 @@ export default function ProjectForm({
 
     // Extract location info — only fills fields that are still empty
     try {
-      const extracted = await api.locationFromPhoto(file, config.metadata.language || "fr");
+      const extracted = await api.locationFromPhoto(file, config.metadata.language || defaultMetadataLanguage());
       setConfig((c) => {
         const next = structuredClone(c);
         const row = next.locations[i];
@@ -750,7 +787,7 @@ export default function ProjectForm({
         setLocationPhotos((prev) => ({
           ...prev,
           [locId]: (prev[locId] || []).map((e) =>
-            e.file === file ? { ...e, uploading: false, error: uploadErr.message || "Échec de l'upload." } : e,
+            e.file === file ? { ...e, uploading: false, error: uploadErr.message || t("form.uploadingFailed") } : e,
           ),
         }));
       }
@@ -826,7 +863,7 @@ export default function ProjectForm({
 
     // Extract object info — only fills fields that are still empty
     try {
-      const extracted = await api.objectFromPhoto(file, config.metadata.language || "fr");
+      const extracted = await api.objectFromPhoto(file, config.metadata.language || defaultMetadataLanguage());
       setConfig((c) => {
         const next = structuredClone(c);
         const row = next.objects[i];
@@ -856,7 +893,7 @@ export default function ProjectForm({
         setObjectPhotos((prev) => ({
           ...prev,
           [objId]: (prev[objId] || []).map((e) =>
-            e.file === file ? { ...e, uploading: false, error: uploadErr.message || "Échec de l'upload." } : e,
+            e.file === file ? { ...e, uploading: false, error: uploadErr.message || t("form.uploadingFailed") } : e,
           ),
         }));
       }
@@ -983,7 +1020,7 @@ export default function ProjectForm({
       await maybeUploadPendingLocationPhotos(out);
       await maybeUploadPendingObjectPhotos(out);
     } catch (e) {
-      setError(e.message);
+      setError(formatError(e, t));
     } finally {
       setSubmitting(false);
     }
@@ -992,12 +1029,7 @@ export default function ProjectForm({
   async function handleApplyStyleOnly() {
     if (!onApplyStyleOnly) return;
     if (
-      !window.confirm(
-        "Le style va remplacer celui du projet. Le scénario (textes, dialogues, " +
-          "personnages, planches) reste intact, mais les images de référence et " +
-          "planches composées seront supprimées pour pouvoir être régénérées avec " +
-          "le nouveau style.\n\nContinuer ?",
-      )
+      !window.confirm(t("form.styleConfirm"))
     )
       return;
     setError(null);
@@ -1007,7 +1039,7 @@ export default function ProjectForm({
       await maybeUploadStyleRef(out);
       await onApplyStyleOnly(out);
     } catch (e) {
-      setError(e.message);
+      setError(formatError(e, t));
     } finally {
       setApplyingStyleOnly(false);
     }
@@ -1015,33 +1047,33 @@ export default function ProjectForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <Section id="sec-identite" title="Identité du projet">
+      <Section id="sec-identite" title={t("form.identity.title")}>
         <Field
-          label="Nom du projet (interface)"
-          hint="Optionnel — sert uniquement à retrouver le projet dans la liste. N'apparaît jamais dans la BD générée. Si vide, le titre de la BD est affiché."
+          label={t("form.identity.nameLabel")}
+          hint={t("form.identity.nameHint")}
         >
           <input
             className="input"
             value={config.display_name || ""}
             onChange={(e) => set("display_name", e.target.value)}
-            placeholder="ex. Brouillon — version courte"
+            placeholder={t("form.identity.namePlaceholder")}
           />
         </Field>
         {isNew && (
           <Field
-            label="Identifiant du projet (slug)"
-            hint="Optionnel — déduit du nom du projet ou du titre si vide. Lettres, chiffres et underscores."
+            label={t("form.identity.slugLabel")}
+            hint={t("form.identity.slugHint")}
           >
             <input
               className="input"
               value={config.project}
               onChange={(e) => set("project", e.target.value.replace(/\s+/g, "_"))}
-              placeholder="ex. mon_super_projet"
+              placeholder={t("form.identity.slugPlaceholder")}
             />
           </Field>
         )}
         <Grid cols={2}>
-          <Field label="Titre de la BD" hint="Apparaît sur la couverture et dans le contenu généré.">
+          <Field label={t("form.identity.comicTitleLabel")} hint={t("form.identity.comicTitleHint")}>
             <input
               className="input"
               value={config.metadata.title}
@@ -1049,7 +1081,7 @@ export default function ProjectForm({
               required
             />
           </Field>
-          <Field label="Auteur·rice">
+          <Field label={t("form.identity.authorLabel")}>
             <input
               className="input"
               value={config.metadata.author}
@@ -1057,7 +1089,7 @@ export default function ProjectForm({
               required
             />
           </Field>
-          <Field label="Langue (ISO)">
+          <Field label={t("form.identity.languageLabel")}>
             <input
               className="input"
               value={config.metadata.language}
@@ -1067,8 +1099,8 @@ export default function ProjectForm({
         </Grid>
       </Section>
 
-      <Section id="sec-histoire" title="Histoire">
-        <Field label="Synopsis" hint="Présentez l'histoire en quelques phrases.">
+      <Section id="sec-histoire" title={t("form.story.title")}>
+        <Field label={t("form.story.synopsisLabel")} hint={t("form.story.synopsisHint")}>
           <textarea
             className="textarea min-h-[7rem]"
             value={config.story.synopsis}
@@ -1077,36 +1109,36 @@ export default function ProjectForm({
           />
         </Field>
         <Grid cols={2}>
-          <Field label="Genre">
+          <Field label={t("form.story.genreLabel")}>
             <ComboBox
               value={config.story.genre || ""}
-              options={STORY_GENRE_PRESETS}
+              options={presetsFor("storyGenre", i18n.language)}
               onChange={(v) => set("story.genre", v)}
-              placeholder="ex. mystère, drame familial"
+              placeholder={t("form.story.genrePlaceholder")}
             />
           </Field>
-          <Field label="Ton">
+          <Field label={t("form.story.toneLabel")}>
             <ComboBox
               value={config.story.tone || ""}
-              options={STORY_TONE_PRESETS}
+              options={presetsFor("storyTone", i18n.language)}
               onChange={(v) => set("story.tone", v)}
-              placeholder="ex. contemplatif, mélancolique"
+              placeholder={t("form.story.tonePlaceholder")}
             />
           </Field>
-          <Field label="Cadre / époque">
+          <Field label={t("form.story.settingLabel")}>
             <ComboBox
               value={config.story.setting || ""}
-              options={STORY_SETTING_PRESETS}
+              options={presetsFor("storySetting", i18n.language)}
               onChange={(v) => set("story.setting", v)}
-              placeholder="ex. Bretagne, automne 1987"
+              placeholder={t("form.story.settingPlaceholder")}
             />
           </Field>
-          <Field label="Public visé">
+          <Field label={t("form.story.audienceLabel")}>
             <ComboBox
               value={config.story.target_audience || ""}
-              options={STORY_AUDIENCE_PRESETS}
+              options={presetsFor("storyAudience", i18n.language)}
               onChange={(v) => set("story.target_audience", v)}
-              placeholder="ex. ado-adulte"
+              placeholder={t("form.story.audiencePlaceholder")}
             />
           </Field>
         </Grid>
@@ -1114,14 +1146,14 @@ export default function ProjectForm({
 
       <Section
         id="sec-style"
-        title="Style visuel"
+        title={t("form.sections.visualStyle")}
         action={
           <button
             type="button"
             className="btn btn-secondary text-sm inline-flex items-center gap-2"
             onClick={() => setStyleFromImageOpen(true)}
           >
-            <FaPalette aria-hidden /> Style depuis une image
+            <FaPalette aria-hidden /> {t("form.actions.styleFromImage")}
           </button>
         }
       >
@@ -1135,47 +1167,47 @@ export default function ProjectForm({
 
       <Section
         id="sec-casting"
-        title="Casting"
-        intro="Personnages, décors et objets — descriptions, photos optionnelles et images de référence. Importez ou exportez un sous-ensemble en .bdrefs pour le réutiliser dans une autre BD (ex. Tome 2)."
+        title={t("form.casting.title")}
+        intro={t("form.casting.intro")}
         action={
           projectName ? <ReferencesBundlePanel projectName={projectName} onImported={onReferencesImported} /> : null
         }
       >
         <Subsection
-          title="Personnages"
+          title={t("form.casting.charactersTitle")}
           action={
             <button
               type="button"
               className="btn btn-secondary text-sm inline-flex items-center gap-2"
               onClick={addCharacter}
             >
-              <FaPlus aria-hidden /> Ajouter
+              <FaPlus aria-hidden /> {t("form.casting.addButton")}
             </button>
           }
         >
           <Toggle
-            label="Autoriser l'IA à inventer des personnages supplémentaires si l'histoire en a besoin"
+            label={t("form.casting.aiAllowCharacters")}
             value={config.structure.allow_extra_characters}
             onChange={(v) => set("structure.allow_extra_characters", v)}
           />
           {config.characters.length === 0 && (
             <p className="text-sm text-[var(--color-mute)]">
-              Aucun personnage défini pour l'instant.
-              {config.structure.allow_extra_characters ? " L'IA en proposera selon les besoins du scénario." : ""}
+              {t("form.casting.noCharacters")}
+              {config.structure.allow_extra_characters ? t("form.casting.aiSuggestsCharacters") : ""}
             </p>
           )}
           <div className="space-y-4">
             {config.characters.map((c, i) => (
               <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">Personnage {i + 1}</span>
+                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">{t("form.casting.cardHeading", { n: i + 1 })}</span>
                   <button
                     type="button"
                     className="btn btn-ghost text-xs inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
                     onClick={() => removeCharacter(i)}
-                    title="Supprimer ce personnage"
+                    title={t("form.casting.removeAria")}
                   >
-                    <FaTrash aria-hidden /> Supprimer
+                    <FaTrash aria-hidden /> {t("common.delete")}
                   </button>
                 </div>
                 <MultiPhotosField
@@ -1188,17 +1220,17 @@ export default function ProjectForm({
                 />
                 <ReferenceImagePreview
                   url={initialReferenceImages?.characters?.[c.id]}
-                  label={`Référence — ${c.name || c.id}`}
+                  label={t("form.casting.refPreview", { name: c.name || c.id })}
                 />
                 <Grid cols={2}>
-                  <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
+                  <Field label={t("form.casting.idLabel")} hint={t("form.casting.idHint")}>
                     <input
                       className="input"
                       value={c.id}
                       onChange={(e) => updateCharacter(i, "id", e.target.value.replace(/\s+/g, "_"))}
                     />
                   </Field>
-                  <Field label="Nom">
+                  <Field label={t("form.casting.nameLabel")}>
                     <input
                       className="input"
                       value={c.name}
@@ -1206,15 +1238,15 @@ export default function ProjectForm({
                       required
                     />
                   </Field>
-                  <Field label="Rôle">
+                  <Field label={t("form.casting.roleLabel")}>
                     <input
                       className="input"
                       value={c.role || ""}
                       onChange={(e) => updateCharacter(i, "role", e.target.value)}
-                      placeholder="ex. protagoniste"
+                      placeholder={t("form.casting.rolePlaceholder")}
                     />
                   </Field>
-                  <Field label="Personnalité">
+                  <Field label={t("form.casting.personalityLabel")}>
                     <input
                       className="input"
                       value={c.personality || ""}
@@ -1222,7 +1254,7 @@ export default function ProjectForm({
                     />
                   </Field>
                 </Grid>
-                <Field label="Description physique">
+                <Field label={t("form.casting.physicalLabel")}>
                   <textarea
                     className="textarea"
                     value={c.physical_description}
@@ -1230,7 +1262,7 @@ export default function ProjectForm({
                     required
                   />
                 </Field>
-                <Field label="Tenue / accessoires">
+                <Field label={t("form.casting.outfitLabel")}>
                   <textarea
                     className="textarea"
                     value={c.outfit || ""}
@@ -1243,42 +1275,42 @@ export default function ProjectForm({
         </Subsection>
 
         <Subsection
-          title="Décors"
+          title={t("form.casting.locationsTitle")}
           action={
             <button
               type="button"
               className="btn btn-secondary text-sm inline-flex items-center gap-2"
               onClick={addLocation}
             >
-              <FaPlus aria-hidden /> Ajouter
+              <FaPlus aria-hidden /> {t("form.casting.addButton")}
             </button>
           }
         >
           <Toggle
-            label="Autoriser l'IA à inventer des décors supplémentaires si l'histoire en a besoin"
+            label={t("form.casting.aiAllowLocations")}
             value={config.structure.allow_extra_locations}
             onChange={(v) => set("structure.allow_extra_locations", v)}
           />
           {config.locations.length === 0 && (
             <p className="text-sm text-[var(--color-mute)]">
-              Aucun décor défini pour l'instant.
+              {t("form.casting.noLocations")}
               {config.structure.allow_extra_locations
-                ? " L'IA en inventera selon les besoins du scénario."
-                : " ⚠️ Aucun décor disponible — l'IA ne pourra pas situer les scènes."}
+                ? t("form.casting.aiSuggestsLocations")
+                : t("form.casting.noLocationsWarning")}
             </p>
           )}
           <div className="space-y-4">
             {config.locations.map((l, i) => (
               <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">Décor {i + 1}</span>
+                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">{t("form.casting.locationCardHeading", { n: i + 1 })}</span>
                   <button
                     type="button"
                     className="btn btn-ghost text-xs inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
                     onClick={() => removeLocation(i)}
-                    title="Supprimer ce décor"
+                    title={t("form.casting.removeLocationAria")}
                   >
-                    <FaTrash aria-hidden /> Supprimer
+                    <FaTrash aria-hidden /> {t("common.delete")}
                   </button>
                 </div>
                 <MultiPhotosField
@@ -1291,17 +1323,17 @@ export default function ProjectForm({
                 />
                 <ReferenceImagePreview
                   url={initialReferenceImages?.locations?.[l.id]}
-                  label={`Référence — ${l.name || l.id}`}
+                  label={t("form.casting.refPreview", { name: l.name || l.id })}
                 />
                 <Grid cols={2}>
-                  <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
+                  <Field label={t("form.casting.idLabel")} hint={t("form.casting.idHint")}>
                     <input
                       className="input"
                       value={l.id}
                       onChange={(e) => updateLocation(i, "id", e.target.value.replace(/\s+/g, "_"))}
                     />
                   </Field>
-                  <Field label="Nom">
+                  <Field label={t("form.casting.nameLabel")}>
                     <input
                       className="input"
                       value={l.name}
@@ -1310,7 +1342,7 @@ export default function ProjectForm({
                     />
                   </Field>
                 </Grid>
-                <Field label="Description" hint="Décrivez le lieu : éléments visuels, ambiance, époque…">
+                <Field label={t("form.casting.descriptionLabel")} hint={t("form.casting.descriptionHint")}>
                   <textarea
                     className="textarea"
                     value={l.description}
@@ -1324,44 +1356,43 @@ export default function ProjectForm({
         </Subsection>
 
         <Subsection
-          title="Objets / produits / références"
+          title={t("form.casting.objectsTitle")}
           action={
             <button
               type="button"
               className="btn btn-secondary text-sm inline-flex items-center gap-2"
               onClick={addObject}
             >
-              <FaPlus aria-hidden /> Ajouter
+              <FaPlus aria-hidden /> {t("form.casting.addButton")}
             </button>
           }
         >
           <p className="text-sm text-[var(--color-mute)]">
-            Optionnel. Ajoutez ici un livre, un produit, un objet symbolique qui doit revenir dans l'histoire. Une photo
-            (optionnelle) servira de guide pour en dessiner une version caricaturée dans le style de la BD.
+            {t("form.casting.objectsIntro")}
           </p>
           <Toggle
-            label="Autoriser l'IA à inventer des objets supplémentaires si l'histoire en a besoin"
+            label={t("form.casting.aiAllowObjects")}
             value={config.structure.allow_extra_objects}
             onChange={(v) => set("structure.allow_extra_objects", v)}
           />
           {config.objects.length === 0 && (
             <p className="text-sm text-[var(--color-mute)]">
-              Aucun objet défini pour l'instant.
-              {config.structure.allow_extra_objects ? " L'IA n'en inventera qu'à la marge." : ""}
+              {t("form.casting.noObjects")}
+              {config.structure.allow_extra_objects ? t("form.casting.aiMarginObjects") : ""}
             </p>
           )}
           <div className="space-y-4">
             {config.objects.map((o, i) => (
               <div key={i} className="card p-4 bg-[var(--color-paper-soft)]/40">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">Objet {i + 1}</span>
+                  <span className="text-xs text-[var(--color-mute)] uppercase tracking-wide">{t("form.casting.objectCardHeading", { n: i + 1 })}</span>
                   <button
                     type="button"
                     className="btn btn-ghost text-xs inline-flex items-center gap-1.5 hover:text-[var(--color-rose-500)]"
                     onClick={() => removeObject(i)}
-                    title="Supprimer cet objet"
+                    title={t("form.casting.removeObjectAria")}
                   >
-                    <FaTrash aria-hidden /> Supprimer
+                    <FaTrash aria-hidden /> {t("common.delete")}
                   </button>
                 </div>
                 <MultiPhotosField
@@ -1374,17 +1405,17 @@ export default function ProjectForm({
                 />
                 <ReferenceImagePreview
                   url={initialReferenceImages?.objects?.[o.id]}
-                  label={`Référence — ${o.name || o.id}`}
+                  label={t("form.casting.refPreview", { name: o.name || o.id })}
                 />
                 <Grid cols={2}>
-                  <Field label="Identifiant" hint="Référence interne (lettres + underscore)">
+                  <Field label={t("form.casting.idLabel")} hint={t("form.casting.idHint")}>
                     <input
                       className="input"
                       value={o.id}
                       onChange={(e) => updateObject(i, "id", e.target.value.replace(/\s+/g, "_"))}
                     />
                   </Field>
-                  <Field label="Nom">
+                  <Field label={t("form.casting.nameLabel")}>
                     <input
                       className="input"
                       value={o.name}
@@ -1393,7 +1424,7 @@ export default function ProjectForm({
                     />
                   </Field>
                 </Grid>
-                <Field label="Description" hint="Décrivez l'objet et son rôle dans l'histoire.">
+                <Field label={t("form.casting.descriptionLabel")} hint={t("form.casting.objectDescriptionHint")}>
                   <textarea
                     className="textarea"
                     value={o.description}
@@ -1407,9 +1438,9 @@ export default function ProjectForm({
         </Subsection>
       </Section>
 
-      <Section id="sec-structure" title="Structure">
+      <Section id="sec-structure" title={t("form.structure.title")}>
         <Grid cols={3}>
-          <Field label="Nombre de planches">
+          <Field label={t("form.structure.pageCountLabel")}>
             <input
               type="number"
               min={1}
@@ -1419,7 +1450,7 @@ export default function ProjectForm({
               onChange={(e) => set("structure.page_count", e.target.value)}
             />
           </Field>
-          <Field label="Cases par planche (moyenne)">
+          <Field label={t("form.structure.avgPanelsLabel")}>
             <input
               type="number"
               min={1}
@@ -1429,7 +1460,7 @@ export default function ProjectForm({
               onChange={(e) => set("structure.panels_per_page_avg", e.target.value)}
             />
           </Field>
-          <Field label="Cases / planche (min – max)">
+          <Field label={t("form.structure.panelsRangeLabel")}>
             <div className="flex gap-2">
               <input
                 type="number"
@@ -1456,42 +1487,42 @@ export default function ProjectForm({
         </Grid>
         <Grid cols={2}>
           <Toggle
-            label="Inclure une couverture"
+            label={t("form.structure.includeCoverLabel")}
             value={config.structure.include_cover}
             onChange={(v) => set("structure.include_cover", v)}
           />
           <Toggle
-            label="Inclure une 4ᵉ de couverture"
+            label={t("form.structure.includeBackCoverLabel")}
             value={config.structure.include_back_cover}
             onChange={(v) => set("structure.include_back_cover", v)}
           />
         </Grid>
-        <Field label="Format de page" hint="Détermine le ratio de la planche et le gabarit imposé au modèle d'image.">
+        <Field label={t("form.structure.pageFormatLabel")} hint={t("form.structure.pageFormatHint")}>
           <select
             className="select"
             value={config.structure.page_format}
             onChange={(e) => set("structure.page_format", e.target.value)}
           >
-            <option value="portrait">Portrait — album BD (21×28 cm)</option>
-            <option value="landscape">Paysage — album à l'italienne (28×21 cm)</option>
-            <option value="square">Carré — album carré (21×21 cm)</option>
-            <option value="strip">Strip — bande horizontale, cases en une rangée</option>
+            <option value="portrait">{t("form.structure.pageFormatPortrait")}</option>
+            <option value="landscape">{t("form.structure.pageFormatLandscape")}</option>
+            <option value="square">{t("form.structure.pageFormatSquare")}</option>
+            <option value="strip">{t("form.structure.pageFormatStrip")}</option>
           </select>
         </Field>
-        <Field label="Rythme narratif">
+        <Field label={t("form.structure.narrativePaceLabel")}>
           <input
             className="input"
             value={config.structure.narrative_pacing || ""}
             onChange={(e) => set("structure.narrative_pacing", e.target.value)}
-            placeholder="ex. lent au début, accélération vers la révélation finale"
+            placeholder={t("form.structure.narrativePacePlaceholder")}
           />
         </Field>
       </Section>
 
-      <Section id="sec-modeles" title="Modèles de génération">
-        <Subsection title="Scénario">
+      <Section id="sec-modeles" title={t("form.models.title")}>
+        <Subsection title={t("form.models.scriptTitle")}>
           <Grid cols={2}>
-            <Field label="Fournisseur du scénario">
+            <Field label={t("form.models.scriptProviderLabel")}>
               <select
                 className="select"
                 value={config.generation_options.script_model.provider}
@@ -1502,7 +1533,7 @@ export default function ProjectForm({
                 <option value="xai">xAI</option>
               </select>
             </Field>
-            <Field label="Modèle du scénario">
+            <Field label={t("form.models.scriptModelLabel")}>
               <ModelSelector
                 provider={config.generation_options.script_model.provider}
                 model={config.generation_options.script_model.model}
@@ -1515,8 +1546,8 @@ export default function ProjectForm({
               config.generation_options.script_model.model,
             ) && (
               <Field
-                label="Effort de raisonnement"
-                hint="Variante de vitesse/profondeur pour les modèles Claude compatibles."
+                label={t("form.models.scriptEffortLabel")}
+                hint={t("form.models.scriptEffortHint")}
               >
                 <OptionSelect
                   value={
@@ -1531,9 +1562,9 @@ export default function ProjectForm({
           </Grid>
         </Subsection>
 
-        <Subsection title="Images finales">
+        <Subsection title={t("form.models.imagesTitle")}>
           <Grid cols={2}>
-            <Field label="Fournisseur des images finales">
+            <Field label={t("form.models.imagesProviderLabel")}>
               <select
                 className="select"
                 value={config.generation_options.image_model.provider}
@@ -1542,7 +1573,7 @@ export default function ProjectForm({
                 <option value="openai">OpenAI</option>
               </select>
             </Field>
-            <Field label="Modèle des images finales">
+            <Field label={t("form.models.imagesModelLabel")}>
               <ModelSelector
                 provider={config.generation_options.image_model.provider}
                 model={config.generation_options.image_model.model}
@@ -1550,7 +1581,7 @@ export default function ProjectForm({
                 onChange={(value) => set("generation_options.image_model.model", value)}
               />
             </Field>
-            <Field label="Qualité des images finales">
+            <Field label={t("form.models.imagesQualityLabel")}>
               <OptionSelect
                 value={config.generation_options.image_model.quality}
                 options={QUALITY_OPTIONS}
@@ -1560,15 +1591,15 @@ export default function ProjectForm({
           </Grid>
         </Subsection>
 
-        <Subsection title="Références visuelles">
+        <Subsection title={t("form.models.referencesTitle")}>
           <Toggle
-            label="Utiliser un modèle dédié pour les références"
+            label={t("form.models.referencesUseDedicatedLabel")}
             value={!!config.generation_options.references.image_model}
             onChange={setReferenceImageModelEnabled}
           />
           {config.generation_options.references.image_model && (
             <Grid cols={2}>
-              <Field label="Fournisseur des références">
+              <Field label={t("form.models.referencesProviderLabel")}>
                 <select
                   className="select"
                   value={config.generation_options.references.image_model.provider}
@@ -1578,7 +1609,7 @@ export default function ProjectForm({
                   <option value="xai">xAI / Grok</option>
                 </select>
               </Field>
-              <Field label="Modèle des références">
+              <Field label={t("form.models.referencesModelLabel")}>
                 <ModelSelector
                   provider={config.generation_options.references.image_model.provider}
                   model={config.generation_options.references.image_model.model}
@@ -1586,7 +1617,7 @@ export default function ProjectForm({
                   onChange={(value) => set("generation_options.references.image_model.model", value)}
                 />
               </Field>
-              <Field label="Qualité des références">
+              <Field label={t("form.models.referencesQualityLabel")}>
                 <OptionSelect
                   value={config.generation_options.references.image_model.quality}
                   options={QUALITY_OPTIONS}
@@ -1597,9 +1628,9 @@ export default function ProjectForm({
           )}
         </Subsection>
 
-        <Subsection title="Sortie">
+        <Subsection title={t("form.models.outputTitle")}>
           <Grid cols={2}>
-            <Field label="Format de sortie">
+            <Field label={t("form.models.outputFormatLabel")}>
               <select
                 className="select"
                 value={config.generation_options.output_format}
@@ -1613,30 +1644,30 @@ export default function ProjectForm({
         </Subsection>
 
         {SHOW_UPSCALE && (
-          <Subsection title="Upscale (Pruna via Replicate)">
+          <Subsection title={t("form.models.upscaleTitle")}>
             <Grid cols={2}>
               <Toggle
-                label="Activer l'étape d'upscale"
+                label={t("form.models.upscaleEnableLabel")}
                 value={config.generation_options.upscale.enabled}
                 onChange={(v) => set("generation_options.upscale.enabled", v)}
               />
               <Field
-                label="Mode d'agrandissement"
-                hint="Choisissez une cible en mégapixels ou un facteur multiplicatif."
+                label={t("form.models.upscaleModeLabel")}
+                hint={t("form.models.upscaleModeHint")}
               >
                 <select
                   className="select"
                   value={config.generation_options.upscale.mode}
                   onChange={(e) => set("generation_options.upscale.mode", e.target.value)}
                 >
-                  <option value="target">Taille cible (MP)</option>
-                  <option value="factor">Facteur ×N</option>
+                  <option value="target">{t("form.models.upscaleModeTarget")}</option>
+                  <option value="factor">{t("form.models.upscaleModeFactor")}</option>
                 </select>
               </Field>
             </Grid>
 
             <Grid cols={2}>
-              <Field label="Mégapixels cibles" hint="Utilisé en mode “taille cible”. Exemple : 4 MP.">
+              <Field label={t("form.models.upscaleTargetLabel")} hint={t("form.models.upscaleTargetHint")}>
                 <input
                   type="number"
                   min={1}
@@ -1649,8 +1680,8 @@ export default function ProjectForm({
                 />
               </Field>
               <Field
-                label="Facteur d'agrandissement"
-                hint="Utilisé en mode “facteur”. Exemple : 2 = largeur et hauteur ×2."
+                label={t("form.models.upscaleFactorLabel")}
+                hint={t("form.models.upscaleFactorHint")}
               >
                 <input
                   type="number"
@@ -1663,7 +1694,7 @@ export default function ProjectForm({
                   disabled={config.generation_options.upscale.mode !== "factor"}
                 />
               </Field>
-              <Field label="Format de sortie upscalé">
+              <Field label={t("form.models.upscaleFormatLabel")}>
                 <select
                   className="select"
                   value={config.generation_options.upscale.output_format}
@@ -1674,7 +1705,7 @@ export default function ProjectForm({
                   <option value="webp">WebP</option>
                 </select>
               </Field>
-              <Field label="Qualité fichier" hint="Appliquée aux formats JPEG et WebP. Ignorée pour PNG.">
+              <Field label={t("form.models.upscaleQualityLabel")} hint={t("form.models.upscaleQualityHint")}>
                 <input
                   type="number"
                   min={1}
@@ -1689,8 +1720,9 @@ export default function ProjectForm({
             </Grid>
 
             <p className="text-xs text-[var(--color-mute)]">
-              Utilise le modèle Pruna P-Image-Upscale via l'API Replicate. Coût : ~$0.005/image (1-4 MP) ou ~$0.01/image
-              (5-8 MP). Nécessite <code>REPLICATE_API_TOKEN</code> dans le <code>.env</code> du serveur.
+              <span dangerouslySetInnerHTML={{ __html: t("form.models.upscaleFootnote", { interpolation: { skipOnVariables: false } })
+                .replace("REPLICATE_API_TOKEN", "<code>REPLICATE_API_TOKEN</code>")
+                .replace(".env", "<code>.env</code>") }} />
             </p>
           </Subsection>
         )}
@@ -1705,7 +1737,7 @@ export default function ProjectForm({
       <div className="flex flex-wrap justify-end gap-3">
         {onCancel && (
           <button type="button" className="btn btn-ghost" onClick={onCancel}>
-            Annuler
+            {t("common.cancel")}
           </button>
         )}
         {onApplyStyleOnly && (
@@ -1714,20 +1746,20 @@ export default function ProjectForm({
             className="btn btn-secondary inline-flex items-center gap-2"
             onClick={handleApplyStyleOnly}
             disabled={submitting || applyingStyleOnly}
-            title="Mettre à jour le style et réinitialiser les images sans toucher au scénario."
+            title={t("form.applyStyleTitle")}
           >
             <FaPalette aria-hidden />
-            {applyingStyleOnly ? "Application…" : applyStyleOnlyLabel}
+            {applyingStyleOnly ? t("form.applyingStyle") : (applyStyleOnlyLabel || t("form.actions.applyStyleOnly"))}
           </button>
         )}
         <button type="submit" className="btn btn-primary" disabled={submitting || applyingStyleOnly}>
-          {submitting ? "Enregistrement…" : submitLabel}
+          {submitting ? t("form.savingForm") : (submitLabel || t("form.actions.save"))}
         </button>
       </div>
 
       {styleFromImageOpen && (
         <StyleFromImageDialog
-          language={config.metadata.language || "fr"}
+          language={config.metadata.language || defaultMetadataLanguage()}
           onClose={() => setStyleFromImageOpen(false)}
           onApply={({ style, characters, locations, file }) => {
             setStyleRefFile(file || null);
@@ -1823,6 +1855,7 @@ function Field({ label, hint, children }) {
 }
 
 function ComboBox({ value, options, onChange, placeholder, required = false, disabled = false }) {
+  const { t } = useTranslation();
   // A non-preset value forces manual mode; otherwise the user can opt in
   // by picking "Saisir manuellement…", which we remember locally so the
   // input stays visible even while the value is empty.
@@ -1846,13 +1879,13 @@ function ComboBox({ value, options, onChange, placeholder, required = false, dis
         required={required && !customMode && !disabled}
         disabled={disabled}
       >
-        <option value="">— Choisir —</option>
+        <option value="">{t("form.chooseOne")}</option>
         {options.map((opt) => (
           <option key={opt} value={opt}>
             {opt}
           </option>
         ))}
-        <option value="__custom__">Saisir manuellement…</option>
+        <option value="__custom__">{t("form.manualEntry")}</option>
       </select>
       {customMode && (
         <input
@@ -1882,10 +1915,11 @@ function OptionSelect({ value, options, onChange }) {
 }
 
 function ModelSelector({ provider, model, optionsByProvider, onChange }) {
+  const { t } = useTranslation();
   const options = optionsByProvider[provider] || [];
   const known = options.some((option) => option.value === model);
   const selectValue = known ? model : "__custom__";
-  const priceText = formatModelPrice(provider, model);
+  const priceText = formatModelPrice(provider, model, t);
 
   return (
     <div className="space-y-2">
@@ -1905,25 +1939,23 @@ function ModelSelector({ provider, model, optionsByProvider, onChange }) {
             {option.label}
           </option>
         ))}
-        <option value="__custom__">Modèle personnalisé…</option>
+        <option value="__custom__">{t("form.customModel")}</option>
       </select>
       {selectValue === "__custom__" && (
         <input
           className="input"
           value={model}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Nom exact du modèle"
+          placeholder={t("form.customModelPlaceholder")}
         />
       )}
       {priceText ? (
         <p className="text-xs text-[var(--color-mute)]">
           {priceText}
-          {hasFastTier(provider, model)
-            ? " · mode standard (le moins cher) ; le mode « fast » double ce tarif"
-            : ""}
+          {hasFastTier(provider, model) ? t("form.priceFastSuffix") : ""}
         </p>
       ) : (
-        model && <p className="text-xs text-[var(--color-mute)]">Tarif non estimé pour ce modèle</p>
+        model && <p className="text-xs text-[var(--color-mute)]">{t("form.priceUnknown")}</p>
       )}
     </div>
   );
@@ -1934,17 +1966,17 @@ function Grid({ cols = 2, children }) {
 }
 
 function ReferenceImagePreview({ url, label }) {
+  const { t } = useTranslation();
   if (!url) return null;
   return (
     <div className="mb-4 flex items-start gap-4">
       <div className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center shrink-0">
-        <img src={url} alt={label || "Image de référence"} className="w-full h-full object-cover" />
+        <img src={url} alt={label || t("form.styleRefAlt")} className="w-full h-full object-cover" />
       </div>
       <div className="flex-1 min-w-0">
-        <label className="label">Image de référence générée</label>
+        <label className="label">{t("imageStep.referenceImageLabel")}</label>
         <p className="text-xs text-[var(--color-mute)]">
-          Image utilisée comme guide visuel lors de la composition des planches. Pour la régénérer, modifiez la fiche
-          puis relancez l'étape Références.
+          {t("imageStep.referenceImageBody")}
         </p>
       </div>
     </div>
@@ -1952,21 +1984,20 @@ function ReferenceImagePreview({ url, label }) {
 }
 
 const _PHOTO_HINTS = {
-  character:
-    "La première photo est analysée pour pré-remplir la fiche et sert de guide de ressemblance (effet caricature). Les photos suivantes enrichissent l'ancrage visuel. Le style défini reste prioritaire.",
-  location:
-    "La première photo est analysée pour pré-remplir nom et description. Toutes les photos servent de guide pour dessiner le décor dans le style de la BD. Aucun personnage ne sera repris.",
-  object:
-    "La première photo est analysée pour pré-remplir la fiche. Toutes les photos servent de guide pour produire une version stylisée de l'objet dans le style de la BD.",
+  character: "form.characterPhotoHint",
+  location: "form.locationPhotoHint",
+  object: "form.objectPhotoHint",
 };
 
 function MultiPhotosField({ entityIndex, kind, photos, maxPhotos, onAdd, onRemove }) {
+  const { t } = useTranslation();
   const inputId = `photos-${kind}-${entityIndex}`;
   const canAdd = photos.length < maxPhotos;
+  const hintKey = _PHOTO_HINTS[kind] || "form.characterPhotoHint";
   return (
     <div className="mb-4">
-      <label className="label">Photos de référence (optionnel)</label>
-      <p className="text-xs text-[var(--color-mute)] mb-2">{_PHOTO_HINTS[kind]}</p>
+      <label className="label">{t("form.referencePhotosLabel")}</label>
+      <p className="text-xs text-[var(--color-mute)] mb-2">{t(hintKey)}</p>
       <div className="flex flex-wrap gap-2 items-start">
         {photos.map((entry, idx) => (
           <div key={idx} className="relative shrink-0">
@@ -1986,8 +2017,8 @@ function MultiPhotosField({ entityIndex, kind, photos, maxPhotos, onAdd, onRemov
               type="button"
               className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[var(--color-rose-500)] text-white text-xs flex items-center justify-center hover:bg-[var(--color-rose-600)] leading-none"
               onClick={() => onRemove(idx)}
-              title="Retirer cette photo"
-              aria-label="Retirer cette photo"
+              title={t("form.removePhotoAria")}
+              aria-label={t("form.removePhotoAria")}
             >
               ×
             </button>
@@ -2000,10 +2031,11 @@ function MultiPhotosField({ entityIndex, kind, photos, maxPhotos, onAdd, onRemov
           <label
             htmlFor={inputId}
             className="w-20 h-20 shrink-0 rounded-lg border-2 border-dashed border-[var(--color-line)] flex flex-col items-center justify-center gap-0.5 cursor-pointer hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] text-[var(--color-mute)] transition-colors"
-            title="Ajouter une photo"
+            title={t("form.addPhotoTitle")}
+            aria-label={t("form.addPhotoAria")}
           >
             <FaPlus className="w-4 h-4" aria-hidden />
-            <span className="text-xs leading-tight">Ajouter</span>
+            <span className="text-xs leading-tight">{t("form.addPhotoAria")}</span>
           </label>
         )}
         <input
@@ -2019,16 +2051,14 @@ function MultiPhotosField({ entityIndex, kind, photos, maxPhotos, onAdd, onRemov
         />
       </div>
       {photos.length >= maxPhotos && (
-        <p className="text-xs text-amber-600 mt-1">
-          Maximum {maxPhotos} photo{maxPhotos > 1 ? "s" : ""} — les photos supplémentaires ne seraient pas transmises au
-          modèle.
-        </p>
+        <p className="text-xs text-amber-600 mt-1">{t("form.maxPhotosWarning", { max: maxPhotos })}</p>
       )}
     </div>
   );
 }
 
 function StyleReferenceCard({ url, onPickImage, config, set }) {
+  const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const allowStyleCopy = !!config.allow_style_copy;
   // When a style reference image is uploaded it carries the overall art-style
@@ -2038,45 +2068,44 @@ function StyleReferenceCard({ url, onPickImage, config, set }) {
   // rendering) enabled because those refine constraints the image alone
   // cannot pin down (e.g. forcing B&W when the reference is in color).
   const hasStyleRef = !!url;
-  const STYLE_REF_DISABLED_HINT = "Désactivé : l'image de référence de style ci-contre fixe déjà ce paramètre.";
   // Required `art_style` must remain non-empty for backend validation. Auto-
   // fill with a sentinel when the user uploads a style reference image but
   // left this field blank — it never overrides existing user input.
   useEffect(() => {
     if (hasStyleRef && !(config.style.art_style || "").trim()) {
-      set("style.art_style", "Défini par l'image de référence de style.");
+      set("style.art_style", t("form.artStyleFromImage"));
     }
     // We intentionally fire only on hasStyleRef transitions: re-running on
     // every art_style change would clobber the user's own edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasStyleRef]);
+  }, [hasStyleRef, t]);
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-4">
         <div
           className="w-24 h-24 rounded-lg overflow-hidden bg-[var(--color-paper)] border border-[var(--color-line)] flex items-center justify-center text-xs text-[var(--color-mute)] shrink-0 cursor-pointer"
           onClick={onPickImage}
-          title={url ? "Changer l'image de style" : "Choisir une image de style"}
+          title={url ? t("form.styleRefChange") : t("form.styleRefChoose")}
         >
           {url ? (
-            <img src={url} alt="Référence de style" className="w-full h-full object-cover" />
+            <img src={url} alt={t("form.styleRefAlt")} className="w-full h-full object-cover" />
           ) : (
-            <span className="text-center px-1">Aucune image</span>
+            <span className="text-center px-1">{t("form.styleEmpty")}</span>
           )}
         </div>
         <div className="flex-1 min-w-0 space-y-3">
           <div>
-            <label className="label">Style artistique</label>
+            <label className="label">{t("form.artStyleLabel")}</label>
             <ComboBox
               value={config.style.art_style}
-              options={STYLE_ART_STYLE_PRESETS}
+              options={presetsFor("styleArtStyle", i18n.language)}
               onChange={(v) => set("style.art_style", v)}
-              placeholder="ex. ligne claire, aquarelle douce"
+              placeholder={t("form.artStylePlaceholder")}
               required
               disabled={hasStyleRef}
             />
             <p className="text-xs text-[var(--color-mute)] mt-1">
-              {hasStyleRef ? STYLE_REF_DISABLED_HINT : "Évitez de citer des artistes ou marques."}
+              {hasStyleRef ? t("form.artStyleDisabledHint") : t("form.noArtistNamesHint")}
             </p>
           </div>
           <button
@@ -2085,64 +2114,61 @@ function StyleReferenceCard({ url, onPickImage, config, set }) {
             onClick={() => setExpanded((v) => !v)}
           >
             <FaChevronDown aria-hidden className={"transition-transform " + (expanded ? "rotate-180" : "")} />
-            {expanded ? "Masquer les détails" : "Détails du style"}
+            {expanded ? t("form.expandHide") : t("form.expandShow")}
           </button>
           {expanded && (
             <div className="space-y-3">
               {hasStyleRef && (
-                <p className="text-xs text-[var(--color-mute)]">
-                  Avec une image de référence de style, seuls les champs descriptifs précis (palette, encrage, cadres,
-                  bulles, rendu des personnages) restent actifs. Ils complètent l'image, ils ne la remplacent pas.
-                </p>
+                <p className="text-xs text-[var(--color-mute)]">{t("form.expandHint")}</p>
               )}
               <Grid cols={3}>
-                <Field label="Palette de couleurs">
+                <Field label={t("form.colorPaletteLabel")}>
                   <ComboBox
                     value={config.style.color_palette || ""}
-                    options={STYLE_COLOR_PALETTE_PRESETS}
+                    options={presetsFor("styleColorPalette", i18n.language)}
                     onChange={(v) => set("style.color_palette", v)}
                   />
                 </Field>
-                <Field label="Encrage / traits">
+                <Field label={t("form.lineWorkLabel")}>
                   <ComboBox
                     value={config.style.line_work || ""}
-                    options={STYLE_LINE_WORK_PRESETS}
+                    options={presetsFor("styleLineWork", i18n.language)}
                     onChange={(v) => set("style.line_work", v)}
                   />
                 </Field>
-                <Field label="Atmosphère">
+                <Field label={t("form.moodLabel")}>
                   <ComboBox
                     value={config.style.mood || ""}
-                    options={STYLE_MOOD_PRESETS}
+                    options={presetsFor("styleMood", i18n.language)}
                     onChange={(v) => set("style.mood", v)}
                     disabled={hasStyleRef}
                   />
-                  {hasStyleRef && <p className="text-xs text-[var(--color-mute)] mt-1">{STYLE_REF_DISABLED_HINT}</p>}
+                  {hasStyleRef && <p className="text-xs text-[var(--color-mute)] mt-1">{t("form.artStyleDisabledHint")}</p>}
                 </Field>
               </Grid>
               <Grid cols={3}>
-                <Field label="Tour des cases">
+                <Field label={t("form.panelBordersLabel")}>
                   <ComboBox
                     value={config.style.panel_borders || ""}
-                    options={STYLE_PANEL_BORDERS_PRESETS}
+                    options={presetsFor("stylePanelBorders", i18n.language)}
                     onChange={(v) => set("style.panel_borders", v)}
-                    placeholder="ex. cadre noir épais légèrement irrégulier"
+                    placeholder={t("form.panelBordersPlaceholder")}
                   />
                 </Field>
-                <Field label="Dessin des bulles">
+                <Field label={t("form.speechBubblesLabel")}>
                   <ComboBox
                     value={config.style.speech_bubbles || ""}
-                    options={STYLE_SPEECH_BUBBLES_PRESETS}
+                    options={presetsFor("styleSpeechBubbles", i18n.language)}
                     onChange={(v) => set("style.speech_bubbles", v)}
-                    placeholder="ex. bulles blanches contour fin et rond"
+                    placeholder={t("form.speechBubblesPlaceholder")}
                   />
                 </Field>
-                <Field label="Dessin des personnages">
+                <Field label={t("form.characterRenderingLabel")}>
                   <ComboBox
                     value={config.style.character_rendering || ""}
-                    options={STYLE_CHARACTER_RENDERING_PRESETS}
+                    options={presetsFor("styleCharacterRendering", i18n.language)}
                     onChange={(v) => set("style.character_rendering", v)}
-                    placeholder="ex. visages ronds, yeux en points, peu d'ombres"
+                    placeholder={t("form.characterRenderingPlaceholder")}
                   />
                 </Field>
               </Grid>
@@ -2159,26 +2185,20 @@ function StyleReferenceCard({ url, onPickImage, config, set }) {
         }
       >
         <Toggle
-          label="Lever la protection anti-plagiat (copier un style connu)"
+          label={t("form.antiPlagiarismLabel")}
           value={allowStyleCopy}
           onChange={(v) => set("allow_style_copy", v)}
         />
         <p className="text-xs text-[var(--color-mute)] mt-2">
-          Désactive la règle stricte de non-copie appliquée à l'image de référence de style. L'IA pourra alors imiter
-          fidèlement l'identité visuelle de la référence (personnages, costumes, motifs) pour reproduire un style connu.
-          N'a d'effet que si une image de référence de style est fournie.
+          {t("form.antiPlagiarismDesc")}
         </p>
         {allowStyleCopy && (
           <div
             role="alert"
             className="mt-3 rounded-md border border-[var(--color-rose-500)] bg-[var(--color-rose-50)] p-3 text-sm text-[var(--color-rose-700)]"
           >
-            <p className="font-semibold">⚠️ Avertissement légal</p>
-            <p className="mt-1">
-              Le contenu généré peut reproduire des éléments protégés (personnages, œuvres, marques) et poser un
-              problème légal. Il est de votre seule responsabilité de vous assurer que vous disposez des droits
-              nécessaires pour utiliser et diffuser ce contenu.
-            </p>
+            <p className="font-semibold">{t("form.legalTitle")}</p>
+            <p className="mt-1">{t("form.legalBody")}</p>
           </div>
         )}
       </div>

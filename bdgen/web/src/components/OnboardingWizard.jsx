@@ -1,54 +1,10 @@
 import { useMemo, useState } from "react";
 import { FaArrowRight, FaCheck, FaCoins, FaKey, FaLock, FaWandMagicSparkles, FaXmark } from "react-icons/fa6";
+import { useTranslation } from "react-i18next";
 import { SHOW_UPSCALE } from "../featureFlags.js";
 
 export const INITIAL_ONBOARDING_KEY = "bdgen.initialOnboarding.dismissed";
 export const APP_ONBOARDING_KEY = "bdgen.appOnboarding.dismissed";
-
-const INITIAL_STEPS = [
-  {
-    icon: FaLock,
-    title: "Protéger vos clés API",
-    body: "Le mot de passe principal sert à chiffrer vos clés sur cet ordinateur. BdGEN ne le stocke pas : il faudra le retenir pour rouvrir le coffre.",
-  },
-  {
-    icon: FaKey,
-    title: "Récupérer les clés utiles",
-    body: "OpenAI est requis pour démarrer. Anthropic, xAI et Replicate sont optionnels selon les modèles que vous souhaitez utiliser.",
-  },
-  {
-    icon: FaCoins,
-    title: "Comprendre le budget",
-    body: SHOW_UPSCALE
-      ? "Une BD consomme des appels texte et image. Le coût varie selon les modèles, le nombre de pages, les essais et l’upscale ; prévoyez d’abord un petit projet de test et suivez les statistiques de coût dans BdGEN."
-      : "Une BD consomme des appels texte et image. Le coût varie selon les modèles, le nombre de pages et les essais ; prévoyez d’abord un petit projet de test et suivez les statistiques de coût dans BdGEN.",
-  },
-];
-
-const APP_STEPS = [
-  {
-    icon: FaWandMagicSparkles,
-    title: "1. Préparer le projet",
-    body: "Décrivez l’histoire, le format, les personnages et le style. Plus la base est claire, plus les étapes suivantes seront cohérentes.",
-  },
-  {
-    icon: FaCheck,
-    title: "2. Écrire et relire",
-    body: "L’étape Écriture transforme votre brief en script structuré. Vous pouvez corriger le résultat avant de lancer les images.",
-  },
-  {
-    icon: FaKey,
-    title: "3. Générer les références",
-    body: "BdGEN crée les fiches visuelles des personnages, lieux et objets. Validez-les ou affinez-les avant les planches finales.",
-  },
-  {
-    icon: FaCoins,
-    title: "4. Composer la BD",
-    body: SHOW_UPSCALE
-      ? "Les planches, la couverture et le PDF sont générés à partir du script et des références. L’upscale reste optionnel pour améliorer la définition."
-      : "Les planches, la couverture et le PDF sont générés à partir du script et des références.",
-  },
-];
 
 export function hasDismissedOnboarding(key) {
   if (typeof window === "undefined") return true;
@@ -68,8 +24,63 @@ export function dismissOnboarding(key) {
   return (window.bdgenDesktop?.setPreference?.(key, true) ?? Promise.resolve()).catch(() => {});
 }
 
+// Step definitions are translated at render time (the `kind` namespace +
+// index) and rely on `useTranslation` so the user can flip languages without
+// restarting the wizard.
+function useOnboardingSteps(kind) {
+  const { t } = useTranslation();
+  return useMemo(() => {
+    if (kind === "initial") {
+      return [
+        {
+          icon: FaLock,
+          title: t("onboarding.initial.step1Title"),
+          body: t("onboarding.initial.step1Body"),
+        },
+        {
+          icon: FaKey,
+          title: t("onboarding.initial.step2Title"),
+          body: t("onboarding.initial.step2Body"),
+        },
+        {
+          icon: FaCoins,
+          title: t("onboarding.initial.step3Title"),
+          body: t(
+            SHOW_UPSCALE
+              ? "onboarding.initial.step3BodyWithUpscale"
+              : "onboarding.initial.step3Body"
+          ),
+        },
+      ];
+    }
+    return [
+      {
+        icon: FaWandMagicSparkles,
+        title: t("onboarding.app.step1Title"),
+        body: t("onboarding.app.step1Body"),
+      },
+      {
+        icon: FaCheck,
+        title: t("onboarding.app.step2Title"),
+        body: t("onboarding.app.step2Body"),
+      },
+      {
+        icon: FaKey,
+        title: t("onboarding.app.step3Title"),
+        body: t("onboarding.app.step3Body"),
+      },
+      {
+        icon: FaCoins,
+        title: t("onboarding.app.step4Title"),
+        body: t(SHOW_UPSCALE ? "onboarding.app.step4Body" : "onboarding.app.step4BodyNoUpscale"),
+      },
+    ];
+  }, [kind, t]);
+}
+
 export default function OnboardingWizard({ kind = "initial", onDone, onSkip, embedded = false }) {
-  const steps = kind === "initial" ? INITIAL_STEPS : APP_STEPS;
+  const { t } = useTranslation();
+  const steps = useOnboardingSteps(kind);
   const [index, setIndex] = useState(0);
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const current = steps[index];
@@ -80,20 +91,18 @@ export default function OnboardingWizard({ kind = "initial", onDone, onSkip, emb
     () =>
       kind === "initial"
         ? {
-            eyebrow: "Premier lancement",
-            title: "Avant de créer votre première BD",
-            intro:
-              "BdGEN utilise vos propres clés API pour générer textes et images. Cette courte introduction pose les bases avant la configuration.",
-            done: "Configurer le coffre",
+            eyebrow: t("onboarding.initial.eyebrow"),
+            title: t("onboarding.initial.title"),
+            intro: t("onboarding.initial.intro"),
+            done: t("onboarding.initial.done"),
           }
         : {
-            eyebrow: "Guide de l’atelier",
-            title: "Comment se déroule une création",
-            intro:
-              "L’outil avance par étapes. Vous pouvez revenir en arrière, relancer une partie et garder la main avant les générations coûteuses.",
-            done: "Commencer",
+            eyebrow: t("onboarding.app.eyebrow"),
+            title: t("onboarding.app.title"),
+            intro: t("onboarding.app.intro"),
+            done: t("onboarding.app.done"),
           },
-    [kind],
+    [kind, t],
   );
 
   function finish() {
@@ -113,7 +122,7 @@ export default function OnboardingWizard({ kind = "initial", onDone, onSkip, emb
             <h1 className="mt-2 text-2xl font-semibold">{copy.title}</h1>
             <p className="mt-3 text-sm text-[var(--color-ink-soft)]">{copy.intro}</p>
           </div>
-          <ol className="flex md:flex-col gap-2" aria-label="Progression du guide">
+          <ol className="flex md:flex-col gap-2" aria-label={t("onboarding.initial.progressAria")}>
             {steps.map((step, stepIndex) => (
               <li key={step.title} className="flex-1">
                 <button
@@ -139,8 +148,8 @@ export default function OnboardingWizard({ kind = "initial", onDone, onSkip, emb
               <button
                 type="button"
                 className="p-2 rounded-md text-[var(--color-mute)] hover:bg-[var(--color-paper-soft)] hover:text-[var(--color-ink)]"
-                title="Passer le guide"
-                aria-label="Passer le guide"
+                title={t("onboarding.skip")}
+                aria-label={t("onboarding.skip")}
                 onClick={skip}
               >
                 <FaXmark aria-hidden />
@@ -161,14 +170,14 @@ export default function OnboardingWizard({ kind = "initial", onDone, onSkip, emb
               disabled={index === 0}
               onClick={() => setIndex((prev) => Math.max(0, prev - 1))}
             >
-              Retour
+              {t("onboarding.back")}
             </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={() => (isLast ? finish() : setIndex((prev) => prev + 1))}
             >
-              {isLast ? copy.done : "Suivant"}
+              {isLast ? copy.done : t("onboarding.next")}
               {!isLast && <FaArrowRight aria-hidden />}
             </button>
           </div>
@@ -179,7 +188,7 @@ export default function OnboardingWizard({ kind = "initial", onDone, onSkip, emb
               checked={dontShowAgain}
               onChange={(event) => setDontShowAgain(event.target.checked)}
             />
-            <span className="min-w-0">Ne plus afficher ce guide au lancement</span>
+            <span className="min-w-0">{t("onboarding.neverShowAgain")}</span>
           </label>
         </div>
       </div>

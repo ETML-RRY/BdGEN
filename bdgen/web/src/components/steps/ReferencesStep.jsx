@@ -1,30 +1,32 @@
+import { useTranslation } from "react-i18next";
 import ImageStep from "../ImageStep.jsx";
 
 export default function ReferencesStep({ project, onChanged }) {
+  const { t } = useTranslation();
   const items = [
     ...project.references.characters.map((c) => ({
       id: c.id,
-      label: `Personnage — ${c.name}`,
+      label: t("stepsUi.references.itemCharacter", { name: c.name }),
       shortLabel: c.name,
-      group: "Personnages",
+      group: t("stepsUi.references.groupCharacters"),
       image_url: c.image_url,
       stale: c.stale,
       description: [c.physical_description, c.outfit].filter(Boolean).join("\n\n"),
     })),
     ...project.references.locations.map((l) => ({
       id: l.id,
-      label: `Décor — ${l.name}`,
+      label: t("stepsUi.references.itemLocation", { name: l.name }),
       shortLabel: l.name,
-      group: "Décors",
+      group: t("stepsUi.references.groupLocations"),
       image_url: l.image_url,
       stale: l.stale,
       description: l.description,
     })),
     ...(project.references.objects || []).map((o) => ({
       id: o.id,
-      label: `Objet — ${o.name}`,
+      label: t("stepsUi.references.itemObject", { name: o.name }),
       shortLabel: o.name,
-      group: "Objets",
+      group: t("stepsUi.references.groupObjects"),
       image_url: o.image_url,
       stale: o.stale,
       description: o.description,
@@ -36,13 +38,13 @@ export default function ReferencesStep({ project, onChanged }) {
       project={project}
       onChanged={onChanged}
       stepId="references"
-      title="Références visuelles"
-      intro="Une planche-modèle est générée pour chaque personnage et chaque décor. Elles servent de référence permanente pour garder les personnages cohérents d'une planche à l'autre."
+      title={t("stepsUi.references.title")}
+      intro={t("stepsUi.references.intro")}
       items={items}
       layout="square"
-      genGroupLabel="Références"
-      startLabel="Générer les références"
-      emptyLabel="Cette référence n'a pas encore été générée."
+      genGroupLabel={t("stepsUi.references.groupLabel")}
+      startLabel={t("stepsUi.references.startLabel")}
+      emptyLabel={t("stepsUi.references.emptyLabel")}
     />
   );
 }

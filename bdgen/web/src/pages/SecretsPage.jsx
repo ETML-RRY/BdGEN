@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { FaArrowUpRightFromSquare, FaBookOpen, FaKey } from "react-icons/fa6";
+import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
+import { formatError } from "../i18n/formatError.js";
 
 const PROVIDERS = [
   {
@@ -37,6 +39,7 @@ const PROVIDERS = [
 const EMPTY_KEYS = Object.fromEntries(PROVIDERS.map((p) => [p.secret, ""]));
 
 export default function SecretsPage({ mode = "page", onReady }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState(null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -71,7 +74,7 @@ export default function SecretsPage({ mode = "page", onReady }) {
       setPassword("");
       onReady?.(next);
     } catch (err) {
-      setError(err.message);
+      setError(formatError(err, t));
     } finally {
       setSaving(false);
     }
@@ -81,11 +84,11 @@ export default function SecretsPage({ mode = "page", onReady }) {
     e.preventDefault();
     setError(null);
     if (password.length < 8) {
-      setError("Choisissez un mot de passe maître d’au moins 8 caractères.");
+      setError(t("secrets.passwordTooShort"));
       return;
     }
     if (password !== confirm) {
-      setError("Les deux mots de passe ne correspondent pas.");
+      setError(t("secrets.passwordMismatch"));
       return;
     }
     setSaving(true);
@@ -97,7 +100,7 @@ export default function SecretsPage({ mode = "page", onReady }) {
       setKeys(EMPTY_KEYS);
       onReady?.(next);
     } catch (err) {
-      setError(err.message);
+      setError(formatError(err, t));
     } finally {
       setSaving(false);
     }
@@ -114,14 +117,14 @@ export default function SecretsPage({ mode = "page", onReady }) {
       setStatus(next);
       setKeys((prev) => ({ ...prev, [item.secret]: "" }));
     } catch (err) {
-      setError(err.message);
+      setError(formatError(err, t));
     } finally {
       setSaving(false);
     }
   }
 
   if (!status) {
-    return <Shell isGate={isGate}><p className="text-sm text-[var(--color-mute)]">Chargement...</p></Shell>;
+    return <Shell isGate={isGate}><p className="text-sm text-[var(--color-mute)]">{t("secrets.loading")}</p></Shell>;
   }
 
   if (needsUnlock) {
@@ -129,9 +132,9 @@ export default function SecretsPage({ mode = "page", onReady }) {
       <Shell isGate={isGate}>
         <form className="card p-6 space-y-4 max-w-md w-full" onSubmit={submitUnlock}>
           <div>
-            <h1 className="text-xl font-semibold">Déverrouiller BdGEN</h1>
+            <h1 className="text-xl font-semibold">{t("secrets.unlockTitle")}</h1>
             <p className="text-sm text-[var(--color-ink-soft)] mt-1">
-              Entrez le mot de passe maître pour déchiffrer les clés API locales.
+              {t("secrets.unlockBody")}
             </p>
           </div>
           <input
@@ -140,11 +143,11 @@ export default function SecretsPage({ mode = "page", onReady }) {
             autoFocus
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Mot de passe maître"
+            placeholder={t("secrets.masterPassword")}
           />
           {error && <p className="text-sm text-[var(--color-rose-500)]">{error}</p>}
           <button className="btn btn-primary w-full" disabled={saving || !password}>
-            {saving ? "Ouverture..." : "Déverrouiller"}
+            {saving ? t("secrets.unlocking") : t("secrets.unlock")}
           </button>
         </form>
       </Shell>
@@ -156,20 +159,19 @@ export default function SecretsPage({ mode = "page", onReady }) {
       <Shell isGate={isGate}>
         <form className="card p-6 space-y-4 max-w-2xl w-full" onSubmit={submitCreate}>
           <div>
-            <h1 className="text-xl font-semibold">Configurer le coffre BdGEN</h1>
+            <h1 className="text-xl font-semibold">{t("secrets.setupTitle")}</h1>
             <p className="text-sm text-[var(--color-ink-soft)] mt-1">
-              Les clés API seront chiffrées sur disque. Le mot de passe maître
-              ne sera pas stocké.
+              {t("secrets.setupBody")}
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-3">
-            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe maître" />
-            <input className="input" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="Confirmer le mot de passe" />
+            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t("secrets.masterPassword")} />
+            <input className="input" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={t("secrets.confirmPassword")} />
           </div>
-          <ProviderInputs keys={keys} setKeys={setKeys} providers={providers} />
+          <ProviderInputs keys={keys} setKeys={setKeys} providers={providers} t={t} />
           {error && <p className="text-sm text-[var(--color-rose-500)]">{error}</p>}
           <button className="btn btn-primary" disabled={saving}>
-            {saving ? "Création..." : "Créer le coffre"}
+            {saving ? t("secrets.creating") : t("secrets.create")}
           </button>
         </form>
       </Shell>
@@ -181,15 +183,14 @@ export default function SecretsPage({ mode = "page", onReady }) {
       <section className="card p-6 space-y-5 max-w-3xl w-full">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold">Clés API</h1>
+            <h1 className="text-xl font-semibold">{t("secrets.pageTitle")}</h1>
             <p className="text-sm text-[var(--color-ink-soft)] mt-1">
-              Les valeurs complètes ne sont jamais affichées. Remplacez une clé
-              en saisissant une nouvelle valeur.
+              {t("secrets.pageBody")}
             </p>
           </div>
           {status.vault_exists && (
             <button className="btn btn-secondary text-sm" onClick={async () => setStatus(await api.lockSecretsVault())}>
-              Verrouiller
+              {t("secrets.lock")}
             </button>
           )}
         </div>
@@ -204,20 +205,22 @@ export default function SecretsPage({ mode = "page", onReady }) {
                     <p className="text-xs text-[var(--color-mute)]">{provider.secret}</p>
                   </div>
                   <span className={info.configured ? "chip chip-mint" : "chip chip-peach"}>
-                    {info.configured ? `Configurée (${info.source})` : "Absente"}
+                    {info.configured
+                      ? t("secrets.configured", { source: info.source })
+                      : t("secrets.absent")}
                   </span>
                 </div>
-                <ProviderLinks provider={provider} className="mb-3" />
+                <ProviderLinks provider={provider} className="mb-3" t={t} />
                 <div className="flex gap-2">
                   <input
                     className="input"
                     type="password"
                     value={keys[provider.secret] || ""}
                     onChange={(e) => setKeys((prev) => ({ ...prev, [provider.secret]: e.target.value }))}
-                    placeholder={`Nouvelle clé ${provider.label}`}
+                    placeholder={t("secrets.newKey", { provider: provider.label })}
                   />
                   <button className="btn btn-primary" disabled={saving || !keys[provider.secret]?.trim()} onClick={() => updateProvider(provider.id)}>
-                    Enregistrer
+                    {t("secrets.save")}
                   </button>
                 </div>
               </div>
@@ -230,23 +233,24 @@ export default function SecretsPage({ mode = "page", onReady }) {
   );
 }
 
-function ProviderInputs({ keys, setKeys, providers }) {
+function ProviderInputs({ keys, setKeys, providers, t }) {
   return (
     <div className="space-y-3">
       {PROVIDERS.map((provider) => (
         <label key={provider.id} className="block">
           <span className="flex flex-wrap items-center justify-between gap-2 mb-1">
             <span className="label mb-0">
-              {provider.label}{provider.required ? " (requis)" : " (optionnel)"}
+              {provider.label}
+              {provider.required ? ` ${t("secrets.required")}` : ` ${t("secrets.optional")}`}
             </span>
-            <ProviderLinks provider={provider} compact />
+            <ProviderLinks provider={provider} compact t={t} />
           </span>
           <input
             className="input"
             type="password"
             value={keys[provider.secret] || ""}
             onChange={(e) => setKeys((prev) => ({ ...prev, [provider.secret]: e.target.value }))}
-            placeholder={providers[provider.id]?.configured ? "Déjà configurée" : provider.secret}
+            placeholder={providers[provider.id]?.configured ? t("secrets.alreadyConfigured") : provider.secret}
           />
         </label>
       ))}
@@ -254,7 +258,7 @@ function ProviderInputs({ keys, setKeys, providers }) {
   );
 }
 
-function ProviderLinks({ provider, compact = false, className = "" }) {
+function ProviderLinks({ provider, compact = false, className = "", t }) {
   const linkClass = compact
     ? "text-xs inline-flex items-center gap-1 text-[var(--color-primary-700)] hover:text-[var(--color-primary-500)]"
     : "text-xs inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[var(--color-line)] text-[var(--color-ink-soft)] hover:bg-[var(--color-paper-soft)] hover:text-[var(--color-ink)]";
@@ -275,7 +279,7 @@ function ProviderLinks({ provider, compact = false, className = "" }) {
         onClick={(e) => openLink(e, provider.docsUrl)}
       >
         <FaBookOpen aria-hidden />
-        Documentation
+        {t("secrets.documentation")}
         {!compact && <FaArrowUpRightFromSquare aria-hidden className="text-[0.65rem]" />}
       </a>
       <a
@@ -286,7 +290,7 @@ function ProviderLinks({ provider, compact = false, className = "" }) {
         onClick={(e) => openLink(e, provider.tokenUrl)}
       >
         <FaKey aria-hidden />
-        Créer un token
+        {t("secrets.createToken")}
         {!compact && <FaArrowUpRightFromSquare aria-hidden className="text-[0.65rem]" />}
       </a>
     </div>
