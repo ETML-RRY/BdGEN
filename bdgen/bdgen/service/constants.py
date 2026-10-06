@@ -30,4 +30,4 @@ THUMBNAIL_NAME = "thumbnail.jpg"
 THUMB_MAX_W = 256
 THUMB_MAX_H = 384
 DEFAULT_IMAGE_PROVIDER = "openai"
-DEFAULT_IMAGE_MODEL = "gpt-image-2"
+DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst"

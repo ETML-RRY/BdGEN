@@ -213,7 +213,7 @@ def test_pick_text_model_prefers_anthropic(monkeypatch: pytest.MonkeyPatch) -> N
 
     chosen = app_module._pick_text_model()
     assert chosen.provider == "anthropic"
-    assert chosen.model == "claude-sonnet-4-6"
+    assert chosen.model == "claude-sonnet-5-5"
     assert chosen.effort == "medium"
 
 
@@ -223,7 +223,7 @@ def test_pick_text_model_falls_back_to_openai(monkeypatch: pytest.MonkeyPatch) -
 
     chosen = app_module._pick_text_model()
     assert chosen.provider == "openai"
-    assert chosen.model == "gpt-5.4"
+    assert chosen.model == "gpt-6.1-sol"
     assert chosen.effort is None
 
 
@@ -233,7 +233,7 @@ def test_pick_text_model_falls_back_to_xai(monkeypatch: pytest.MonkeyPatch) -> N
 
     chosen = app_module._pick_text_model()
     assert chosen.provider == "xai"
-    assert chosen.model == "grok-4.3"
+    assert chosen.model == "grok-4.7"
 
 
 def test_pick_text_model_raises_400_without_keys(monkeypatch: pytest.MonkeyPatch) -> None:

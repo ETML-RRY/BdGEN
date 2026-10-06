@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from pydantic import BaseModel
 
 import bdgen.script as script_module
@@ -76,7 +77,11 @@ def test_anthropic_effort_defaults_to_medium_and_validates_env(monkeypatch) -> N
 def test_adaptive_thinking_only_for_supported_models() -> None:
     assert _anthropic_supports_adaptive_thinking("claude-sonnet-4-6")
     assert _anthropic_supports_adaptive_thinking("claude-opus-4-7")
+    assert _anthropic_supports_adaptive_thinking("claude-sonnet-5-5")
+    assert _anthropic_supports_adaptive_thinking("claude-opus-5-5")
+    assert _anthropic_supports_adaptive_thinking("claude-fable-5-1")
     assert not _anthropic_supports_adaptive_thinking("claude-sonnet-4-5")
+    assert not _anthropic_supports_adaptive_thinking("claude-haiku-4-5")
     assert not _anthropic_supports_adaptive_thinking("claude-3-7-sonnet")
 
 
@@ -139,6 +144,45 @@ def test_anthropic_call_uses_configurable_timeout_and_effort(monkeypatch) -> Non
     assert captured["options"] == {"timeout": 1200.0}
     assert captured["kwargs"]["thinking"] == {"type": "adaptive"}
     assert captured["kwargs"]["output_config"] == {"effort": "max"}
+
+
+def test_anthropic_call_raises_clear_error_on_refusal(monkeypatch) -> None:
+    class FakeStream:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def __iter__(self):
+            yield SimpleNamespace(type="message_stop")
+
+        def get_final_message(self):
+            return SimpleNamespace(
+                usage=None,
+                stop_reason="refusal",
+                stop_details=SimpleNamespace(category="cyber"),
+            )
+
+    class FakeClient:
+        class messages:
+            @staticmethod
+            def stream(**kwargs):
+                return FakeStream()
+
+        def with_options(self, **kwargs):
+            return self
+
+    monkeypatch.setattr(script_module.secret_store, "anthropic_client", lambda: FakeClient())
+    monkeypatch.setattr(script_module, "_wait_for_anthropic_input_budget", lambda _system, _user: None)
+
+    with pytest.raises(RuntimeError, match=r"claude-opus-5-5\) declined the request \(category: cyber\)"):
+        _call_anthropic(
+            "system",
+            "user",
+            SimpleNamespace(provider="anthropic", model="claude-opus-5-5", effort="medium"),
+            TinyPayload,
+        )
 
 
 def test_detects_rate_limit_and_retry_after_header() -> None:

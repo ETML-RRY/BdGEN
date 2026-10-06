@@ -471,6 +471,7 @@
     },
     "priceLine": "≈ {{input}} $ entrée · {{output}} $ {{outputLabel}} / M tokens",
     "priceFastSuffix": " · mode standard (le moins cher) ; le mode « fast » double ce tarif",
+    "premiumModelWarning": "Modèle premium : environ 2,5× le prix d'Opus 5.5, et chaque appel peut durer plusieurs minutes. Un album complet peut coûter très cher — à réserver aux projets exigeants, après un test sur un petit projet.",
     "priceUnknown": "Tarif non estimé pour ce modèle",
     "identity": {
       "title": "Identité du projet",
