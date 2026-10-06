@@ -100,12 +100,22 @@ SETUP_SYSTEM_PROMPT = dedent("""\
        clothing cut and colors, accessories). Do NOT include any art style, color
        palette, line work, rendering technique, or stylization instructions — visual
        style is injected separately at image-generation time.
-       SIZE — if the input character has a `size` field (non-null string), include
-       the EXACT user text in the `reference_prompt` as a dedicated line, phrased
-       as: `Size: <the user's size text>.` Place this line right after the outfit /
-       appearance description and BEFORE the HANDS AND ARMS block. Do not paraphrase,
-       translate or shorten the user's wording — the user authored it intentionally to
-       anchor relative proportions across the album.
+       SIZE — MANDATORY. The `size` field MUST be a non-null string in every output
+       character. If the input character has a `size` field (non-null string), copy
+       the EXACT user text verbatim — do not paraphrase, translate or shorten it; the
+       user authored it intentionally to anchor relative proportions across the
+       album (and the user's text wins over the project's `metadata.language`).
+       If the input `size` is null or missing, INFER a reasonable size description
+       from the `physical_description` (e.g. height with a metric estimate, build,
+       age range, or any other size cue that helps the image model reason about
+       relative proportions when several characters share a frame). Keep the
+       inferred size to a single short sentence. Write the inferred `size` field
+       in the language specified by `metadata.language` (fr/en/de). The
+       `reference_prompt` itself stays in English, but the standalone `size` field
+       is narrative content and follows the project's language. Include the chosen
+       `size` text in the `reference_prompt` as a dedicated line, phrased as:
+       `Size: <the size text>.` Place this line right after the outfit / appearance
+       description and BEFORE the HANDS AND ARMS block.
        HANDS AND ARMS — MANDATORY in every `reference_prompt`: the full-body
        front view MUST explicitly show both hands with clearly separated fingers
        (5 fingers per hand: 4 fingers + 1 thumb). Include the instruction:
@@ -129,15 +139,35 @@ SETUP_SYSTEM_PROMPT = dedent("""\
        lighting mood — with as much specificity as possible. Avoid photographic
        vocabulary (depth of field, bokeh, establishing shot, camera, lens); use
        illustration vocabulary instead (composition, foreground, midground, scene,
-       layout). SIZE — if the input location has a `size` field (non-null string),
-       include the EXACT user text in the `reference_prompt` as a dedicated line,
-       phrased as: `Size: <the user's size text>.` Place this line right after the
-       place's main description and before the final "No text. No characters." line.
-       Do not paraphrase, translate or shorten the user's wording. Do NOT include
-       any art style, color palette, line work, rendering technique, or stylization
-       instructions — visual style is injected separately at image-generation time.
-       End with "No text. No characters." Whether you may invent ADDITIONAL locations
-       is decided by the AUTHORING RULES at the end of the user message.
+       layout). SIZE — MANDATORY. The `size` field MUST be a non-null string in every
+       output location. If the input location has a `size` field (non-null string),
+       copy the EXACT user text verbatim — do not paraphrase, translate or shorten
+       it (the user's text wins over the project's `metadata.language`). If the
+       input `size` is null or missing, INFER a reasonable size description from
+       the `description` (e.g. spatial extent, ceiling height, square footage,
+       relative scale, or any other size cue that helps the image model reason
+       about relative proportions when characters and objects appear in this
+       location). Keep the inferred size to a single short sentence. Write the
+       inferred `size` field in the language specified by `metadata.language`
+       (fr/en/de) — the `reference_prompt` itself stays in English, but the
+       standalone `size` field is narrative content and follows the project's
+       language. Include the chosen `size` text in the `reference_prompt` as a
+       dedicated line, phrased as: `Size: <the size text>.` Place this line right
+       after the place's main description and before the final "No text. No
+       characters." line. Do NOT
+       include any art style, color palette, line work, rendering technique, or
+       stylization instructions — visual style is injected separately at
+       image-generation time. End with "No text. No characters."
+       SCENERY COMPLETENESS — every distinct physical setting where the story's
+       action takes place, AND every large recurring scenery structure that
+       visually anchors the story (a cave, a hut, a ship, a tower, a bridge, a
+       vehicle the characters travel in...), MUST exist as its own entry in
+       `locations` so it receives a reference image. Scenery that lives only
+       inside page scene descriptions has no reference image and will be
+       redrawn with a different shape on every page — register it here instead.
+       Whether you may invent ADDITIONAL locations is decided by the AUTHORING
+       RULES at the end of the user message; if inventing is disallowed, stage
+       the story within the provided locations only.
 
     3. OBJECTS — first, for EACH entry in the input `objects` array (which may be
        empty), copy `id`, `name`, `description` and (if present) `size` verbatim.
@@ -151,20 +181,30 @@ SETUP_SYSTEM_PROMPT = dedent("""\
        colors and any distinctive markings with as much specificity as possible.
        Avoid photographic vocabulary (product shot, studio photo, macro, depth of
        field, lighting rig); use illustration vocabulary instead (drawing,
-       illustration, reference sheet, composition). SIZE — if the input object has
-       a `size` field (non-null string), include the EXACT user text in the
-       `reference_prompt` as a dedicated line, phrased as:
-       `Size: <the user's size text>.` Place this line right after the object's main
-       description and before the final "No text. No characters." line. Do not
-       paraphrase, translate or shorten the user's wording. If the user provided a
-       photo of this object (passed at image-generation time), the resulting
-       illustration must remain recognizably the SAME object — same shape, key
-       markings, characteristic silhouette. Do NOT include any art style, color
-       palette, line work, rendering technique, or stylization instructions — visual
-       style is injected separately at image-generation time. Plan how each object
-       will recur across the story so panels can reference it consistently. End with
-       "No text. No characters." Whether you may invent ADDITIONAL objects is decided
-       by the AUTHORING RULES at the end of the user message.
+       illustration, reference sheet, composition). SIZE — MANDATORY. The `size`
+       field MUST be a non-null string in every output object. If the input object
+       has a `size` field (non-null string), copy the EXACT user text verbatim — do
+       not paraphrase, translate or shorten it (the user's text wins over the
+       project's `metadata.language`). If the input `size` is null or missing, INFER
+       a reasonable size description from the `description` (e.g. length, width,
+       height, volume, or any other size cue that helps the image model reason
+       about the object's relative scale when it appears alongside characters or
+       other objects). Keep the inferred size to a single short sentence. Write the
+       inferred `size` field in the language specified by `metadata.language`
+       (fr/en/de) — the `reference_prompt` itself stays in English, but the
+       standalone `size` field is narrative content and follows the project's
+       language. Include the chosen `size` text in the `reference_prompt` as a
+       dedicated line, phrased as: `Size: <the size text>.` Place this line right
+       after the object's main description and before the final "No text. No
+       characters." line. If the user provided a photo of this object (passed at
+       image-generation time), the resulting illustration must remain recognizably
+       the SAME object — same shape, key markings, characteristic silhouette. Do
+       NOT include any art style, color palette, line work, rendering technique, or
+       stylization instructions — visual style is injected separately at
+       image-generation time. Plan how each object will recur across the story so
+       panels can reference it consistently. End with "No text. No characters."
+       Whether you may invent ADDITIONAL objects is decided by the AUTHORING RULES
+       at the end of the user message.
 
     4. COVER — only if `structure.include_cover` is true. Provide:
        - `scene_description`: an evocative illustration concept for the front cover
@@ -242,6 +282,17 @@ PAGE_SYSTEM_PROMPT = dedent("""\
     HARD CONSTRAINTS:
     - Write narrative content (scene descriptions, narration, dialogs, sound effects)
       in the language specified by `metadata.language`.
+    - USE SIZES IN PANELS — the SETUP block below gives every character, location
+      and object a `size` field. You MUST use that field to reason about
+      RELATIVE PROPORTIONS whenever two or more entities share a panel. When
+      several characters stand next to each other, the scene_description MUST
+      reflect their actual relative heights and builds (e.g. "Fernand barely
+      reaches Gabrielle's shoulder, his head coming up to her collarbone");
+      never describe them as roughly the same size if their `size` fields
+      disagree. The same applies to objects — a chair is desk-height, a sword
+      fits in a hand, a wardrobe towers over a child, etc. Honoring the `size`
+      field in scene descriptions is what keeps the image model from
+      generating characters at inconsistent scales across pages.
     - The page's `layout` description MUST exactly describe the number of panels you
       produce. Don't say "3 cases" if you emit 4 panels.
     - The `rows` field MUST list every panel_number exactly once, grouped by row
@@ -250,6 +301,16 @@ PAGE_SYSTEM_PROMPT = dedent("""\
       that appears in `panels` must appear in exactly one row of `rows`.
     - Use ONLY character ids, location ids and object ids defined in the setup. Do not
       introduce new ones in this call.
+    - BACKGROUNDS COME FROM REGISTERED LOCATIONS — each panel's background is
+      defined by its `location` id and that location's setup description. Do NOT
+      introduce in `scene_description` a new prominent structure or landmark
+      (a cave, a hut, a tower, a bridge, a vehicle...) that exists in no setup
+      location or object: it has no reference image, so the image model would
+      draw it with a different shape on every page. If the action happens at,
+      inside or near such a structure, set the panel's `location` to the setup
+      location that represents or contains it, and when you mention a landmark
+      that belongs to a setup location, reuse that location's own description
+      wording so the landmark looks the same every time it recurs.
     - List in `objects` the ids of EVERY object visible in the panel (only objects from
       the setup; leave the array empty if none). When an object is in the panel,
       reference it explicitly in `scene_description` so its placement is unambiguous.
@@ -322,7 +383,7 @@ CHARACTER_REFINE_SYSTEM_PROMPT = dedent("""\
         "name": "...",
         "physical_description": "...",
         "outfit": "...",
-        "size": "<string or null>",
+        "size": "<non-null string>",
         "reference_prompt": "..."
       }
 
@@ -340,6 +401,20 @@ CHARACTER_REFINE_SYSTEM_PROMPT = dedent("""\
     - Do NOT include any art style, color palette, line work, rendering technique,
       or stylization instructions in `reference_prompt` — visual style is injected
       separately at image-generation time.
+    - SIZE — MANDATORY. The `size` field MUST be a non-null string. If the current
+      character's `size` is non-null, you may keep it verbatim (the user's text
+      wins over the project's `metadata.language`) or refine it to match the new
+      `physical_description`. If the current character's `size` is null or
+      missing, INFER a reasonable size description from the `physical_description`
+      (height with a metric estimate, build, age range, or any other size cue
+      that helps the image model reason about relative proportions). Keep the
+      inferred size to a single short sentence. Write the inferred `size` field
+      in the language specified by `metadata.language` (fr/en/de). The
+      `reference_prompt` itself stays in English, but the standalone `size` field
+      is narrative content and follows the project's language. Include the chosen
+      `size` text in the `reference_prompt` as a dedicated line, phrased as:
+      `Size: <the size text>.` placed right after the outfit / appearance
+      description and BEFORE the hands-and-arms instruction.
     - USER-PHOTO ANCHOR — when `has_user_photo` is true, the user has uploaded a
       reference photograph of this character. That photo is the AUTHORITATIVE,
       NON-OVERRIDABLE source of the character's physical likeness. You MUST NOT
@@ -378,7 +453,7 @@ LOCATION_REFINE_SYSTEM_PROMPT = dedent("""\
         "id": "<unchanged>",
         "name": "...",
         "description": "...",
-        "size": "<string or null>",
+        "size": "<non-null string>",
         "reference_prompt": "..."
       }
 
@@ -399,6 +474,20 @@ LOCATION_REFINE_SYSTEM_PROMPT = dedent("""\
     - Do NOT include any art style, color palette, line work, rendering technique,
       or stylization instructions in `reference_prompt` — visual style is injected
       separately at image-generation time.
+    - SIZE — MANDATORY. The `size` field MUST be a non-null string. If the current
+      location's `size` is non-null, you may keep it verbatim (the user's text
+      wins over the project's `metadata.language`) or refine it to match the new
+      `description`. If the current location's `size` is null or missing, INFER a
+      reasonable size description from the `description` (spatial extent, ceiling
+      height, square footage, relative scale, or any other size cue that helps
+      the image model reason about relative proportions). Keep the inferred size
+      to a single short sentence. Write the inferred `size` field in the
+      language specified by `metadata.language` (fr/en/de) — the
+      `reference_prompt` itself stays in English, but the standalone `size` field
+      is narrative content and follows the project's language. Include the chosen
+      `size` text in the `reference_prompt` as a dedicated line, phrased as:
+      `Size: <the size text>.` placed right after the place's main description
+      and before the final "No text. No characters." line.
     - USER-PHOTO ANCHOR — when `has_user_photo` is true, the user has uploaded a
       reference photograph of this location. That photo is the AUTHORITATIVE,
       NON-OVERRIDABLE source of the location's appearance. You MUST NOT alter,
@@ -438,7 +527,7 @@ OBJECT_REFINE_SYSTEM_PROMPT = dedent("""\
         "id": "<unchanged>",
         "name": "...",
         "description": "...",
-        "size": "<string or null>",
+        "size": "<non-null string>",
         "reference_prompt": "..."
       }
 
@@ -459,6 +548,20 @@ OBJECT_REFINE_SYSTEM_PROMPT = dedent("""\
     - Do NOT include any art style, color palette, line work, rendering technique,
       or stylization instructions in `reference_prompt` — visual style is injected
       separately at image-generation time.
+    - SIZE — MANDATORY. The `size` field MUST be a non-null string. If the current
+      object's `size` is non-null, you may keep it verbatim (the user's text wins
+      over the project's `metadata.language`) or refine it to match the new
+      `description`. If the current object's `size` is null or missing, INFER a
+      reasonable size description from the `description` (length, width, height,
+      volume, or any other size cue that helps the image model reason about the
+      object's relative scale). Keep the inferred size to a single short
+      sentence. Write the inferred `size` field in the language specified by
+      `metadata.language` (fr/en/de) — the `reference_prompt` itself stays in
+      English, but the standalone `size` field is narrative content and follows
+      the project's language. Include the chosen `size` text in the
+      `reference_prompt` as a dedicated line, phrased as: `Size: <the size text>.`
+      placed right after the object's main description and before the final "No
+      text. No characters." line.
     - USER-PHOTO ANCHOR — when `has_user_photo` is true, the user has uploaded a
       reference photograph of this object. That photo is the AUTHORITATIVE,
       NON-OVERRIDABLE source of the object's appearance. You MUST NOT alter, in
@@ -904,6 +1007,27 @@ def _build_skeleton(config: BdGenInput, setup: _LLMSetupDraft, input_path: Path,
         generated_at=datetime.now(timezone.utc).isoformat(),
         script_model=model_label,
     )
+    characters = [
+        ScriptCharacter(
+            **_apply_size_fallback(c.model_dump(), "character", config.metadata.language),
+            reference_image=None,
+        )
+        for c in setup.characters
+    ]
+    locations = [
+        ScriptLocation(
+            **_apply_size_fallback(l.model_dump(), "location", config.metadata.language),
+            reference_image=None,
+        )
+        for l in setup.locations
+    ]
+    objects = [
+        ScriptObject(
+            **_apply_size_fallback(o.model_dump(), "object", config.metadata.language),
+            reference_image=None,
+        )
+        for o in setup.objects
+    ]
     return BdGenScript(
         project=config.project,
         display_name=config.display_name,
@@ -913,13 +1037,59 @@ def _build_skeleton(config: BdGenInput, setup: _LLMSetupDraft, input_path: Path,
         page_format=config.structure.page_format,
         allow_style_copy=config.allow_style_copy,
         generation_options=config.generation_options,
-        characters=[ScriptCharacter(**c.model_dump(), reference_image=None) for c in setup.characters],
-        locations=[ScriptLocation(**l.model_dump(), reference_image=None) for l in setup.locations],
-        objects=[ScriptObject(**o.model_dump(), reference_image=None) for o in setup.objects],
+        characters=characters,
+        locations=locations,
+        objects=objects,
         cover=setup.cover,
         back_cover=setup.back_cover,
         pages=[],
     )
+
+
+# Localized fallback strings for entities whose LLM-generated size came back
+# null. The LLM is instructed to always fill in a size (see SETUP_SYSTEM_PROMPT
+# and the *_REFINE_SYSTEM_PROMPTs) but a model that ignores that instruction
+# would leave the field null — the fallback below ensures downstream code that
+# assumes a non-null size (the page-prompt setup dict, the compose label) always
+# has something to work with.
+_SIZE_FALLBACK: dict[tuple[str, str], str] = {
+    ("fr", "character"): "Taille adulte standard (non précisée par l'IA).",
+    ("en", "character"): "Standard adult size (not specified by the AI).",
+    ("de", "character"): "Standardmäßige Erwachsenengröße (von der KI nicht angegeben).",
+    ("fr", "location"): "Dimensions standard (non précisées par l'IA).",
+    ("en", "location"): "Standard dimensions (not specified by the AI).",
+    ("de", "location"): "Standardabmessungen (von der KI nicht angegeben).",
+    ("fr", "object"): "Dimensions standard (non précisées par l'IA).",
+    ("en", "object"): "Standard dimensions (not specified by the AI).",
+    ("de", "object"): "Standardabmessungen (von der KI nicht angegeben).",
+}
+
+
+def _size_fallback_text(language: str | None, kind: str) -> str:
+    """Return a localized fallback size for an entity whose LLM-generated size is null.
+
+    The choice of "Standard adult size" (and equivalents) keeps the
+    ``Size: <text>.`` line non-empty in the generated reference prompt, so the
+    image model always receives an explicit proportions anchor even when the LLM
+    skipped the size field.
+    """
+    lang = (language or "fr").lower().split("_")[0].split("-")[0]
+    if lang not in {"fr", "en", "de"}:
+        lang = "fr"
+    return _SIZE_FALLBACK[(lang, kind)]
+
+
+def _apply_size_fallback(payload: dict, kind: str, language: str | None) -> dict:
+    """Return ``payload`` with a non-null ``size`` (filling in a fallback if needed).
+
+    ``kind`` is one of ``"character"``, ``"location"``, ``"object"``. Mutates a
+    copy of ``payload`` so the caller's draft is not affected.
+    """
+    if payload.get("size") and str(payload["size"]).strip():
+        return payload
+    out = dict(payload)
+    out["size"] = _size_fallback_text(language, kind)
+    return out
 
 
 # --- Prompt builders ---
@@ -959,11 +1129,19 @@ def _build_setup_prompt(
     if config.structure.allow_extra_locations:
         if n_locs > 0:
             loc_rule = (
-                f"You MAY invent additional locations needed by the story arc. "
-                f"Always copy the {n_locs} input location(s) verbatim first."
+                f"You MAY invent additional locations, and you MUST register as a "
+                f"location every distinct setting and every recurring large-scale "
+                f"scenery structure (cave, hut, ship, tower...) the story arc needs "
+                f"— unregistered scenery gets no reference image and drifts between "
+                f"pages. Always copy the {n_locs} input location(s) verbatim first."
             )
         else:
-            loc_rule = "Invent every location your story will need across the FULL story arc (the input has none)."
+            loc_rule = (
+                "Invent every location your story will need across the FULL story "
+                "arc (the input has none) — including any recurring large-scale "
+                "scenery structure (cave, hut, ship, tower...), which counts as a "
+                "location and must be registered to get a reference image."
+            )
     else:
         loc_rule = f"STRICT: Use ONLY the {n_locs} input location(s). Do NOT invent any new location."
     if n_objs == 0 and config.structure.allow_extra_objects:
@@ -1055,11 +1233,18 @@ def _build_page_prompt(
                 "name": c.name,
                 "physical_description": c.physical_description,
                 "outfit": c.outfit,
+                "size": c.size,
             }
             for c in bd_script.characters
         ],
-        "locations": [{"id": l.id, "name": l.name, "description": l.description} for l in bd_script.locations],
-        "objects": [{"id": o.id, "name": o.name, "description": o.description} for o in bd_script.objects],
+        "locations": [
+            {"id": l.id, "name": l.name, "description": l.description, "size": l.size}
+            for l in bd_script.locations
+        ],
+        "objects": [
+            {"id": o.id, "name": o.name, "description": o.description, "size": o.size}
+            for o in bd_script.objects
+        ],
     }
     window = _page_context_window()
     recent_pages = bd_script.pages[len(bd_script.pages) - window :] if window else []
@@ -1628,7 +1813,10 @@ def regenerate_character(
             draft.id = character_id  # never let the model rename
         char.physical_description = draft.physical_description
         char.outfit = draft.outfit
-        char.size = draft.size
+        # Always end up with a non-null size — the LLM is told to fill it in,
+        # but if it ignores that instruction we still want downstream code
+        # (page prompts, compose labels) to have a non-empty size anchor.
+        char.size = draft.size or _size_fallback_text(bd_script.metadata.language, "character")
         char.reference_prompt = draft.reference_prompt
         char.name = draft.name
         rep.emit(
@@ -1701,7 +1889,7 @@ def regenerate_location(
             draft.id = location_id
         loc.name = draft.name
         loc.description = draft.description
-        loc.size = draft.size
+        loc.size = draft.size or _size_fallback_text(bd_script.metadata.language, "location")
         loc.reference_prompt = draft.reference_prompt
         rep.emit(
             ProgressEvent(
@@ -1773,7 +1961,7 @@ def regenerate_object(
             draft.id = object_id
         obj.name = draft.name
         obj.description = draft.description
-        obj.size = draft.size
+        obj.size = draft.size or _size_fallback_text(bd_script.metadata.language, "object")
         obj.reference_prompt = draft.reference_prompt
         rep.emit(
             ProgressEvent(
@@ -1837,11 +2025,18 @@ def _regenerate_page_impl(
                 "name": c.name,
                 "physical_description": c.physical_description,
                 "outfit": c.outfit,
+                "size": c.size,
             }
             for c in bd_script.characters
         ],
-        "locations": [{"id": l.id, "name": l.name, "description": l.description} for l in bd_script.locations],
-        "objects": [{"id": o.id, "name": o.name, "description": o.description} for o in bd_script.objects],
+        "locations": [
+            {"id": l.id, "name": l.name, "description": l.description, "size": l.size}
+            for l in bd_script.locations
+        ],
+        "objects": [
+            {"id": o.id, "name": o.name, "description": o.description, "size": o.size}
+            for o in bd_script.objects
+        ],
     }
     prior = [p.model_dump(mode="json") for p in bd_script.pages[:idx]]
     later = [p.model_dump(mode="json") for p in bd_script.pages[idx + 1 :]]

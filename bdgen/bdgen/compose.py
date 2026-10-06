@@ -554,6 +554,58 @@ def _size_anchor(size: str | None) -> str:
     return f" Size anchor: {size.strip()}."
 
 
+def _scale_block(script: BdGenScript, page: Page) -> str:
+    """Build the SCALE & RELATIVE PROPORTIONS section of the page prompt.
+
+    Sizes travel into the prompt twice already — in parentheses after entity
+    names in the PANELS section and as "Size anchor:" suffixes on input-image
+    labels — but without an explicit rule the image model treats them as
+    flavour text and freely rescales characters to fit the composition (a
+    character set to 1m20 ends up knee-high). This block makes the sizes
+    binding. Returns "" when no entity on the page has a size, so prompts for
+    older scripts without the field are unchanged.
+    """
+    seen: set[str] = set()
+    lines: list[str] = []
+    for panel in page.panels:
+        entities = (
+            [script.character_by_id(c) for c in panel.characters]
+            + [script.location_by_id(panel.location)]
+            + [script.object_by_id(o) for o in panel.objects]
+        )
+        for e in entities:
+            if e is None or e.id in seen:
+                continue
+            seen.add(e.id)
+            if e.size and e.size.strip():
+                lines.append(f"        - {e.name}: {e.size.strip()}")
+    if not lines:
+        return ""
+    return (
+        dedent("""\
+
+        SCALE & RELATIVE PROPORTIONS — NON-NEGOTIABLE:
+        The sizes below (also shown in parentheses in the PANELS section and as
+        "Size anchor:" notes on the input images) are real-world dimensions.
+        They are BINDING:
+        """)
+        + "\n".join(lines)
+        + "\n"
+        + dedent("""\
+        - In every panel, draw each character at the height its size describes
+          RELATIVE to the other characters, the objects and the location around
+          it. Use the location's human-scale landmarks (doorways, furniture,
+          ceiling height, vegetation) as the measuring stick.
+        - NEVER shrink or enlarge a character or object to fit the composition
+          — change the framing or camera angle instead. A character reference
+          sheet shows the character alone, so its size text is the ONLY scale
+          authority; do not infer scale from how large the character appears
+          in its reference image.
+        - Keep every entity at the SAME scale in all panels of this page.
+        """)
+    )
+
+
 def _entity_short_label(entity) -> str:
     """Return ``"<name> (<size>)"`` if the entity has a size, else ``"<name>"``."""
     name = entity.name
@@ -762,7 +814,14 @@ def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | 
 
         """) + _build_refs_section(ref_labels)
 
-    body = header + "\n\n".join(panels_text) + footer + "\n\n" + _style_enforcement_block(style)
+    body = (
+        header
+        + "\n\n".join(panels_text)
+        + _scale_block(script, page)
+        + footer
+        + "\n\n"
+        + _style_enforcement_block(style)
+    )
     attribution = _attribution_free_block(script)
     if attribution:
         body += "\n\n" + attribution

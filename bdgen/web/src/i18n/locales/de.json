@@ -1004,6 +1004,8 @@
       "empty": "Keine Figur.",
       "outfitLabel": "Outfit — ",
       "outfitPlaceholder": "Kein Outfit.",
+      "sizeLabel": "Grösse — ",
+      "sizePlaceholder": "Keine Grösse angegeben.",
       "saveError": "Speichern fehlgeschlagen: {{error}}",
       "addDialogTitle": "Figur hinzufügen",
       "refineTitle": "„{{name}}“ verfeinern",
@@ -1016,6 +1018,8 @@
     "locations": {
       "add": "Ort hinzufügen",
       "empty": "Kein Ort.",
+      "sizeLabel": "Grösse — ",
+      "sizePlaceholder": "Keine Grösse angegeben.",
       "saveError": "Speichern fehlgeschlagen: {{error}}",
       "addDialogTitle": "Ort hinzufügen",
       "refineTitle": "„{{name}}“ verfeinern",
@@ -1028,6 +1032,8 @@
     "objects": {
       "add": "Objekt hinzufügen",
       "empty": "Kein Objekt / Produkt / Requisit für dieses Projekt.",
+      "sizeLabel": "Grösse — ",
+      "sizePlaceholder": "Keine Grösse angegeben.",
       "saveError": "Speichern fehlgeschlagen: {{error}}",
       "addDialogTitle": "Objekt hinzufügen",
       "refineTitle": "„{{name}}“ verfeinern",
@@ -1131,6 +1137,8 @@
       "physicalDescription": "Körperliche Beschreibung",
       "description": "Beschreibung",
       "outfit": "Outfit",
+      "size": "Grösse",
+      "sizePlaceholder": "z. B. sehr gross, 1,80 m, imposant",
       "referencePrompt": "Referenzbild-Prompt",
       "referencePromptPlaceholder": "Falls leer, wird er aus der Beschreibung abgeleitet.",
       "idNameDescriptionRequired": "ID, Name und Beschreibung sind erforderlich."

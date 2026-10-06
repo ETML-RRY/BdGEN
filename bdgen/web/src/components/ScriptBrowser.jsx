@@ -264,6 +264,28 @@ function CharactersList({ characters, onChanged, readOnly = false }) {
                 }
               />
             </div>
+            <div className="text-sm text-[var(--color-ink-soft)] mt-2">
+              <span className="text-xs uppercase tracking-wide text-[var(--color-mute)]">
+                {t("scriptBrowser.characters.sizeLabel")}
+              </span>
+              <EditableText
+                label={t("scriptBrowser.editor.fieldLabel", { id: c.id })}
+                value={c.size || ""}
+                placeholder={t("scriptBrowser.characters.sizePlaceholder")}
+                readOnly={readOnly}
+                multiline={false}
+                saving={savingField === `${c.id}_size`}
+                onSave={(value) =>
+                  updateCharacter(
+                    c,
+                    (draft) => {
+                      draft.size = value.trim() ? value : null;
+                    },
+                    `${c.id}_size`,
+                  )
+                }
+              />
+            </div>
           </li>
         ))}
       </ul>
@@ -430,6 +452,28 @@ function LocationsList({ locations, onChanged, readOnly = false }) {
                 }
               />
             </div>
+            <div className="text-sm text-[var(--color-ink-soft)] mt-2">
+              <span className="text-xs uppercase tracking-wide text-[var(--color-mute)]">
+                {t("scriptBrowser.locations.sizeLabel")}
+              </span>
+              <EditableText
+                label={t("scriptBrowser.editor.fieldLabel", { id: l.id })}
+                value={l.size || ""}
+                placeholder={t("scriptBrowser.locations.sizePlaceholder")}
+                readOnly={readOnly}
+                multiline={false}
+                saving={savingField === `${l.id}_size`}
+                onSave={(value) =>
+                  updateLocation(
+                    l,
+                    (draft) => {
+                      draft.size = value.trim() ? value : null;
+                    },
+                    `${l.id}_size`,
+                  )
+                }
+              />
+            </div>
           </li>
         ))}
       </ul>
@@ -592,6 +636,28 @@ function ObjectsList({ objects, onChanged, readOnly = false }) {
                       draft.description = value;
                     },
                     `${o.id}_description`,
+                  )
+                }
+              />
+            </div>
+            <div className="text-sm text-[var(--color-ink-soft)] mt-2">
+              <span className="text-xs uppercase tracking-wide text-[var(--color-mute)]">
+                {t("scriptBrowser.objects.sizeLabel")}
+              </span>
+              <EditableText
+                label={t("scriptBrowser.editor.fieldLabel", { id: o.id })}
+                value={o.size || ""}
+                placeholder={t("scriptBrowser.objects.sizePlaceholder")}
+                readOnly={readOnly}
+                multiline={false}
+                saving={savingField === `${o.id}_size`}
+                onSave={(value) =>
+                  updateObject(
+                    o,
+                    (draft) => {
+                      draft.size = value.trim() ? value : null;
+                    },
+                    `${o.id}_size`,
                   )
                 }
               />
@@ -1036,6 +1102,7 @@ function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
     name: "",
     description: "",
     outfit: "",
+    size: "",
     referencePrompt: "",
   });
   const [saving, setSaving] = useState(false);
@@ -1051,6 +1118,7 @@ function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
     const name = draft.name.trim();
     const description = draft.description.trim();
     const outfit = draft.outfit.trim();
+    const size = draft.size.trim();
     const referencePrompt = draft.referencePrompt.trim() || buildReferencePrompt(description, outfit, name);
     if (!id || !name || !description) {
       setError(t("scriptBrowser.addItem.idNameDescriptionRequired"));
@@ -1065,12 +1133,14 @@ function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
             name,
             physical_description: description,
             outfit: outfit || null,
+            size: size || null,
             reference_prompt: referencePrompt,
           }
         : {
             id,
             name,
             description,
+            size: size || null,
             reference_prompt: referencePrompt,
           };
       await onSubmit(payload);
@@ -1132,6 +1202,16 @@ function AddScriptItemDialog({ type, title, onClose, onSubmit }) {
             />
           </label>
         )}
+        <label className="text-sm font-medium block">
+          {t("scriptBrowser.addItem.size")}
+          <input
+            className="input mt-1"
+            value={draft.size}
+            onChange={(event) => updateField("size", event.target.value)}
+            disabled={saving}
+            placeholder={t("scriptBrowser.addItem.sizePlaceholder")}
+          />
+        </label>
         <label className="text-sm font-medium block">
           {t("scriptBrowser.addItem.referencePrompt")}
           <textarea
