@@ -1,4 +1,4 @@
-import { NavLink, Link, useLocation } from "react-router-dom";
+import { NavLink, Link, useLocation } from "react-router";
 import { FiHome } from "react-icons/fi";
 import { useTranslation } from "react-i18next";
 import { useAppContext } from "../../context/AppContext.jsx";

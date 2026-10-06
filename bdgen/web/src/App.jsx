@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "./api.js";
 import { useAppContext } from "./context/AppContext.jsx";

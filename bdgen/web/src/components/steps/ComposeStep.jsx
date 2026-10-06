@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { FaFilePdf } from "react-icons/fa6";
 import ImageStep from "../ImageStep.jsx";
 import { SHOW_UPSCALE } from "../../featureFlags.js";

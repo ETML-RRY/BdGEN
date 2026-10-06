@@ -1,4 +1,4 @@
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router";
 import { FiMinus, FiSquare, FiX, FiFolder, FiKey } from "react-icons/fi";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FiEdit2 } from "react-icons/fi";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { api } from "../api.js";
 import { SHOW_COHERENCE_CHECK } from "../featureFlags.js";
 import RefineDialog from "./RefineDialog.jsx";
