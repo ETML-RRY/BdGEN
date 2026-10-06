@@ -533,7 +533,10 @@
       "aiMarginObjects": " The AI will invent them only marginally.",
       "objectCardHeading": "Object {{n}}",
       "removeObjectAria": "Remove this object",
-      "objectDescriptionHint": "Describe the object and its role in the story."
+      "objectDescriptionHint": "Describe the object and its role in the story.",
+      "sizeLabel": "Size",
+      "sizePlaceholder": "e.g. very tall, 6ft, imposing",
+      "sizeHint": "Free-form size description so the AI can reason on relative proportions."
     },
     "structure": {
       "title": "Structure",
@@ -1001,6 +1004,8 @@
       "empty": "No character.",
       "outfitLabel": "Outfit — ",
       "outfitPlaceholder": "No outfit.",
+      "sizeLabel": "Size — ",
+      "sizePlaceholder": "No size filled in.",
       "saveError": "Save failed: {{error}}",
       "addDialogTitle": "Add a character",
       "refineTitle": "Refine « {{name}} »",
@@ -1013,6 +1018,8 @@
     "locations": {
       "add": "Add a location",
       "empty": "No location.",
+      "sizeLabel": "Size — ",
+      "sizePlaceholder": "No size filled in.",
       "saveError": "Save failed: {{error}}",
       "addDialogTitle": "Add a location",
       "refineTitle": "Refine « {{name}} »",
@@ -1025,6 +1032,8 @@
     "objects": {
       "add": "Add an object",
       "empty": "No object / product / reference for this project.",
+      "sizeLabel": "Size — ",
+      "sizePlaceholder": "No size filled in.",
       "saveError": "Save failed: {{error}}",
       "addDialogTitle": "Add an object",
       "refineTitle": "Refine « {{name}} »",
@@ -1128,6 +1137,8 @@
       "physicalDescription": "Physical description",
       "description": "Description",
       "outfit": "Outfit",
+      "size": "Size",
+      "sizePlaceholder": "e.g. very tall, 6ft, imposing",
       "referencePrompt": "Reference image prompt",
       "referencePromptPlaceholder": "If empty, it will be derived from the description.",
       "idNameDescriptionRequired": "The id, name and description are required."

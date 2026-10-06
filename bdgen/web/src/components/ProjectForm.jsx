@@ -285,6 +285,7 @@ function blankCharacter(i) {
     physical_description: "",
     outfit: "",
     personality: "",
+    size: "",
   };
 }
 
@@ -293,6 +294,7 @@ function blankLocation(i) {
     id: `decor_${i}`,
     name: "",
     description: "",
+    size: "",
   };
 }
 
@@ -301,6 +303,7 @@ function blankObject(i) {
     id: `objet_${i}`,
     name: "",
     description: "",
+    size: "",
   };
 }
 
@@ -1269,6 +1272,14 @@ export default function ProjectForm({
                     onChange={(e) => updateCharacter(i, "outfit", e.target.value)}
                   />
                 </Field>
+                <Field label={t("form.casting.sizeLabel")} hint={t("form.casting.sizeHint")}>
+                  <input
+                    className="input"
+                    value={c.size || ""}
+                    onChange={(e) => updateCharacter(i, "size", e.target.value)}
+                    placeholder={t("form.casting.sizePlaceholder")}
+                  />
+                </Field>
               </div>
             ))}
           </div>
@@ -1348,6 +1359,14 @@ export default function ProjectForm({
                     value={l.description}
                     onChange={(e) => updateLocation(i, "description", e.target.value)}
                     required
+                  />
+                </Field>
+                <Field label={t("form.casting.sizeLabel")} hint={t("form.casting.sizeHint")}>
+                  <input
+                    className="input"
+                    value={l.size || ""}
+                    onChange={(e) => updateLocation(i, "size", e.target.value)}
+                    placeholder={t("form.casting.sizePlaceholder")}
                   />
                 </Field>
               </div>
@@ -1430,6 +1449,14 @@ export default function ProjectForm({
                     value={o.description}
                     onChange={(e) => updateObject(i, "description", e.target.value)}
                     required
+                  />
+                </Field>
+                <Field label={t("form.casting.sizeLabel")} hint={t("form.casting.sizeHint")}>
+                  <input
+                    className="input"
+                    value={o.size || ""}
+                    onChange={(e) => updateObject(i, "size", e.target.value)}
+                    placeholder={t("form.casting.sizePlaceholder")}
                   />
                 </Field>
               </div>

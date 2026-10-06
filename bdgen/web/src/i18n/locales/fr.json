@@ -533,7 +533,10 @@
       "aiMarginObjects": " L'IA n'en inventera qu'à la marge.",
       "objectCardHeading": "Objet {{n}}",
       "removeObjectAria": "Supprimer cet objet",
-      "objectDescriptionHint": "Décrivez l'objet et son rôle dans l'histoire."
+      "objectDescriptionHint": "Décrivez l'objet et son rôle dans l'histoire.",
+      "sizeLabel": "Taille",
+      "sizePlaceholder": "ex. très grand, 1m80, imposant",
+      "sizeHint": "Description libre de la taille pour aider l'IA à raisonner sur les proportions."
     },
     "structure": {
       "title": "Structure",
@@ -1001,6 +1004,8 @@
       "empty": "Aucun personnage.",
       "outfitLabel": "Tenue — ",
       "outfitPlaceholder": "Aucune tenue.",
+      "sizeLabel": "Taille — ",
+      "sizePlaceholder": "Aucune taille renseignée.",
       "saveError": "Sauvegarde impossible : {{error}}",
       "addDialogTitle": "Ajouter un personnage",
       "refineTitle": "Retoucher « {{name}} »",
@@ -1013,6 +1018,8 @@
     "locations": {
       "add": "Ajouter un décor",
       "empty": "Aucun décor.",
+      "sizeLabel": "Taille — ",
+      "sizePlaceholder": "Aucune taille renseignée.",
       "saveError": "Sauvegarde impossible : {{error}}",
       "addDialogTitle": "Ajouter un décor",
       "refineTitle": "Retoucher « {{name}} »",
@@ -1025,6 +1032,8 @@
     "objects": {
       "add": "Ajouter un objet",
       "empty": "Aucun objet / produit / référence pour ce projet.",
+      "sizeLabel": "Taille — ",
+      "sizePlaceholder": "Aucune taille renseignée.",
       "saveError": "Sauvegarde impossible : {{error}}",
       "addDialogTitle": "Ajouter un objet",
       "refineTitle": "Retoucher « {{name}} »",
@@ -1128,6 +1137,8 @@
       "physicalDescription": "Description physique",
       "description": "Description",
       "outfit": "Tenue",
+      "size": "Taille",
+      "sizePlaceholder": "ex. très grand, 1m80, imposant",
       "referencePrompt": "Prompt image de référence",
       "referencePromptPlaceholder": "Si vide, il sera repris depuis la description.",
       "idNameDescriptionRequired": "L'id, le nom et la description sont obligatoires."

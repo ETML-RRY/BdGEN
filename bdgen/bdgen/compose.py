@@ -501,6 +501,7 @@ def _collect_refs(script: BdGenScript, page: Page) -> list[tuple[Path, str]]:
                 f'Character sheet for "{char.name}" — this is the canonical '
                 f"reference for this character's face, hair, eyes, body type "
                 f"and outfit. Match it EXACTLY in every panel they appear in."
+                f"{_size_anchor(char.size)}"
             )
             refs.append((ref_path, label))
         elif char:
@@ -514,6 +515,7 @@ def _collect_refs(script: BdGenScript, page: Page) -> list[tuple[Path, str]]:
             label = (
                 f'Establishing shot of "{loc.name}" — match its mood, '
                 f"atmosphere and visual elements when this location appears."
+                f"{_size_anchor(loc.size)}"
             )
             refs.append((ref_path, label))
         elif loc:
@@ -529,6 +531,7 @@ def _collect_refs(script: BdGenScript, page: Page) -> list[tuple[Path, str]]:
                 f"stylized appearance of this object. Whenever it is visible "
                 f"in a panel, match its shape, key markings and silhouette "
                 f"EXACTLY so it stays recognizable across the album."
+                f"{_size_anchor(obj.size)}"
             )
             refs.append((ref_path, label))
         elif obj:
@@ -537,6 +540,92 @@ def _collect_refs(script: BdGenScript, page: Page) -> list[tuple[Path, str]]:
                 refs.append((photo_path, _photo_fallback_label("object", obj.name)))
 
     return refs
+
+
+def _size_anchor(size: str | None) -> str:
+    """Return a "Size anchor: <text>." suffix for compose labels, or empty string.
+
+    Anchoring the size verbatim in the per-entity input image label gives the
+    image model an explicit cue to reason about relative proportions when
+    several entities share a frame.
+    """
+    if not size or not size.strip():
+        return ""
+    return f" Size anchor: {size.strip()}."
+
+
+def _scale_block(script: BdGenScript, page: Page) -> str:
+    """Build the SCALE & RELATIVE PROPORTIONS section of the page prompt.
+
+    Sizes travel into the prompt twice already — in parentheses after entity
+    names in the PANELS section and as "Size anchor:" suffixes on input-image
+    labels — but without an explicit rule the image model treats them as
+    flavour text and freely rescales characters to fit the composition (a
+    character set to 1m20 ends up knee-high). This block makes the sizes
+    binding. Returns "" when no entity on the page has a size, so prompts for
+    older scripts without the field are unchanged.
+    """
+    seen: set[str] = set()
+    lines: list[str] = []
+    for panel in page.panels:
+        entities = (
+            [script.character_by_id(c) for c in panel.characters]
+            + [script.location_by_id(panel.location)]
+            + [script.object_by_id(o) for o in panel.objects]
+        )
+        for e in entities:
+            if e is None or e.id in seen:
+                continue
+            seen.add(e.id)
+            if e.size and e.size.strip():
+                lines.append(f"        - {e.name}: {e.size.strip()}")
+    if not lines:
+        return ""
+    return (
+        dedent("""\
+
+        SCALE & RELATIVE PROPORTIONS — NON-NEGOTIABLE:
+        The sizes below (also shown in parentheses in the PANELS section and as
+        "Size anchor:" notes on the input images) are real-world dimensions.
+        They are BINDING:
+        """)
+        + "\n".join(lines)
+        + "\n"
+        + dedent("""\
+        - In every panel, draw each character at the height its size describes
+          RELATIVE to the other characters, the objects and the location around
+          it. Use the location's human-scale landmarks (doorways, furniture,
+          ceiling height, vegetation) as the measuring stick.
+        - NEVER shrink or enlarge a character or object to fit the composition
+          — change the framing or camera angle instead. A character reference
+          sheet shows the character alone, so its size text is the ONLY scale
+          authority; do not infer scale from how large the character appears
+          in its reference image.
+        - Keep every entity at the SAME scale in all panels of this page.
+        """)
+    )
+
+
+def _entity_short_label(entity) -> str:
+    """Return ``"<name> (<size>)"`` if the entity has a size, else ``"<name>"``."""
+    name = entity.name
+    if entity.size and entity.size.strip():
+        return f"{name} ({entity.size.strip()})"
+    return name
+
+
+def _entity_label_with_size(entity, separator: str) -> str:
+    """Return ``"<name> (<size>) <separator> <description>"`` when size is set.
+
+    Falls back to the original ``"<name> <separator> <description>"`` form
+    when the entity has no size, so existing per-panel prompts stay
+    byte-identical for projects that don't use the new field.
+    """
+    name = entity.name
+    description = entity.description
+    if entity.size and entity.size.strip():
+        return f"{name} ({entity.size.strip()}){separator}{description}"
+    return f"{name}{separator}{description}"
 
 
 def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | None = None) -> str:
@@ -550,11 +639,11 @@ def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | 
     panels_text: list[str] = []
     for panel in page.panels:
         loc = script.location_by_id(panel.location)
-        loc_text = f"{loc.name} - {loc.description}" if loc else panel.location
+        loc_text = _entity_label_with_size(loc, " - ") if loc else panel.location
         chars = [script.character_by_id(c) for c in panel.characters]
-        chars_text = ", ".join(c.name for c in chars if c) or "(no character)"
+        chars_text = ", ".join(_entity_short_label(c) for c in chars if c) or "(no character)"
         objs = [script.object_by_id(o) for o in panel.objects]
-        objs_text = ", ".join(o.name for o in objs if o) or "(no object)"
+        objs_text = ", ".join(_entity_short_label(o) for o in objs if o) or "(no object)"
 
         dialogs_block = ""
         if panel.dialogs:
@@ -725,7 +814,14 @@ def _build_page_prompt(script: BdGenScript, page: Page, ref_labels: list[str] | 
 
         """) + _build_refs_section(ref_labels)
 
-    body = header + "\n\n".join(panels_text) + footer + "\n\n" + _style_enforcement_block(style)
+    body = (
+        header
+        + "\n\n".join(panels_text)
+        + _scale_block(script, page)
+        + footer
+        + "\n\n"
+        + _style_enforcement_block(style)
+    )
     attribution = _attribution_free_block(script)
     if attribution:
         body += "\n\n" + attribution

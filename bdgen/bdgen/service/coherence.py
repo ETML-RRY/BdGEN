@@ -165,11 +165,16 @@ def check_script_coherence(name: str, output_root: Path | None = None) -> dict:
         script_model = opts.script_model if opts else None
 
     characters = [
-        {"id": c.id, "name": c.name, "description": c.physical_description, "outfit": c.outfit}
+        {"id": c.id, "name": c.name, "description": c.physical_description, "outfit": c.outfit, "size": c.size}
         for c in bd_script.characters
     ]
-    locations = [{"id": loc.id, "name": loc.name, "description": loc.description} for loc in bd_script.locations]
-    objects = [{"id": o.id, "name": o.name, "description": o.description} for o in bd_script.objects]
+    locations = [
+        {"id": loc.id, "name": loc.name, "description": loc.description, "size": loc.size}
+        for loc in bd_script.locations
+    ]
+    objects = [
+        {"id": o.id, "name": o.name, "description": o.description, "size": o.size} for o in bd_script.objects
+    ]
     pages_data = []
     for page in bd_script.pages:
         panels_data = []
@@ -203,7 +208,12 @@ def check_script_coherence(name: str, output_root: Path | None = None) -> dict:
         "2. Proposer des SUGGESTIONS narratives proactives (dans 'suggestions') : personnages, décors ou objets "
         "qui n'apparaissent dans aucune planche et pourraient être exploités ; planches où un personnage "
         "récemment ajouté enrichirait la scène ; incohérences narratives subtiles entre la description d'un "
-        "élément et son usage dans les cases ; améliorations pour renforcer la cohérence de l'histoire.\n"
+        "élément et son usage dans les cases ; ÉLÉMENTS DE DÉCOR RÉCURRENTS (grotte, cabane, tour, véhicule…) "
+        "décrits dans les scene_description de plusieurs cases mais ABSENTS de la liste 'locations' — sans "
+        "image de référence ils changeront de forme à chaque planche : suggérer de les enregistrer comme "
+        "décor (kind 'location', target = le nom de l'élément) ; scene_description qui contredit le champ "
+        "'size' d'un personnage, décor ou objet (proportions relatives incohérentes) ; améliorations pour "
+        "renforcer la cohérence de l'histoire.\n"
         "Réponds UNIQUEMENT avec un objet JSON de la forme :\n"
         '{"issues": [...], "suggestions": [...]}\n'
         "Chaque entrée (issue ou suggestion) : "

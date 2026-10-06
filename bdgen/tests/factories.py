@@ -42,6 +42,9 @@ def make_minimal_script(
     project: str = "demo",
     image_provider: str = "openai",
     image_model: str = "gpt-image-2",
+    character_size: str | None = None,
+    location_size: str | None = None,
+    object_size: str | None = None,
 ) -> BdGenScript:
     return BdGenScript(
         project=project,
@@ -60,6 +63,7 @@ def make_minimal_script(
                 name="Hero",
                 physical_description="Hero desc",
                 reference_prompt="Hero prompt",
+                size=character_size,
             )
         ],
         locations=[
@@ -68,6 +72,7 @@ def make_minimal_script(
                 name="Home",
                 description="Home desc",
                 reference_prompt="Home prompt",
+                size=location_size,
             )
         ],
         objects=[
@@ -76,6 +81,7 @@ def make_minimal_script(
                 name="Book",
                 description="Book desc",
                 reference_prompt="Book prompt",
+                size=object_size,
             )
         ],
         pages=[

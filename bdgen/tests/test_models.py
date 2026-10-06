@@ -170,3 +170,46 @@ def test_make_options_paths_are_pinned_to_root(tmp_path: Path) -> None:
     assert opts.references.output_dir == tmp_path / "references"
     assert opts.upscale.output_dir == tmp_path / "pages_upscaled"
     assert opts.script_path == tmp_path / "bdgen-script.json"
+
+
+def test_size_round_trip_preserved_on_entities(tmp_path: Path) -> None:
+    """``size`` must survive ``save()``/``load()`` and ``to_portable_dict()``."""
+    script = make_minimal_script(
+        tmp_path / "demo",
+        character_size="1m85, taller than Alice",
+        location_size="small studio, 20m²",
+        object_size="5cm wide, pocket-sized",
+    )
+
+    payload = script.to_portable_dict(tmp_path / "demo" / "bdgen-script.json")
+    assert payload["characters"][0]["size"] == "1m85, taller than Alice"
+    assert payload["locations"][0]["size"] == "small studio, 20m²"
+    assert payload["objects"][0]["size"] == "5cm wide, pocket-sized"
+
+    script_path = tmp_path / "demo" / "bdgen-script.json"
+    script.save(script_path)
+    loaded = BdGenScript.load(script_path)
+
+    assert loaded.characters[0].size == "1m85, taller than Alice"
+    assert loaded.locations[0].size == "small studio, 20m²"
+    assert loaded.objects[0].size == "5cm wide, pocket-sized"
+
+
+def test_size_defaults_to_none_when_absent_from_payload(tmp_path: Path) -> None:
+    """Scripts written before the ``size`` field existed must still load."""
+    script = make_minimal_script(tmp_path / "demo")
+    payload = script.to_portable_dict(tmp_path / "demo" / "bdgen-script.json")
+    # Strip the new field to simulate a pre-existing file on disk.
+    for entity_list in ("characters", "locations", "objects"):
+        for item in payload[entity_list]:
+            item.pop("size", None)
+
+    script_path = tmp_path / "demo" / "bdgen-script.json"
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+    script_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = BdGenScript.load(script_path)
+
+    assert loaded.characters[0].size is None
+    assert loaded.locations[0].size is None
+    assert loaded.objects[0].size is None
