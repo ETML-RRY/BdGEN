@@ -9,7 +9,7 @@ from textwrap import dedent
 from openai import OpenAI
 from . import secret_store
 from .feedback import FeedbackStore, feedback_block
-from .image_rules import IMAGE_CONSTRAINTS
+from .image_rules import IMAGE_CONSTRAINTS, with_openai_text_rules
 from .pdf_export import assemble_pdf
 from .references import (
     LOCATION_PHOTO_REF_LABEL,
@@ -1087,6 +1087,7 @@ def _call_image(
     size: str,
     trace_name: str = "call_image",
 ) -> dict:
+    prompt = with_openai_text_rules(prompt, "openai")
     with trace.node(trace_name, "image_call", inputs={"refs": refs, "size": size}) as tn:
         tn.set_model("openai", image_model.model)
         tn.set_prompt(prompt)
