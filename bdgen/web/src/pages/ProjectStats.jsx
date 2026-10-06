@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import { FaArrowLeft, FaClock, FaCoins, FaCubesStacked, FaWandMagicSparkles } from "react-icons/fa6";
 import { useTranslation } from "react-i18next";
 import { api } from "../api.js";

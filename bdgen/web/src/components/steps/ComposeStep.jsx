@@ -1,5 +1,6 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { FaFilePdf } from "react-icons/fa6";
 import ImageStep from "../ImageStep.jsx";
 import { SHOW_UPSCALE } from "../../featureFlags.js";
@@ -27,24 +28,32 @@ export default function ComposeStep({ project, onChanged }) {
     };
   });
 
-  const projectExtraCommands = project.pdf_url
-    ? [
-        {
-          id: "pdf",
-          label: t("stepsUi.compose.downloadPdf"),
-          icon: <FaFilePdf />,
-          onClick: () => {
-            const a = document.createElement("a");
-            a.href = project.pdf_url;
-            a.download = "";
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-          },
-          title: t("stepsUi.compose.downloadPdfTitle"),
-        },
-      ]
-    : null;
+  // Memoized: ImageStep re-publishes the ribbon whenever this reference changes,
+  // and publishing re-renders this step — a fresh array each render loops forever
+  // and starves router navigations (React Router v7 runs them as transitions).
+  const pdfUrl = project.pdf_url;
+  const projectExtraCommands = useMemo(
+    () =>
+      pdfUrl
+        ? [
+            {
+              id: "pdf",
+              label: t("stepsUi.compose.downloadPdf"),
+              icon: <FaFilePdf />,
+              onClick: () => {
+                const a = document.createElement("a");
+                a.href = pdfUrl;
+                a.download = "";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+              },
+              title: t("stepsUi.compose.downloadPdfTitle"),
+            },
+          ]
+        : null,
+    [pdfUrl, t],
+  );
 
   return (
     <ImageStep

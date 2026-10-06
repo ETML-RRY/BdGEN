@@ -1,5 +1,5 @@
 import { useTranslation, Trans } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import ImageStep from "../ImageStep.jsx";
 
 export default function UpscaleStep({ project, onChanged }) {

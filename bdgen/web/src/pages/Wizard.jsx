@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Routes, Route, Link, useParams, useLocation, useNavigate, Navigate } from "react-router-dom";
+import { Routes, Route, Link, useParams, useLocation, useNavigate, Navigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { api } from "../api.js";
 import { useAppContext } from "../context/AppContext.jsx";
@@ -144,14 +144,14 @@ export default function Wizard() {
             SHOW_UPSCALE ? (
               <UpscaleStep project={project} onChanged={reload} />
             ) : (
-              <Navigate to="../compose" replace />
+              <Navigate to={`/projects/${encodeURIComponent(name)}/compose`} replace />
             )
           }
         />
         {debug.enabled && (
           <Route path="trace" element={<TracePanel projectName={name} />} />
         )}
-        <Route path="*" element={<Navigate to="preparation" replace />} />
+        <Route path="*" element={<Navigate to={`/projects/${encodeURIComponent(name)}/preparation`} replace />} />
       </Routes>
 
       {showDuplicateDialog && (
