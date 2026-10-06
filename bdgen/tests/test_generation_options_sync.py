@@ -83,7 +83,7 @@ def test_legacy_xai_image_config_is_coerced_to_openai(tmp_path: Path) -> None:
 
     persisted_config = load_config("demo", output_root)
     assert persisted_config.generation_options.image_model.provider == "openai"
-    assert persisted_config.generation_options.image_model.model == "gpt-image-2"
+    assert persisted_config.generation_options.image_model.model == "gpt-image-2.5-sunburst"
 
 
 def test_xai_dedicated_reference_image_config_is_preserved(tmp_path: Path) -> None:

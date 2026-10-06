@@ -471,6 +471,7 @@
     },
     "priceLine": "≈ ${{input}} Eingabe · ${{output}} {{outputLabel}} / M Tokens",
     "priceFastSuffix": " · Standardmodus (am günstigsten); „Schnell“-Modus verdoppelt diesen Tarif",
+    "premiumModelWarning": "Premium-Modell: etwa 2,5-mal so teuer wie Opus 5.5, und jeder Aufruf kann mehrere Minuten dauern. Ein ganzes Album kann sehr teuer werden – nur für anspruchsvolle Projekte nutzen, nach einem Test mit einem kleinen Projekt.",
     "priceUnknown": "Kein geschätzter Tarif für dieses Modell",
     "identity": {
       "title": "Projektidentität",

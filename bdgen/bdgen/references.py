@@ -14,7 +14,7 @@ from PIL import Image
 
 from . import secret_store
 from .feedback import FeedbackStore, feedback_block
-from .image_rules import IMAGE_CONSTRAINTS
+from .image_rules import IMAGE_CONSTRAINTS, with_openai_text_rules
 from .models import (
     BdGenScript,
     ImageModelConfig,
@@ -862,6 +862,8 @@ def _generate_image_impl(
 
     if client is None:
         raise RuntimeError("OpenAI client missing for image generation.")
+
+    prompt = with_openai_text_rules(prompt, image_model.provider)
 
     if inputs:
         full_prompt = "\n\n".join(prompt_prefix_parts + [prompt])

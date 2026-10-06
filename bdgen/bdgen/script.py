@@ -1516,6 +1516,16 @@ def _call_anthropic(system: str, user: str, model_config: ScriptModelConfig, out
             cached_note = f", cache write: {cache_write}"
         print(f"  Tokens: input={u.input_tokens + cache_read + cache_write}{cached_note}, output={u.output_tokens}")
 
+    # Claude Fable 5.x / Opus 5.5 / Sonnet 5.5 run safety classifiers that can
+    # decline a request with HTTP 200 + stop_reason "refusal" and no text.
+    if getattr(final, "stop_reason", None) == "refusal":
+        details = getattr(final, "stop_details", None)
+        category = getattr(details, "category", None) if details else None
+        suffix = f" (category: {category})" if category else ""
+        raise RuntimeError(
+            f"Claude ({model_config.model}) declined the request{suffix}. "
+            "Rephrase the content or pick another script model."
+        )
     raw = "".join(text_parts)
     if not raw.strip():
         raise RuntimeError("Claude returned no text content (only thinking blocks?).")
@@ -1585,10 +1595,13 @@ def _anthropic_supports_adaptive_thinking(model: str) -> bool:
     return model.startswith(
         (
             "claude-mythos-preview",
+            "claude-fable-5",
             "claude-opus-4-6",
             "claude-opus-4-7",
             "claude-opus-4-8",
+            "claude-opus-5",
             "claude-sonnet-4-6",
+            "claude-sonnet-5",
         )
     )
 

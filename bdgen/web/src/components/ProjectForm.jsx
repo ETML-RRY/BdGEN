@@ -89,13 +89,13 @@ export const DEFAULT_CONFIG = {
   generation_options: {
     script_model: {
       provider: "anthropic",
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-5-5",
       temperature: 0.8,
       effort: "medium",
     },
     image_model: {
       provider: "openai",
-      model: "gpt-image-2",
+      model: "gpt-image-2.5-sunburst",
       size: "1024x1536",
       quality: "high",
     },
@@ -136,47 +136,42 @@ export function slugifyProjectName(source) {
 
 const SCRIPT_MODEL_OPTIONS = {
   anthropic: [
+    { value: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
+    { value: "claude-opus-5-5", label: "Claude Opus 5.5" },
+    { value: "claude-fable-5-1", label: "Claude Fable 5.1" },
     { value: "claude-opus-4-8", label: "Claude Opus 4.8" },
-    { value: "claude-opus-4-7", label: "Claude Opus 4.7" },
-    { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
     { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-    { value: "claude-opus-4-5", label: "Claude Opus 4.5" },
-    { value: "claude-sonnet-4-5", label: "Claude Sonnet 4.5" },
     { value: "claude-haiku-4-5", label: "Claude Haiku 4.5" },
-    { value: "claude-opus-4-1", label: "Claude Opus 4.1" },
   ],
   openai: [
+    { value: "gpt-6.1-sol", label: "GPT-6.1 Sol" },
+    { value: "gpt-6-astra", label: "GPT-6 Astra" },
+    { value: "gpt-6-luna", label: "GPT-6 Luna" },
+    { value: "gpt-5.6-sol", label: "GPT-5.6 Sol" },
+    { value: "gpt-5.6-terra", label: "GPT-5.6 Terra" },
+    { value: "gpt-5.6-luna", label: "GPT-5.6 Luna" },
+    { value: "gpt-5.5", label: "GPT-5.5" },
     { value: "gpt-5.4", label: "GPT-5.4" },
     { value: "gpt-5.4-mini", label: "GPT-5.4 mini" },
-    { value: "gpt-5.4-nano", label: "GPT-5.4 nano" },
-    { value: "gpt-5.3-chat-latest", label: "GPT-5.3 (chat latest)" },
-    { value: "gpt-5.2", label: "GPT-5.2" },
-    { value: "gpt-5.2-pro", label: "GPT-5.2 pro" },
-    { value: "gpt-5.1", label: "GPT-5.1" },
-    { value: "gpt-5.1-codex-max", label: "GPT-5.1 Codex Max" },
-    { value: "gpt-5-mini", label: "GPT-5 mini" },
-    { value: "gpt-5-nano", label: "GPT-5 nano" },
-    { value: "gpt-4.1", label: "GPT-4.1" },
   ],
   xai: [
+    { value: "grok-4.7", label: "Grok 4.7" },
+    { value: "grok-4.6", label: "Grok 4.6" },
+    { value: "grok-4.5", label: "Grok 4.5" },
     { value: "grok-4.3", label: "Grok 4.3" },
-    { value: "grok-4.20-reasoning", label: "Grok 4.20 reasoning" },
-    { value: "grok-4-fast-reasoning", label: "Grok 4 Fast reasoning" },
-    { value: "grok-4-fast-non-reasoning", label: "Grok 4 Fast non-reasoning" },
-    { value: "grok-3", label: "Grok 3" },
-    { value: "grok-3-mini", label: "Grok 3 mini" },
+    { value: "grok-4.20-0309-reasoning", label: "Grok 4.20 reasoning" },
   ],
 };
 
 const IMAGE_MODEL_OPTIONS = {
   openai: [
+    { value: "gpt-image-2.5-sunburst", label: "GPT Image 2.5 Sunburst" },
+    { value: "gpt-image-2.5-flare", label: "GPT Image 2.5 Flare" },
     { value: "gpt-image-2", label: "GPT Image 2" },
-    { value: "gpt-image-1", label: "GPT Image 1" },
-    { value: "gpt-image-1-mini", label: "GPT Image 1 mini" },
-    { value: "chatgpt-image-latest", label: "ChatGPT image latest" },
   ],
   xai: [
     { value: "grok-imagine-image-quality", label: "Grok Imagine quality" },
+    { value: "grok-imagine-image-2.0", label: "Grok Imagine 2.0" },
     { value: "grok-imagine-image", label: "Grok Imagine" },
   ],
 };
@@ -187,8 +182,16 @@ function modelRates(provider, model) {
   const p = (provider || "").toLowerCase();
   const m = (model || "").toLowerCase();
   if (p === "openai") {
+    // gpt-image-2 and the gpt-image-2.5 family share the same rate card.
     if (m.includes("gpt-image-2")) return { input: 5, image_output: 30 };
     if (m.includes("gpt-image-1")) return { input: 5, output: 0 };
+    // Most specific ids first: "gpt-5" would otherwise swallow gpt-5.6-*.
+    if (m.includes("gpt-6-astra")) return { input: 10, output: 50 };
+    if (m.includes("gpt-6.1-sol") || m.includes("gpt-6-sol")) return { input: 2, output: 10 };
+    if (m.includes("gpt-6-luna")) return { input: 0.1, output: 0.5 };
+    if (m.includes("gpt-5.6-sol")) return { input: 4, output: 20 };
+    if (m.includes("gpt-5.6-terra")) return { input: 2, output: 12 };
+    if (m.includes("gpt-5.6-luna")) return { input: 0.2, output: 1.2 };
     if (m.includes("gpt-5.5")) return { input: 5, output: 30 };
     if (m.includes("gpt-5.4-mini")) return { input: 0.75, output: 4.5 };
     if (m.includes("gpt-5.4")) return { input: 2.5, output: 15 };
@@ -198,14 +201,23 @@ function modelRates(provider, model) {
     return null;
   }
   if (p === "anthropic") {
+    if (m.includes("fable") || m.includes("mythos")) return { input: 10, output: 50 };
     if (m.includes("opus")) {
-      if (["opus-4-5", "opus-4-6", "opus-4-7", "opus-4-8", "opus-4-9"].some((v) => m.includes(v)))
+      if (m.includes("opus-5-5")) return { input: 4, output: 20 };
+      if (["opus-4-5", "opus-4-6", "opus-4-7", "opus-4-8", "opus-4-9", "opus-5"].some((v) => m.includes(v)))
         return { input: 5, output: 25 };
       return { input: 15, output: 75 };
     }
+    if (m.includes("sonnet-5")) return { input: 2, output: 10 };
     if (m.includes("sonnet")) return { input: 3, output: 15 };
+    if (m.includes("haiku-4-5")) return { input: 1, output: 5 };
     if (m.includes("haiku-3-5") || m.includes("haiku-3.5")) return { input: 0.8, output: 4 };
     if (m.includes("haiku")) return { input: 0.25, output: 1.25 };
+    return null;
+  }
+  if (p === "xai") {
+    if (["grok-4.7", "grok-4.6", "grok-4.5"].some((v) => m.includes(v))) return { input: 2, output: 6 };
+    if (m.includes("grok-4.3") || m.includes("grok-4.20")) return { input: 1.25, output: 2.5 };
     return null;
   }
   return null;
@@ -220,12 +232,19 @@ function formatModelPrice(provider, model, t) {
 }
 
 // True for Opus variants that offer a premium "fast" tier at double the rate.
+// Opus 4.7 lost its fast mode; Opus 4.8, 5 and 5.5 keep it.
 function hasFastTier(provider, model) {
   const m = (model || "").toLowerCase();
   return (
-    (provider || "").toLowerCase() === "anthropic" &&
-    ["opus-4-5", "opus-4-6", "opus-4-7", "opus-4-8", "opus-4-9"].some((v) => m.includes(v))
+    (provider || "").toLowerCase() === "anthropic" && ["opus-4-8", "opus-5"].some((v) => m.includes(v))
   );
+}
+
+// True for the premium Fable tier (and its Mythos counterpart), priced above
+// Opus, with long turns — the form shows an extra cost warning.
+function isPremiumTier(provider, model) {
+  const m = (model || "").toLowerCase();
+  return (provider || "").toLowerCase() === "anthropic" && (m.includes("fable") || m.includes("mythos"));
 }
 
 const QUALITY_VALUES = ["low", "medium", "high"];
@@ -260,10 +279,13 @@ function supportsScriptEffort(provider, model) {
   return (
     provider === "anthropic" &&
     (model.startsWith("claude-mythos-preview") ||
+      model.startsWith("claude-fable-5") ||
       model.startsWith("claude-opus-4-6") ||
       model.startsWith("claude-opus-4-7") ||
       model.startsWith("claude-opus-4-8") ||
-      model.startsWith("claude-sonnet-4-6"))
+      model.startsWith("claude-opus-5") ||
+      model.startsWith("claude-sonnet-4-6") ||
+      model.startsWith("claude-sonnet-5"))
   );
 }
 
@@ -1983,6 +2005,9 @@ function ModelSelector({ provider, model, optionsByProvider, onChange }) {
         </p>
       ) : (
         model && <p className="text-xs text-[var(--color-mute)]">{t("form.priceUnknown")}</p>
+      )}
+      {isPremiumTier(provider, model) && (
+        <p className="text-xs text-amber-600">⚠ {t("form.premiumModelWarning")}</p>
       )}
     </div>
   );

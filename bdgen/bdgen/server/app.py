@@ -1489,9 +1489,9 @@ def _check_api_key(provider: str) -> None:
 # the first option of each provider in the frontend's SCRIPT_MODEL_OPTIONS and
 # the script_model default of DEFAULT_CONFIG.
 _TEXT_MODEL_FALLBACK: list[tuple[str, str]] = [
-    ("anthropic", "claude-sonnet-4-6"),
-    ("openai", "gpt-5.4"),
-    ("xai", "grok-4.3"),
+    ("anthropic", "claude-sonnet-5-5"),
+    ("openai", "gpt-6.1-sol"),
+    ("xai", "grok-4.7"),
 ]
 
 

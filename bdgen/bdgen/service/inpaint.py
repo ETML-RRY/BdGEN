@@ -12,6 +12,7 @@ from .. import stats as stats_module
 from .. import trace
 from .. import versioning
 from ..feedback import FeedbackStore, feedback_path_for
+from ..image_rules import with_openai_text_rules
 from ..models import BdGenScript, image_size_for_format
 from ._helpers import _resolve_options
 from ._paths import _composed_path
@@ -87,8 +88,9 @@ def inpaint_image(
 
         # gpt-image-2 inpainting is prompt-based: explicitly instruct the model to
         # preserve the rest of the image so it doesn't regenerate everything.
-        guided_prompt = (
-            f"{prompt}. Keep all other parts of the image exactly as they are, only modify the area indicated by the mask."
+        guided_prompt = with_openai_text_rules(
+            f"{prompt}. Keep all other parts of the image exactly as they are, only modify the area indicated by the mask.",
+            opts.image_model.provider,
         )
 
         started_at, started = stats_module.start_timer()

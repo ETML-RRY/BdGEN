@@ -36,7 +36,7 @@ SUPPORTED_MIME_TYPES = {
     "image/gif",
 }
 
-DEFAULT_MODEL = os.environ.get("BDGEN_STYLE_MODEL", "gpt-4o-mini")
+DEFAULT_MODEL = os.environ.get("BDGEN_STYLE_MODEL", "gpt-6-luna")
 MAX_IMAGE_BYTES = 20 * 1024 * 1024  # 20 MB safety cap
 
 # Generic catch-all of names users might try to inject. Not exhaustive — the
@@ -352,7 +352,7 @@ def extract(
 
     ``language`` is the ISO code for the descriptions (matches
     ``metadata.language`` on a project). ``model`` defaults to the
-    ``BDGEN_STYLE_MODEL`` env var or ``gpt-4o-mini``.
+    ``BDGEN_STYLE_MODEL`` env var or ``gpt-6-luna``.
     """
     if mime_type not in SUPPORTED_MIME_TYPES:
         raise ValueError(

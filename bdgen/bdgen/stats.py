@@ -185,10 +185,26 @@ def _rates(provider: str, model: str, *, speed: str | None = None) -> dict[str, 
     p = provider.lower()
     m = model.lower()
     if p == "openai":
+        # gpt-image-2 and the gpt-image-2.5 family share the same rate card.
         if "gpt-image-2" in m:
             return {"input": 5.0, "cached_input": 1.25, "image_input": 8.0, "image_output": 30.0, "output": 30.0}
         if "gpt-image-1" in m:
             return {"input": 5.0, "cached_input": 1.25, "output": 0.0}
+        # Most specific ids first: "gpt-5" would otherwise swallow gpt-5.6-*.
+        if "gpt-6-astra" in m:
+            return {"input": 10.0, "cached_input": 1.0, "output": 50.0}
+        if "gpt-6.1-sol" in m:
+            return {"input": 2.0, "cached_input": 0.1, "output": 10.0}
+        if "gpt-6-sol" in m:
+            return {"input": 2.0, "cached_input": 0.2, "output": 10.0}
+        if "gpt-6-luna" in m:
+            return {"input": 0.1, "cached_input": 0.01, "output": 0.5}
+        if "gpt-5.6-sol" in m:
+            return {"input": 4.0, "cached_input": 0.4, "output": 20.0}
+        if "gpt-5.6-terra" in m:
+            return {"input": 2.0, "cached_input": 0.2, "output": 12.0}
+        if "gpt-5.6-luna" in m:
+            return {"input": 0.2, "cached_input": 0.02, "output": 1.2}
         if "gpt-5.5" in m:
             return {"input": 5.0, "cached_input": 0.5, "output": 30.0}
         if "gpt-5.4-mini" in m:
@@ -202,21 +218,42 @@ def _rates(provider: str, model: str, *, speed: str | None = None) -> dict[str, 
         if "gpt-4o" in m:
             return {"input": 2.5, "cached_input": 1.25, "output": 10.0}
     if p == "anthropic":
+        if "fable" in m or "mythos" in m:
+            # The 5.1 generation cut cache reads from $1.00 to $0.25 per M tokens.
+            cached = 0.25 if any(v in m for v in ("fable-5-1", "mythos-5-1")) else 1.0
+            return {"input": 10.0, "cache_creation": 12.5, "cached_input": cached, "output": 50.0}
         if "opus" in m:
-            # Opus 4.5+ dropped to $5/$25 per M tokens; Opus 4.1 and earlier
-            # stay on the legacy $15/$75 rate card.
-            if any(v in m for v in ("opus-4-5", "opus-4-6", "opus-4-7", "opus-4-8", "opus-4-9")):
+            if "opus-5-5" in m:
+                if speed == "fast":
+                    return {"input": 8.0, "cache_creation": 10.0, "cached_input": 0.4, "output": 40.0}
+                return {"input": 4.0, "cache_creation": 5.0, "cached_input": 0.2, "output": 20.0}
+            # Opus 4.5 through Opus 5 sit at $5/$25 per M tokens; Opus 4.1 and
+            # earlier stay on the legacy $15/$75 rate card.
+            if any(v in m for v in ("opus-4-5", "opus-4-6", "opus-4-7", "opus-4-8", "opus-4-9", "opus-5")):
                 if speed == "fast":
                     # Fast mode (research preview): exactly double the standard rate.
                     return {"input": 10.0, "cache_creation": 12.5, "cached_input": 1.0, "output": 50.0}
                 return {"input": 5.0, "cache_creation": 6.25, "cached_input": 0.5, "output": 25.0}
             return {"input": 15.0, "cache_creation": 18.75, "cached_input": 1.5, "output": 75.0}
+        if "sonnet-5" in m:
+            return {"input": 2.0, "cache_creation": 2.5, "cached_input": 0.2, "output": 10.0}
         if "sonnet" in m:
             return {"input": 3.0, "cache_creation": 3.75, "cached_input": 0.3, "output": 15.0}
+        if "haiku-4-5" in m:
+            return {"input": 1.0, "cache_creation": 1.25, "cached_input": 0.1, "output": 5.0}
         if "haiku-3-5" in m or "haiku-3.5" in m:
             return {"input": 0.8, "cache_creation": 1.0, "cached_input": 0.08, "output": 4.0}
         if "haiku" in m:
             return {"input": 0.25, "cache_creation": 0.30, "cached_input": 0.03, "output": 1.25}
+    if p == "xai":
+        # Text models only, below-200k-token prompt tier. Grok Imagine is billed
+        # per image, which the token-based estimate can't express.
+        if any(v in m for v in ("grok-4.7", "grok-4.6")):
+            return {"input": 2.0, "cached_input": 0.5, "output": 6.0}
+        if "grok-4.5" in m:
+            return {"input": 2.0, "cached_input": 0.3, "output": 6.0}
+        if any(v in m for v in ("grok-4.3", "grok-4.20")):
+            return {"input": 1.25, "cached_input": 0.2, "output": 2.5}
     return None
 
 

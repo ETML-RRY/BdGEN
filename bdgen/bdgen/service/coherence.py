@@ -27,7 +27,7 @@ def _llm_coherence_check(
     Returns {"issues": [...], "suggestions": [...]}.
     """
     provider = script_model.provider if script_model else "openai"
-    model = script_model.model if script_model else "gpt-4o-mini"
+    model = script_model.model if script_model else "gpt-6-luna"
 
     started_at, started = stats_module.start_timer()
     usage: dict = {}
@@ -264,7 +264,7 @@ def apply_global_suggestion(
         script_model = opts.script_model if opts else None
 
     provider = script_model.provider if script_model else "openai"
-    model = script_model.model if script_model else "gpt-4o-mini"
+    model = script_model.model if script_model else "gpt-6-luna"
 
     script_payload = {
         "characters": [c.model_dump(mode="json") for c in bd_script.characters],

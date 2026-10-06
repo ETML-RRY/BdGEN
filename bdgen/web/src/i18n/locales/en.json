@@ -471,6 +471,7 @@
     },
     "priceLine": "≈ ${{input}} input · ${{output}} {{outputLabel}} / M tokens",
     "priceFastSuffix": " · standard mode (cheapest); “fast” mode doubles this rate",
+    "premiumModelWarning": "Premium model: about 2.5× the price of Opus 5.5, and each call can run for several minutes. A full album can get very expensive — keep it for demanding projects, after a test on a small one.",
     "priceUnknown": "No estimated rate for this model",
     "identity": {
       "title": "Project identity",

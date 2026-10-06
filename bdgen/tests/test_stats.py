@@ -83,6 +83,46 @@ def test_estimate_cost_usd_for_openai_input_only() -> None:
     assert cost == pytest.approx(1.25, abs=1e-6)
 
 
+@pytest.mark.parametrize(
+    ("provider", "model", "input_rate", "output_rate"),
+    [
+        ("anthropic", "claude-haiku-4-5", 1.0, 5.0),
+        ("anthropic", "claude-sonnet-5-5", 2.0, 10.0),
+        ("anthropic", "claude-opus-5-5", 4.0, 20.0),
+        ("anthropic", "claude-opus-4-8", 5.0, 25.0),
+        ("anthropic", "claude-fable-5-1", 10.0, 50.0),
+        ("openai", "gpt-6.1-sol", 2.0, 10.0),
+        ("openai", "gpt-6-luna", 0.1, 0.5),
+        # Must not fall through to the generic "gpt-5" rate card.
+        ("openai", "gpt-5.6-terra", 2.0, 12.0),
+        ("xai", "grok-4.7", 2.0, 6.0),
+        ("xai", "grok-4.20-0309-reasoning", 1.25, 2.5),
+    ],
+)
+def test_estimate_cost_usd_current_model_rates(provider, model, input_rate, output_rate) -> None:
+    cost_in = estimate_cost_usd(provider, model, {"input_tokens": 1_000_000})
+    cost_out = estimate_cost_usd(provider, model, {"output_tokens": 1_000_000})
+
+    assert cost_in == pytest.approx(input_rate, abs=1e-6)
+    assert cost_out == pytest.approx(output_rate, abs=1e-6)
+
+
+def test_estimate_cost_usd_gpt_image_25_uses_image_output_rate() -> None:
+    cost = estimate_cost_usd(
+        "openai",
+        "gpt-image-2.5-sunburst",
+        {"output_tokens": 1_000_000, "image_output_tokens": 1_000_000},
+    )
+
+    assert cost == pytest.approx(30.0, abs=1e-6)
+
+
+def test_estimate_cost_usd_opus_55_fast_mode_doubles_rate() -> None:
+    cost = estimate_cost_usd("anthropic", "claude-opus-5-5", {"output_tokens": 1_000_000}, speed="fast")
+
+    assert cost == pytest.approx(40.0, abs=1e-6)
+
+
 def test_estimate_cost_usd_for_anthropic_includes_cache_creation() -> None:
     cost = estimate_cost_usd(
         "anthropic",
